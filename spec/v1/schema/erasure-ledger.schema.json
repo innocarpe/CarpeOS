@@ -1,0 +1,188 @@
+{
+  "$id": "https://spec.carpeos.org/v1/schema/erasure-ledger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarpeOS v1 ErasureLedger record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "erasure_id",
+    "target_ref",
+    "requested_at",
+    "completed_at",
+    "method",
+    "actor_ref",
+    "trust_zone",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+    },
+    "erasure_id": {
+      "type": "string",
+      "pattern": "^era_[a-z0-9][a-z0-9_-]{7,127}$"
+    },
+    "target_ref": {
+      "$ref": "#/$defs/erasureTargetRef"
+    },
+    "requested_at": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+    },
+    "completed_at": {
+      "oneOf": [
+        {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "method": {
+      "type": "string",
+      "enum": ["tombstone", "crypto_shred", "projection_delete"]
+    },
+    "actor_ref": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+    },
+    "trust_zone": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZone"
+    },
+    "zone_sequence": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/provenanceRef"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "crypto_shred"
+          }
+        },
+        "required": ["method"]
+      },
+      "then": {
+        "properties": {
+          "target_ref": {
+            "type": "object",
+            "properties": {
+              "target_kind": {
+                "enum": ["protected_value", "key"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "projection_delete"
+          }
+        },
+        "required": ["method"]
+      },
+      "then": {
+        "properties": {
+          "target_ref": {
+            "type": "object",
+            "properties": {
+              "target_kind": {
+                "const": "projection"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "tombstone"
+          }
+        },
+        "required": ["method"]
+      },
+      "then": {
+        "properties": {
+          "target_ref": {
+            "type": "object",
+            "properties": {
+              "target_kind": {
+                "enum": ["event", "artifact"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "erasureTargetRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_kind", "target_id"],
+      "properties": {
+        "target_kind": {
+          "type": "string",
+          "enum": ["protected_value", "key", "projection", "event", "artifact"]
+        },
+        "target_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "target_kind": {
+                "const": "event"
+              }
+            },
+            "required": ["target_kind"]
+          },
+          "then": {
+            "properties": {
+              "target_id": {
+                "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target_kind": {
+                "const": "artifact"
+              }
+            },
+            "required": ["target_kind"]
+          },
+          "then": {
+            "properties": {
+              "target_id": {
+                "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/artifactId"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

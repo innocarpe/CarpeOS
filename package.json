@@ -16,7 +16,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "public-boundary": "node scripts/check-public-boundary.mjs",
-    "test": "vitest run --passWithNoTests",
+    "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {

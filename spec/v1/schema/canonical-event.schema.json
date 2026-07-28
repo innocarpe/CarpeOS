@@ -1,0 +1,350 @@
+{
+  "$id": "https://spec.carpeos.org/v1/schema/canonical-event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarpeOS v1 CanonicalEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "subject_ref",
+    "valid_time",
+    "recorded_time",
+    "lifecycle_status",
+    "epistemic_authority",
+    "trust_zone",
+    "provenance",
+    "idempotency_key",
+    "request_fingerprint",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+    },
+    "event_id": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["EvidenceArtifact", "Observation", "Claim", "AcceptanceDecision", "Supersession"]
+    },
+    "subject_ref": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+    },
+    "valid_time": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+    },
+    "recorded_time": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+    },
+    "lifecycle_status": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/lifecycleStatus"
+    },
+    "epistemic_authority": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/epistemicAuthority"
+    },
+    "trust_zone": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZone"
+    },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/provenanceRef"
+      }
+    },
+    "idempotency_key": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
+    },
+    "request_fingerprint": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/requestFingerprint"
+    },
+    "zone_sequence": {
+      "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/evidenceArtifact"
+        },
+        {
+          "$ref": "#/$defs/observation"
+        },
+        {
+          "$ref": "#/$defs/claim"
+        },
+        {
+          "$ref": "#/$defs/acceptanceDecision"
+        },
+        {
+          "$ref": "#/$defs/supersession"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "EvidenceArtifact"
+          }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/evidenceArtifact"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "Observation"
+          }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/observation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "Claim"
+          }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/claim"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "AcceptanceDecision"
+          }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/acceptanceDecision"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "Supersession"
+          }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "lifecycle_status": {
+            "const": "active"
+          },
+          "payload": {
+            "$ref": "#/$defs/supersession"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "externalContentRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref_type", "uri", "digest", "visibility", "reachability"],
+      "properties": {
+        "ref_type": {
+          "type": "string",
+          "const": "external_uri"
+        },
+        "uri": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:.+$"
+        },
+        "digest": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/digest"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["private", "shared", "public"]
+        },
+        "reachability": {
+          "type": "string",
+          "enum": ["online", "offline_snapshot", "unreachable"]
+        }
+      }
+    },
+    "evidenceArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "kind", "media_type", "content_ref"],
+      "properties": {
+        "artifact_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/artifactId"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["document", "image", "audio", "dataset", "message", "other"]
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$"
+        },
+        "content_ref": {
+          "oneOf": [
+            {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueRef"
+            },
+            {
+              "$ref": "#/$defs/externalContentRef"
+            }
+          ]
+        },
+        "lineage": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/provenanceRef"
+          }
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_id", "observed_at", "statement", "evidence_artifact_refs"],
+      "properties": {
+        "observation_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "observed_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_artifact_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/artifactId"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "statement", "claim_type", "support"],
+      "properties": {
+        "claim_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claim_type": {
+          "type": "string",
+          "enum": ["factual", "inference", "decision"]
+        },
+        "support": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/provenanceRef"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "acceptanceDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision_id", "claim_refs", "decision", "decided_by", "decided_at"],
+      "properties": {
+        "decision_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "claim_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+          }
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["accepted", "rejected", "needs_review"]
+        },
+        "decided_by": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "decided_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "supersession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supersession_id", "supersedes_event_id", "reason"],
+      "properties": {
+        "supersession_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "supersedes_event_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+        },
+        "replacement_event_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

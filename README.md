@@ -101,8 +101,8 @@ Planned canonical record types include:
 | `CanonicalEvent` | Append-only envelope that records what happened, when it was recorded, who produced it, and which trust zone owns it. |
 | `EvidenceArtifact` | Raw or externally referenced material produced during work. Large or sensitive values should be stored as protected-value references to external encrypted blobs, not copied inline by default. |
 | `Observation` | A bounded statement extracted from evidence without turning it into an accepted fact. |
-| `Claim` | An immutable statement that can later be accepted, rejected, or superseded by separate decision records. |
-| `AcceptanceDecision` | An immutable decision that accepts or rejects a claim under a stated authority, scope, rationale, and evidence set. |
+| `Claim` | An immutable statement evaluated through separate acceptance decisions and related to supersessions without mutating the claim. |
+| `AcceptanceDecision` | An immutable decision that records `accepted`, `rejected`, or `needs_review` for a claim under a stated authority, scope, rationale, and evidence set. |
 | `Supersession` | An immutable record that replaces, narrows, invalidates, or updates an earlier claim or decision. |
 
 Derived and supporting concepts may include:
@@ -123,11 +123,14 @@ CarpeOS uses bitemporal time:
 - `valid_time` describes when the statement is true in the domain being modeled;
 - `recorded_time` describes when CarpeOS recorded the event.
 
-CarpeOS also separates lifecycle status from epistemic authority. A record can
-be captured, extracted, reviewed, projected, or synced as part of its processing
-lifecycle, while its truth authority remains unaccepted, accepted for a scope,
-rejected, superseded, stale, or unknown. These axes should not be merged into
-one mutable status field.
+CarpeOS also separates processing lifecycle from epistemic authority. A record
+can be captured, extracted, reviewed, projected, or synced as part of its
+processing lifecycle. Its epistemic authority uses warrant classes:
+`unverified`, `self_reported`, `observed`, `imported`, `derived`, or `verified`.
+The values `accepted`, `rejected`, and `needs_review` exist only in
+`AcceptanceDecision`; `superseded`, `erased`, and `stale` are derived query or
+projection states. These axes should not be merged into one mutable status
+field.
 
 ## Retrieval Model
 
@@ -175,8 +178,8 @@ CarpeOS is designed to work locally first:
 - each device writes to a local append-only outbox;
 - sync uploads events to a private remote instance;
 - projections can be rebuilt from canonical events;
-- conflicts are resolved at the event and claim-status layer, not by editing
-  generated notes directly.
+- conflicts are resolved at the event, decision, supersession, and
+  erasure-ledger layers, not by editing generated notes directly.
 
 The intended result is continuity across machines without making a public
 repository the user's private memory store.

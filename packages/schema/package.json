@@ -1,0 +1,26 @@
+{
+  "name": "@carpeos/schema",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Machine-readable CarpeOS v1 schemas and conformance helpers.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  }
+}
