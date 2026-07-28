@@ -9,11 +9,12 @@ CarpeOS is a personal knowledge operating system for AI-assisted work.
 It is designed to capture work across AI agents, structure it as
 provenance-aware knowledge, synchronize it across devices, and expose that
 knowledge through retrieval interfaces for both humans and LLMs. The current
-G005 implementation covers local capture, durable outbox storage, and a
-Cloudflare Worker/D1/R2 sync backend and client that are locally integration
-tested with synthetic data. No live Cloudflare deployment is claimed.
-Retrieval, MCP, embedding, GraphRAG, and Obsidian projections are planned
-milestones, not active features.
+G006 implementation covers local capture, durable outbox storage, a Cloudflare
+Worker/D1/R2 sync backend and client, and local rebuildable retrieval
+projections with CLI search/get commands. These paths are locally tested with
+synthetic data. No live Cloudflare deployment is claimed. MCP, GraphRAG,
+Obsidian projections, hosted embedding jobs, and production semantic retrieval
+quality are planned milestones, not active features.
 
 This repository is the canonical place for the public design, specifications,
 implementation, and roadmap. It does not contain a user's private knowledge
@@ -83,6 +84,24 @@ The sync backend is deployable code and local test infrastructure only. This
 repository does not claim that a production Cloudflare Worker, D1 database, or
 R2 bucket has been provisioned.
 
+G006 adds the first local retrieval boundary:
+
+- rebuildable retrieval chunks derived from canonical events and erasure
+  records;
+- meaningful-unit chunking for claims, observations, decisions, and selected
+  evidence metadata instead of raw hook JSON;
+- FTS, structured metadata, recency, and locally stored vector candidate paths;
+- canonical recheck of every result against trust-zone visibility, lifecycle,
+  authority, supersession, erasure, and projection freshness;
+- deterministic local development embeddings for tests and local smoke checks;
+- `retrieval rebuild`, `retrieval embed`, `memory search`, and `memory get` CLI
+  commands.
+
+The deterministic embedding provider is synthetic and development-only. Workers
+AI and Vectorize bindings are adapter boundaries in code, but this repository
+does not claim live Workers AI/Vectorize resources, hosted embedding execution,
+or production semantic quality.
+
 ## Quick Start
 
 Prerequisites:
@@ -146,7 +165,9 @@ distribution are separate packaging work.
 See [Local Capture Guide](docs/guides/local-capture.md) for the complete command
 surface and hook template notes. See
 [Cloudflare Sync Guide](docs/guides/cloudflare-sync.md) for local Worker, D1,
-R2, secret-file, and MacBook/Mac mini sync setup.
+R2, secret-file, and MacBook/Mac mini sync setup. See
+[Retrieval Guide](docs/guides/retrieval.md) for local projection rebuild,
+development embedding, search, and get commands.
 
 ## Architecture Model
 
@@ -230,14 +251,26 @@ field.
 
 ## Retrieval Model
 
-CarpeOS is designed for hybrid retrieval:
+CarpeOS now has a local hybrid retrieval MVP:
 
 - structured queries for project, bitemporal time, lifecycle, authority, and
   trust-zone filters;
 - full-text search for exact terms;
-- vector search for semantic similarity;
-- graph traversal for lineage, dependency, and supersession paths;
-- bounded context packing for LLM prompts.
+- vector candidate support for stored embeddings;
+- lineage-aware result metadata for provenance, supersession, erasure, and
+  projection freshness;
+- canonical result recheck before a chunk is visible.
+
+Vector search is a candidate-retrieval mechanism, not an authority model. Every
+result must remain traceable to canonical source records, and vector hits do not
+turn a claim into an accepted fact.
+
+The current CLI commands are:
+
+- `carpeos retrieval rebuild`
+- `carpeos retrieval embed --provider deterministic-local-dev`
+- `carpeos memory search --query ... --visible-trust-zone ...`
+- `carpeos memory get --chunk-id ... --visible-trust-zone ...`
 
 The target LLM-facing interface is MCP. Planned tools include:
 
@@ -306,6 +339,10 @@ local or self-hosted alternatives where practical.
 For a personal MVP, the free-tier path is expected to be useful if the system
 embeds only meaningful knowledge units, such as session summaries, decisions,
 claims, and selected evidence chunks, instead of embedding every raw hook event.
+Current Cloudflare limits must be checked against official documentation before
+operation. As of the G006 design update, Workers AI free usage is documented in
+Neurons/day and Vectorize free usage is documented in queried and stored vector
+dimensions; these quotas are operational limits, not correctness guarantees.
 
 ## MVP Roadmap
 
@@ -335,15 +372,22 @@ claims, and selected evidence chunks, instead of embedding every raw hook event.
    - Grok Build lifecycle hooks
    - provider-neutral capture envelope
 
-5. Add retrieval.
+5. Add sync.
+   - Cloudflare sync adapter
+   - encrypted protected-value upload/download
+   - cross-Mac private operator setup
+
+6. Add retrieval.
    - structured search
+   - full-text search
+   - local vector projection
+   - canonical recheck
+
+7. Add projections and interfaces.
+   - Obsidian projection generator
    - context pack generation
    - MCP server
-   - optional vector adapter
-
-6. Add projections and sync.
-   - Obsidian projection generator
-   - Cloudflare sync adapter
+   - graph projection
    - optional dashboard
 
 ## Repository Boundary
@@ -400,10 +444,10 @@ copyright and license notices.
 
 ## Project Status
 
-CarpeOS is pre-MVP. The G005 local capture and Cloudflare sync runtime is
+CarpeOS is pre-MVP. The G006 local capture, sync, and local retrieval runtime is
 implemented and locally tested with synthetic data, but the project is not ready
 as a packaged end-user release and no live deployment is claimed.
 
-Do not treat planned retrieval, MCP, adapter installation, projection, or live
-deployment paths as stable until they are implemented, tested, and documented in
-this repository.
+Do not treat planned MCP, adapter installation, Obsidian projection, GraphRAG,
+hosted embedding, Vectorize operation, or live deployment paths as stable until
+they are implemented, tested, and documented in this repository.

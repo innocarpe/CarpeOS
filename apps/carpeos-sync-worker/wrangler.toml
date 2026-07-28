@@ -17,5 +17,15 @@ migrations_dir = "migrations"
 binding = "PROTECTED_VALUES"
 bucket_name = "carpeos-protected-values"
 
+# Public-safe placeholders only. These names are NOT DEPLOYED and do not grant
+# access to live AI or Vectorize resources until a private operator replaces
+# them outside this repository.
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "RETRIEVAL_VECTORS"
+index_name = "carpeos-retrieval-vectors-not-deployed"
+
 [vars]
 CARPEOS_ENV = "local"

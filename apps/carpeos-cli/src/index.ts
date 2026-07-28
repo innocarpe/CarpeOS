@@ -11,7 +11,21 @@ import {
   isTrustZoneId,
   LocalCaptureStore,
   runtimeDirFromEnv,
+  withLocalRetrievalDatabase,
 } from "@carpeos/local-store";
+import {
+  ackEmbeddingJob,
+  DETERMINISTIC_LOCAL_DEV_EMBEDDING,
+  deterministicLocalDevEmbedding,
+  ensureEmbeddingJob,
+  leaseEmbeddingJobs,
+  makeEmbeddingRecord,
+  rebuildLocalRetrievalIndex,
+  searchLocalRetrievalIndex,
+  storeLocalVector,
+} from "@carpeos/retrieval";
+import type { RetrievalQuery } from "@carpeos/schema";
+import type { RetrievalChunk } from "@carpeos/schema";
 import { OutboxSyncCoordinator, SyncHttpError, SyncHttpTransport } from "@carpeos/sync-client";
 import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
 
@@ -44,6 +58,10 @@ export async function runCli(
         return runOutbox(rest, env);
       case "sync":
         return await runSync(rest, env);
+      case "retrieval":
+        return runRetrieval(rest, env);
+      case "memory":
+        return runMemory(rest, env);
       default:
         throw new CliUsageError(`unknown command: ${command}`);
     }
@@ -68,6 +86,199 @@ export async function runCli(
       },
     });
     return publicError.exitCode;
+  }
+}
+
+function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const [subcommand, ...rest] = argv;
+  if (subcommand === undefined) {
+    throw new CliUsageError("retrieval requires rebuild or embed");
+  }
+  const parsed = parseArgs({
+    args: rest,
+    allowPositionals: false,
+    strict: true,
+    options: {
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+      provider: { type: "string", default: "deterministic-local-dev" },
+      limit: { type: "string", default: "10" },
+      "lease-ms": { type: "string", default: "30000" },
+    },
+  });
+  const trustZone = requireStoreTrustZone(parsed.values["trust-zone"]);
+  const store = openStore(
+    compactCommonOptions(parsed.values.home, parsed.values["project-id"], trustZone),
+    env,
+  );
+  try {
+    switch (subcommand) {
+      case "rebuild": {
+        const rebuilt = withLocalRetrievalDatabase(store, (db) =>
+          rebuildLocalRetrievalIndex(db, new Date()),
+        );
+        writeJson(process.stdout, {
+          ok: true,
+          command: "retrieval rebuild",
+          chunks: rebuilt.chunks.length,
+          freshness: rebuilt.freshness,
+          trust_zone_id: store.trustZone.trust_zone_id,
+        });
+        return 0;
+      }
+      case "embed": {
+        if (parsed.values.provider !== "deterministic-local-dev") {
+          throw new CliUsageError(
+            "retrieval embed requires --provider deterministic-local-dev; production embedding is not configured",
+          );
+        }
+        const embedded = withLocalRetrievalDatabase(store, (db) => {
+          const rebuilt = rebuildLocalRetrievalIndex(db, new Date());
+          for (const chunk of rebuilt.chunks.filter((item) => item.status === "active")) {
+            ensureEmbeddingJob(db, {
+              chunkId: chunk.chunk_id,
+              embeddingModel: DETERMINISTIC_LOCAL_DEV_EMBEDDING.model,
+              embeddingVersion: DETERMINISTIC_LOCAL_DEV_EMBEDDING.version,
+              pooling: DETERMINISTIC_LOCAL_DEV_EMBEDDING.pooling,
+            });
+          }
+          const leased = leaseEmbeddingJobs(db, {
+            limit: parseInteger(parsed.values.limit, "--limit", 1),
+            leaseMs: parseInteger(parsed.values["lease-ms"], "--lease-ms", 1),
+          });
+          let count = 0;
+          for (const item of leased) {
+            const chunk = rebuilt.chunks.find(
+              (candidate) => candidate.chunk_id === item.job.chunk_id,
+            );
+            if (chunk === undefined) {
+              continue;
+            }
+            const vector = deterministicLocalDevEmbedding(chunk.text);
+            const record = makeEmbeddingRecord({
+              chunkId: chunk.chunk_id,
+              vector,
+              embeddingModel: DETERMINISTIC_LOCAL_DEV_EMBEDDING.model,
+              embeddingVersion: DETERMINISTIC_LOCAL_DEV_EMBEDDING.version,
+              pooling: DETERMINISTIC_LOCAL_DEV_EMBEDDING.pooling,
+              inputTextSha256: chunk.text_digest,
+              createdAt: new Date().toISOString(),
+            });
+            storeLocalVector(db, { record, vector });
+            if (ackEmbeddingJob(db, { jobId: item.job.job_id, leaseId: item.lease_id, record })) {
+              count += 1;
+            }
+          }
+          return { leased: leased.length, embedded: count };
+        });
+        writeJson(process.stdout, {
+          ok: true,
+          command: "retrieval embed",
+          provider: "deterministic-local-dev",
+          semantic_quality: "synthetic-dev-only",
+          ...embedded,
+        });
+        return 0;
+      }
+      default:
+        throw new CliUsageError(`unknown retrieval subcommand: ${subcommand}`);
+    }
+  } finally {
+    store.close();
+  }
+}
+
+function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const [subcommand, ...rest] = argv;
+  if (subcommand === undefined) {
+    throw new CliUsageError("memory requires search or get");
+  }
+  const parsed = parseArgs({
+    args: rest,
+    allowPositionals: false,
+    strict: true,
+    options: {
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+      query: { type: "string" },
+      "chunk-id": { type: "string" },
+      limit: { type: "string", default: "10" },
+      "visible-trust-zone": { type: "string", multiple: true },
+    },
+  });
+  const trustZone = requireStoreTrustZone(parsed.values["trust-zone"]);
+  const visibleTrustZones = requireVisibleTrustZones(
+    parsed.values["visible-trust-zone"],
+    trustZone,
+  );
+  const store = openStore(
+    compactCommonOptions(parsed.values.home, parsed.values["project-id"], trustZone),
+    env,
+  );
+  try {
+    switch (subcommand) {
+      case "search": {
+        const queryText = requireString(parsed.values.query, "--query");
+        const result = withLocalRetrievalDatabase(store, (db) =>
+          searchLocalRetrievalIndex(db, {
+            query: makeRetrievalQuery({
+              text: queryText,
+              visibleTrustZones,
+              limit: parseInteger(parsed.values.limit, "--limit", 1),
+            }),
+          }),
+        );
+        writeJson(process.stdout, {
+          ok: true,
+          command: "memory search",
+          result,
+        });
+        return 0;
+      }
+      case "get": {
+        const chunkId = requireString(parsed.values["chunk-id"], "--chunk-id");
+        const result = withLocalRetrievalDatabase(store, (db) => {
+          const row = db
+            .prepare("SELECT chunk_json FROM retrieval_chunks WHERE chunk_id = ?")
+            .get(chunkId) as { chunk_json: string } | undefined;
+          const chunk =
+            row === undefined ? undefined : (JSON.parse(row.chunk_json) as RetrievalChunk);
+          if (chunk === undefined) {
+            return undefined;
+          }
+          return searchLocalRetrievalIndex(db, {
+            query: makeRetrievalQuery({
+              text: chunk.text,
+              visibleTrustZones,
+              limit: 100,
+            }),
+          });
+        });
+        if (result === undefined) {
+          writeJson(process.stdout, {
+            ok: false,
+            command: "memory get",
+            item: undefined,
+          });
+          return 2;
+        }
+        const item = result.results.find((candidate) => candidate.chunk_id === chunkId);
+        writeJson(process.stdout, {
+          ok: item !== undefined,
+          command: "memory get",
+          item,
+          freshness: result.projection_freshness,
+          filters_applied: result.filters_applied,
+        });
+        return item === undefined ? 2 : 0;
+      }
+      default:
+        throw new CliUsageError(`unknown memory subcommand: ${subcommand}`);
+    }
+  } finally {
+    store.close();
   }
 }
 
@@ -481,7 +692,7 @@ function splitCommand(argv: readonly string[]): { command: string; rest: readonl
   const [command, ...rest] = argv;
   if (command === undefined) {
     throw new CliUsageError(
-      "a command is required: init, project identify, capture-hook, outbox, or sync",
+      "a command is required: init, project identify, capture-hook, outbox, sync, retrieval, or memory",
     );
   }
   return { command, rest };
@@ -646,6 +857,56 @@ function normalizeSyncUrl(value: string): string {
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function requireStoreTrustZone(value: string | undefined): string {
+  if (value === undefined || value.trim().length === 0) {
+    throw new CliUsageError("--trust-zone is required for retrieval and memory commands");
+  }
+  if (!isTrustZoneId(value)) {
+    throw new CliUsageError("--trust-zone must match tz_[a-z0-9][a-z0-9_-]{2,63}");
+  }
+  return value;
+}
+
+function requireVisibleTrustZones(
+  values: readonly string[] | undefined,
+  storeTrustZone: string,
+): string[] {
+  if (values === undefined || values.length === 0) {
+    throw new CliUsageError("memory commands require --visible-trust-zone");
+  }
+  for (const trustZoneId of values) {
+    if (!isTrustZoneId(trustZoneId)) {
+      throw new CliUsageError("--visible-trust-zone must match tz_[a-z0-9][a-z0-9_-]{2,63}");
+    }
+  }
+  if (!values.includes(storeTrustZone)) {
+    throw new CliUsageError("--visible-trust-zone must include the active --trust-zone");
+  }
+  return [...values];
+}
+
+function makeRetrievalQuery(input: {
+  text: string;
+  visibleTrustZones: readonly string[];
+  limit: number;
+}): RetrievalQuery {
+  return {
+    schema_version: "v1",
+    record_type: "retrieval_query",
+    query_id: `query_${sha256Hex(input.text).slice(0, 24)}`,
+    query_text: input.text,
+    filters: {
+      visible_trust_zone_ids: [...input.visibleTrustZones],
+      lifecycle_status: ["active"],
+      epistemic_authority: ["observed", "derived", "verified"],
+      protected_value_policy: "metadata_only",
+      conflict_policy: "surface_conflicts",
+    },
+    ranking: { mode: "hybrid", weights: { structured: 1, fts: 1, semantic: 1, recency: 0.1 } },
+    limit: input.limit,
+  };
 }
 
 function isLoopbackHost(hostname: string): boolean {

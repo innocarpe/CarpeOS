@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
   buildSyncPushRequest,
   type CaptureEnvelope,
@@ -39,6 +39,17 @@ export type LocalStoreOptions = {
   explicitProjectId?: string;
   keyProvider?: KeyProvider;
   clock?: Clock;
+};
+
+export type LocalStoreSqlStatement = {
+  run(...params: SQLInputValue[]): unknown;
+  get(...params: SQLInputValue[]): unknown;
+  all(...params: SQLInputValue[]): unknown[];
+};
+
+export type LocalStoreSqlDatabase = {
+  exec(sql: string): void;
+  prepare(sql: string): LocalStoreSqlStatement;
 };
 
 export type CaptureRequestOptions = {
@@ -966,6 +977,49 @@ export class LocalCaptureStore {
     return inboxRow === undefined ? undefined : (JSON.parse(inboxRow.event_json) as CanonicalEvent);
   }
 
+  withRetrievalDatabase<T>(callback: (db: LocalStoreSqlDatabase) => T): T {
+    let active = true;
+    const assertActive = () => {
+      if (!active) {
+        throw new Error("retrieval SQL session is no longer active");
+      }
+    };
+    const session: LocalStoreSqlDatabase = {
+      exec: (sql) => {
+        assertActive();
+        this.db.exec(sql);
+      },
+      prepare: (sql) => {
+        assertActive();
+        const statement = this.db.prepare(sql);
+        return {
+          run: (...params) => {
+            assertActive();
+            return statement.run(...params);
+          },
+          get: (...params) => {
+            assertActive();
+            return statement.get(...params);
+          },
+          all: (...params) => {
+            assertActive();
+            return statement.all(...params);
+          },
+        };
+      },
+    };
+
+    try {
+      const result = callback(session);
+      if (isThenable(result)) {
+        throw new Error("retrieval SQL callback must be synchronous");
+      }
+      return result;
+    } finally {
+      active = false;
+    }
+  }
+
   private assertLocalTrustZone(trustZoneId: string, refId: string): void {
     if (trustZoneId !== this.trustZone.trust_zone_id) {
       throw new Error(`remote record ${refId} belongs to a different trust zone`);
@@ -1485,5 +1539,14 @@ function isErrnoCode(error: unknown, code: string): boolean {
     error !== null &&
     "code" in error &&
     (error as { code?: unknown }).code === code
+  );
+}
+
+function isThenable(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { then?: unknown }).then === "function"
   );
 }

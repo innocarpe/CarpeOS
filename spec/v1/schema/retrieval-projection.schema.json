@@ -1,0 +1,838 @@
+{
+  "$id": "https://spec.carpeos.org/v1/schema/retrieval-projection.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarpeOS v1 retrieval projection schemas",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/retrievalChunk"
+    },
+    {
+      "$ref": "#/$defs/embeddingJob"
+    },
+    {
+      "$ref": "#/$defs/embeddingRecord"
+    },
+    {
+      "$ref": "#/$defs/projectionFreshness"
+    },
+    {
+      "$ref": "#/$defs/retrievalQuery"
+    },
+    {
+      "$ref": "#/$defs/retrievalResult"
+    }
+  ],
+  "$defs": {
+    "sha256Ref": {
+      "type": "string",
+      "pattern": "^sha-256:[a-f0-9]{64}$"
+    },
+    "projectionVersion": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}/v[0-9]+$"
+    },
+    "retrievalChunkId": {
+      "type": "string",
+      "pattern": "^chk_[a-f0-9]{40}$"
+    },
+    "embeddingJobId": {
+      "type": "string",
+      "pattern": "^embjob_[a-f0-9]{32}$"
+    },
+    "embeddingRecordId": {
+      "type": "string",
+      "pattern": "^emb_[a-f0-9]{40}$"
+    },
+    "chunkKind": {
+      "type": "string",
+      "enum": ["summary", "claim", "decision", "evidence_excerpt", "open_loop"]
+    },
+    "relationshipRole": {
+      "type": "string",
+      "enum": ["primary", "support", "acceptance", "supersession", "erasure", "lineage"]
+    },
+    "sourceRecordKind": {
+      "type": "string",
+      "enum": ["event", "erasure"]
+    },
+    "retrievalStatus": {
+      "type": "string",
+      "enum": ["active", "stale", "projection_deleted"]
+    },
+    "embeddingState": {
+      "type": "string",
+      "enum": ["pending", "leased", "retryable_failed", "blocked", "embedded"]
+    },
+    "embeddingFailureKind": {
+      "type": "string",
+      "enum": [
+        "workers_ai_allocation_exhausted",
+        "rate_limited",
+        "server_error",
+        "timeout",
+        "dimension_mismatch",
+        "invalid_request",
+        "metadata_limit",
+        "vector_id_limit",
+        "unknown_retryable",
+        "unknown_blocked"
+      ]
+    },
+    "pooling": {
+      "type": "string",
+      "enum": ["mean", "cls"]
+    },
+    "retrievalSourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_record_kind",
+        "source_record_id",
+        "trust_zone_id",
+        "zone_sequence",
+        "source_fingerprint",
+        "relationship_role",
+        "recorded_time"
+      ],
+      "properties": {
+        "source_record_kind": {
+          "$ref": "#/$defs/sourceRecordKind"
+        },
+        "source_record_id": {
+          "type": "string",
+          "pattern": "^(?:evt|era)_[a-z0-9][a-z0-9_-]{7,127}$"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "zone_sequence": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+        },
+        "source_fingerprint": {
+          "$ref": "#/$defs/sha256Ref"
+        },
+        "relationship_role": {
+          "$ref": "#/$defs/relationshipRole"
+        },
+        "event_type": {
+          "type": "string",
+          "enum": ["EvidenceArtifact", "Observation", "Claim", "AcceptanceDecision", "Supersession"]
+        },
+        "lifecycle_status": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/lifecycleStatus"
+        },
+        "epistemic_authority": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/epistemicAuthority"
+        },
+        "valid_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        },
+        "recorded_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source_record_kind": {
+                "const": "event"
+              }
+            },
+            "required": ["source_record_kind"]
+          },
+          "then": {
+            "properties": {
+              "source_record_id": {
+                "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+              }
+            },
+            "required": ["event_type", "lifecycle_status", "epistemic_authority", "valid_time"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_record_kind": {
+                "const": "erasure"
+              }
+            },
+            "required": ["source_record_kind"]
+          },
+          "then": {
+            "properties": {
+              "source_record_id": {
+                "type": "string",
+                "pattern": "^era_[a-z0-9][a-z0-9_-]{7,127}$"
+              },
+              "relationship_role": {
+                "enum": ["erasure", "lineage"]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "retrievalDerivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "algorithm_version", "config_digest", "input_manifest_digest"],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "enum": ["canonical_retrieval_chunk_v1"]
+        },
+        "algorithm_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+$"
+        },
+        "config_digest": {
+          "$ref": "#/$defs/sha256Ref"
+        },
+        "input_manifest_digest": {
+          "$ref": "#/$defs/sha256Ref"
+        }
+      }
+    },
+    "embeddingProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "embedding_model",
+        "embedding_dimensions",
+        "embedding_version",
+        "pooling",
+        "input_token_limit",
+        "input_text_sha256",
+        "created_at"
+      ],
+      "properties": {
+        "embedding_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "embedding_dimensions": {
+          "type": "integer",
+          "const": 768
+        },
+        "embedding_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+$"
+        },
+        "pooling": {
+          "$ref": "#/$defs/pooling"
+        },
+        "input_token_limit": {
+          "type": "integer",
+          "const": 512
+        },
+        "input_text_sha256": {
+          "$ref": "#/$defs/sha256Ref"
+        },
+        "created_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "retrievalScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "structured", "fts", "semantic", "recency"],
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "structured": {
+          "type": "number"
+        },
+        "fts": {
+          "type": "number"
+        },
+        "semantic": {
+          "type": "number"
+        },
+        "recency": {
+          "type": "number"
+        }
+      }
+    },
+    "retrievalLineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_records", "canonical_rechecked"],
+      "properties": {
+        "source_records": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/retrievalSourceRecord"
+          }
+        },
+        "canonical_rechecked": {
+          "type": "boolean",
+          "const": true
+        },
+        "accepted_decision_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          },
+          "uniqueItems": true
+        },
+        "rejected_decision_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          },
+          "uniqueItems": true
+        },
+        "supersession_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          },
+          "uniqueItems": true
+        },
+        "erasure_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^era_[a-z0-9][a-z0-9_-]{7,127}$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "retrievalChunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "chunk_id",
+        "chunk_kind",
+        "trust_zone_id",
+        "projection_version",
+        "chunker_version",
+        "chunk_index",
+        "text",
+        "text_digest",
+        "source_records",
+        "derivation",
+        "lifecycle_status",
+        "epistemic_authority",
+        "status",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "record_type": {
+          "type": "string",
+          "const": "retrieval_chunk"
+        },
+        "chunk_id": {
+          "$ref": "#/$defs/retrievalChunkId"
+        },
+        "chunk_kind": {
+          "$ref": "#/$defs/chunkKind"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "projection_version": {
+          "$ref": "#/$defs/projectionVersion"
+        },
+        "chunker_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+$"
+        },
+        "chunk_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "text_digest": {
+          "$ref": "#/$defs/sha256Ref"
+        },
+        "source_records": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/retrievalSourceRecord"
+          }
+        },
+        "derivation": {
+          "$ref": "#/$defs/retrievalDerivation"
+        },
+        "lifecycle_status": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/lifecycleStatus"
+        },
+        "epistemic_authority": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/epistemicAuthority"
+        },
+        "status": {
+          "$ref": "#/$defs/retrievalStatus"
+        },
+        "created_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "embeddingJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "job_id",
+        "chunk_id",
+        "embedding_model",
+        "embedding_version",
+        "pooling",
+        "state",
+        "attempts",
+        "available_at",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "record_type": {
+          "type": "string",
+          "const": "embedding_job"
+        },
+        "job_id": {
+          "$ref": "#/$defs/embeddingJobId"
+        },
+        "chunk_id": {
+          "$ref": "#/$defs/retrievalChunkId"
+        },
+        "embedding_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "embedding_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+$"
+        },
+        "pooling": {
+          "$ref": "#/$defs/pooling"
+        },
+        "state": {
+          "$ref": "#/$defs/embeddingState"
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "available_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "lease_id": {
+          "type": "string",
+          "pattern": "^lease_[a-f0-9]{24}$"
+        },
+        "lease_expires_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "failure_kind": {
+          "$ref": "#/$defs/embeddingFailureKind"
+        },
+        "retry_after": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "quota_reset_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "last_error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "created_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "embeddingRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "embedding_id",
+        "chunk_id",
+        "vector_ref",
+        "vector_digest",
+        "provenance",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "record_type": {
+          "type": "string",
+          "const": "embedding_record"
+        },
+        "embedding_id": {
+          "$ref": "#/$defs/embeddingRecordId"
+        },
+        "chunk_id": {
+          "$ref": "#/$defs/retrievalChunkId"
+        },
+        "vector_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "vector_digest": {
+          "$ref": "#/$defs/sha256Ref"
+        },
+        "provenance": {
+          "$ref": "#/$defs/embeddingProvenance"
+        },
+        "created_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "projectionFreshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "projection_name",
+        "projection_version",
+        "trust_zone_id",
+        "last_indexed_zone_sequence",
+        "sync_cursor_after_sequence",
+        "stale",
+        "checked_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "record_type": {
+          "type": "string",
+          "const": "projection_freshness"
+        },
+        "projection_name": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "projection_version": {
+          "$ref": "#/$defs/projectionVersion"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "last_indexed_zone_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sync_cursor_after_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["behind_sync_cursor", "version_changed", "erasure_pending"]
+        },
+        "checked_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "stale": {
+                "const": true
+              }
+            },
+            "required": ["stale"]
+          },
+          "then": {
+            "required": ["reason"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "behind_sync_cursor"
+              }
+            },
+            "required": ["reason"]
+          },
+          "then": {
+            "properties": {
+              "stale": {
+                "const": true
+              }
+            },
+            "required": ["stale"]
+          }
+        }
+      ]
+    },
+    "retrievalFilters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible_trust_zone_ids", "protected_value_policy", "conflict_policy"],
+      "properties": {
+        "visible_trust_zone_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+          },
+          "uniqueItems": true
+        },
+        "lifecycle_status": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/lifecycleStatus"
+          },
+          "uniqueItems": true
+        },
+        "epistemic_authority": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/epistemicAuthority"
+          },
+          "uniqueItems": true
+        },
+        "valid_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        },
+        "recorded_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        },
+        "protected_value_policy": {
+          "type": "string",
+          "enum": ["metadata_only", "allow_decrypt", "deny"]
+        },
+        "conflict_policy": {
+          "type": "string",
+          "enum": ["surface_conflicts", "exclude_conflicts", "review_required"]
+        }
+      }
+    },
+    "rankWeights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["structured", "fts", "semantic", "recency"],
+      "properties": {
+        "structured": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fts": {
+          "type": "number",
+          "minimum": 0
+        },
+        "semantic": {
+          "type": "number",
+          "minimum": 0
+        },
+        "recency": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "retrievalQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "query_id",
+        "query_text",
+        "filters",
+        "ranking",
+        "limit"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "record_type": {
+          "type": "string",
+          "const": "retrieval_query"
+        },
+        "query_id": {
+          "type": "string",
+          "pattern": "^query_[a-f0-9]{24}$"
+        },
+        "query_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "filters": {
+          "$ref": "#/$defs/retrievalFilters"
+        },
+        "ranking": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "weights"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["structured", "fts", "semantic", "hybrid"]
+            },
+            "weights": {
+              "$ref": "#/$defs/rankWeights"
+            }
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "retrievalResultItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "chunk_id", "status", "score", "lineage", "canonical_rechecked"],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "pattern": "^cand_[a-f0-9]{24}$"
+        },
+        "chunk_id": {
+          "$ref": "#/$defs/retrievalChunkId"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["visible", "redacted", "excluded"]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "score": {
+          "$ref": "#/$defs/retrievalScore"
+        },
+        "lineage": {
+          "$ref": "#/$defs/retrievalLineage"
+        },
+        "canonical_rechecked": {
+          "type": "boolean",
+          "const": true
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "visible"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["text"],
+            "not": {
+              "required": ["reason"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": ["redacted", "excluded"]
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["reason"],
+            "not": {
+              "required": ["text"]
+            }
+          }
+        }
+      ]
+    },
+    "retrievalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "query_id",
+        "projection_freshness",
+        "filters_applied",
+        "results",
+        "warnings"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "record_type": {
+          "type": "string",
+          "const": "retrieval_result"
+        },
+        "query_id": {
+          "type": "string",
+          "pattern": "^query_[a-f0-9]{24}$"
+        },
+        "projection_freshness": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/projectionFreshness"
+          }
+        },
+        "filters_applied": {
+          "$ref": "#/$defs/retrievalFilters"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/retrievalResultItem"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        }
+      }
+    }
+  }
+}
