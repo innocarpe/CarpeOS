@@ -138,6 +138,7 @@ Use `ProtectedValueRef` to reference an encrypted blob.
 
 A `ProtectedValueRef` identifies:
 
+- a stable protected value ID;
 - a vault reference;
 - a key reference;
 - encrypted blob metadata;

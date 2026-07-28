@@ -1,0 +1,11 @@
+{
+  "name": "@carpeos/adapter-template-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Contract tests for public CarpeOS provider hook templates.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  }
+}

@@ -72,7 +72,25 @@
             "$ref": "https://spec.carpeos.org/v1/schema/erasure-ledger.schema.json"
           }
         }
-      }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "events": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "erasures": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        }
+      ]
     },
     "syncPushResult": {
       "type": "object",

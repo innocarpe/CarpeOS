@@ -23,6 +23,10 @@
       "type": "string",
       "pattern": "^art_[a-z0-9][a-z0-9_-]{7,127}$"
     },
+    "protectedValueId": {
+      "type": "string",
+      "pattern": "^pv_[a-z0-9][a-z0-9_-]{7,127}$"
+    },
     "trustZoneId": {
       "type": "string",
       "pattern": "^tz_[a-z0-9][a-z0-9_-]{2,63}$"
@@ -115,11 +119,14 @@
     "protectedValueRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ref_type", "vault_ref", "key_ref", "encrypted_blob"],
+      "required": ["ref_type", "protected_value_id", "vault_ref", "key_ref", "encrypted_blob"],
       "properties": {
         "ref_type": {
           "type": "string",
           "const": "protected_value"
+        },
+        "protected_value_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueId"
         },
         "vault_ref": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"

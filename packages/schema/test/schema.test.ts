@@ -28,6 +28,7 @@ const trustZone = {
 
 const protectedContentRef = {
   ref_type: "protected_value",
+  protected_value_id: "pv_synthetic_artifact_001",
   vault_ref: "vault_primary",
   key_ref: "key_active",
   encrypted_blob: {
@@ -94,7 +95,7 @@ type _InvalidTombstoneProtectedValue = AssertErasureLedgerRecord<
   // @ts-expect-error tombstone records can only target events or artifacts.
   CompileTimeErasureBase & {
     method: "tombstone";
-    target_ref: { target_kind: "protected_value"; target_id: "protected_artifact_001" };
+    target_ref: { target_kind: "protected_value"; target_id: "pv_synthetic_artifact_001" };
   }
 >;
 
@@ -189,7 +190,7 @@ const erasureFixture: ErasureLedgerRecord = {
   erasure_id: "era_00000001",
   target_ref: {
     target_kind: "protected_value",
-    target_id: "protected_artifact_001",
+    target_id: "pv_synthetic_artifact_001",
     reason: "Synthetic encrypted content deletion.",
   },
   requested_at: "2026-01-02T00:00:00Z",
@@ -364,9 +365,22 @@ describe("CarpeOS v1 schemas", () => {
         },
       },
     };
+    const withoutProtectedValueId = {
+      ...event,
+      payload: {
+        ...event.payload,
+        content_ref: {
+          ref_type: protectedContentRef.ref_type,
+          vault_ref: protectedContentRef.vault_ref,
+          key_ref: protectedContentRef.key_ref,
+          encrypted_blob: protectedContentRef.encrypted_blob,
+        },
+      },
+    };
 
     expect(validate(withSecretBytes)).toBe(false);
     expect(validate(withCiphertextBytes)).toBe(false);
+    expect(validate(withoutProtectedValueId)).toBe(false);
   });
 
   it("keeps acceptance and rejection only on decision payloads", () => {
@@ -494,8 +508,20 @@ describe("CarpeOS v1 schemas", () => {
       method: "tombstone",
       target_ref: {
         target_kind: "protected_value",
-        target_id: "protected_artifact_001",
+        target_id: "pv_synthetic_artifact_001",
       },
+    };
+    const cryptoShredWithNonProtectedValueId = {
+      ...erasureFixture,
+      target_ref: {
+        target_kind: "protected_value",
+        target_id: "artifact_not_a_protected_value",
+      },
+    };
+    const emptyPush = {
+      ...(syncFixtures[0] as Record<string, unknown>),
+      events: [],
+      erasures: [],
     };
     const replayMissingReplayOf = {
       schema_version: "v1",
@@ -523,6 +549,11 @@ describe("CarpeOS v1 schemas", () => {
     expect(validators.erasureLedger(cryptoShredEvent)).toBe(false);
     expect(validators.erasureLedger(projectionDeleteKey)).toBe(false);
     expect(validators.erasureLedger(tombstoneProtectedValue)).toBe(false);
+    expect(validators.erasureLedger(cryptoShredWithNonProtectedValueId)).toBe(false);
+    expect(validators.syncApi(emptyPush)).toBe(false);
+    expect(validateConformance("syncApi", emptyPush).errors).toContain(
+      "sync push request must contain at least one event or erasure",
+    );
     expect(validators.syncApi(replayMissingReplayOf)).toBe(false);
     expect(validators.syncApi(conflictMissingConflictWith)).toBe(false);
     expect(validators.syncApi(replayWithConflictMarker)).toBe(false);

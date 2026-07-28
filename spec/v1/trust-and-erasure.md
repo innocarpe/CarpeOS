@@ -29,6 +29,7 @@ the canonical event.
 
 The event may store:
 
+- protected value identity;
 - vault reference;
 - key reference;
 - encryption algorithm;
@@ -38,6 +39,10 @@ The event may store:
 - size.
 
 The event MUST NOT store plaintext protected content.
+
+`protected_value_id` is the stable identity shared by the canonical reference,
+the encrypted value store, and `ErasureLedger.target_ref.target_id` when
+`target_kind` is `protected_value`.
 
 ## DEK and KeyProvider
 
@@ -91,8 +96,8 @@ mark affected projection output according to the erasure method.
 
 ## Synthetic Example
 
-An `EvidenceArtifact` for Example Alpha points to `vault:synthetic_local` with
-`key_ref = key:example_local_dek_001`. A later `ErasureLedger` record uses
-`crypto_shred` against that protected value or its key. The canonical event
-remains as audit metadata, but the DEK is destroyed and projections must remove
-plaintext.
+An `EvidenceArtifact` for Example Alpha points to `pv_example_local_001` in
+`vault_synthetic_local` with `key_ref = key_example_local_dek_001`. A later
+`ErasureLedger` record uses `crypto_shred` against that protected value ID or its
+key. The canonical event remains as audit metadata, but the DEK is destroyed and
+projections must remove plaintext.

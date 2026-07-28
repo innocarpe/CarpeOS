@@ -55,6 +55,7 @@ export type TrustZone = {
 
 export type ProtectedValueRef = {
   ref_type: "protected_value";
+  protected_value_id: string;
   vault_ref: string;
   key_ref: string;
   encrypted_blob: {
@@ -423,6 +424,10 @@ function collectSyncSemanticErrors(message: Record<string, unknown>): string[] {
   }
 
   const errors: string[] = [];
+
+  if (message.events.length === 0 && message.erasures.length === 0) {
+    errors.push("sync push request must contain at least one event or erasure");
+  }
 
   for (const event of message.events) {
     if (isCanonicalEventLike(event)) {

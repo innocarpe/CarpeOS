@@ -16,7 +16,9 @@ network reachability is external-reference access metadata, not a trust zone.
 Sensitive or large evidence will use `ProtectedValueRef` to external encrypted
 blobs. A DEK encrypts blob content, and a `KeyProvider` protects the DEK.
 `ErasureLedger` records tombstone, crypto-shred, and projection-delete actions
-with method-compatible targets.
+with method-compatible targets. Each protected reference carries the same
+`protected_value_id` used by encrypted storage and protected-value erasure
+targets.
 
 ## Consequences
 
