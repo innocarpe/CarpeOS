@@ -2,6 +2,12 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type {
+  CanonicalEvent,
+  ErasureLedgerRecord,
+  ProtectedValueMetadata,
+  ProtectedValueUploadIntent,
+} from "@carpeos/schema";
 import type { CaptureEnvelope } from "@carpeos/capture";
 import { hashHex } from "@carpeos/capture";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +21,8 @@ import {
 import { resolveProjectIdentity, sanitizeRemoteIdentity } from "../src/project-identity.js";
 
 const staticMaterial = new Uint8Array(32).fill(7);
+const otherStaticMaterial = new Uint8Array(32).fill(9);
+const trustZoneSyncKey = new Uint8Array(32).fill(11);
 const now = new Date("2026-01-01T00:00:00Z");
 const createdDirs: string[] = [];
 
@@ -217,7 +225,7 @@ describe("LocalCaptureStore", () => {
     const row = db.prepare("SELECT count(*) AS count FROM schema_migrations").get() as {
       count: number;
     };
-    expect(Number(row.count)).toBe(1);
+    expect(Number(row.count)).toBe(2);
     db.close();
   });
 
@@ -357,6 +365,220 @@ describe("LocalCaptureStore", () => {
         }),
     ).toThrow(/invalid trust zone id/);
   });
+
+  it("exports protected ciphertext with a schema-valid upload intent without leaking the raw device key", () => {
+    const { store } = makeStore();
+    const captured = store.captureHook(makeEnvelope({ payload: { transcript: "sync export" } }));
+    const transfer = store.exportProtectedValueForSync({
+      protectedValueId: captured.protected_value_id,
+      trustZoneSyncKey,
+    });
+
+    expect(transfer.intent.protected_value_id).toBe(captured.protected_value_id);
+    expect(transfer.intent.trust_zone_id).toBe(store.trustZone.trust_zone_id);
+    expect(transfer.intent.object_key).toContain(`/${captured.protected_value_id}/`);
+    expect(transfer.intent.original_ciphertext_digest.value).toBe(hashHex(transfer.ciphertext));
+    expect(transfer.intent.original_ciphertext_size_bytes).toBe(transfer.ciphertext.byteLength);
+    expect(JSON.stringify(transfer.intent)).not.toContain(
+      Buffer.from(staticMaterial).toString("hex"),
+    );
+    expect(transfer.intent.wrapped_device_key.aad).toEqual({
+      trust_zone_id: store.trustZone.trust_zone_id,
+      protected_value_id: captured.protected_value_id,
+      key_ref: "key_local_active",
+    });
+  });
+
+  it("imports pulled protected values into a second runtime with a different device key", () => {
+    const trustZoneId = "tz_shared_sync_zone";
+    const runtimeA = tempDir();
+    const runtimeB = tempDir();
+    const storeA = new LocalCaptureStore({
+      runtimeDir: runtimeA,
+      workspaceRoot: runtimeA,
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+      clock: { now: () => now },
+    });
+    const captured = storeA.captureHook(
+      makeEnvelope({ payload: { transcript: "cross mac synthetic secret" } }),
+    );
+    const transfer = storeA.exportProtectedValueForSync({
+      protectedValueId: captured.protected_value_id,
+      trustZoneSyncKey,
+    });
+    const remoteEvent = { ...captured.event, zone_sequence: 12 };
+    const metadata = metadataFromIntent(transfer.intent, captured.event.event_id);
+
+    const storeB = new LocalCaptureStore({
+      runtimeDir: runtimeB,
+      workspaceRoot: runtimeB,
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(otherStaticMaterial),
+      clock: { now: () => new Date("2026-01-01T00:01:00Z") },
+    });
+    const imported = storeB.importPulledProtectedValue({
+      event: remoteEvent,
+      metadata,
+      ciphertext: transfer.ciphertext,
+      trustZoneSyncKey,
+    });
+
+    expect(imported.status).toBe("imported");
+    expect(storeB.getEvent(captured.event.event_id)).toEqual(remoteEvent);
+    expect(
+      Buffer.from(storeB.decryptProtectedValue(captured.protected_value_id)).toString("utf8"),
+    ).toContain("cross mac synthetic secret");
+    expect(storeB.countRows("protected_value_imports")).toBe(1);
+    expect(storeB.countRows("sync_inbox_events")).toBe(1);
+    expect(searchRuntimeBytes(runtimeB, "cross mac synthetic secret")).toBe(false);
+  });
+
+  it("fails closed on wrong sync key, digest mismatch, and wrapped AAD mismatch", () => {
+    const { store } = makeStore();
+    const captured = store.captureHook(makeEnvelope({ payload: { transcript: "aad guard" } }));
+    const transfer = store.exportProtectedValueForSync({
+      protectedValueId: captured.protected_value_id,
+      trustZoneSyncKey,
+    });
+    const metadata = metadataFromIntent(transfer.intent, captured.event.event_id);
+    const target = new LocalCaptureStore({
+      runtimeDir: tempDir(),
+      workspaceRoot: tempDir(),
+      trustZoneId: store.trustZone.trust_zone_id,
+      keyProvider: new StaticKeyProvider(otherStaticMaterial),
+    });
+
+    expect(() =>
+      target.importPulledProtectedValue({
+        event: captured.event,
+        metadata,
+        ciphertext: transfer.ciphertext,
+        trustZoneSyncKey: new Uint8Array(32).fill(12),
+      }),
+    ).toThrow();
+    expect(() =>
+      target.importPulledProtectedValue({
+        event: captured.event,
+        metadata: {
+          ...metadata,
+          original_ciphertext_digest: { algorithm: "sha-256", value: "0".repeat(64) },
+        },
+        ciphertext: transfer.ciphertext,
+        trustZoneSyncKey,
+      }),
+    ).toThrow(/metadata digest does not match event|ciphertext digest mismatch/);
+    expect(() =>
+      target.importPulledProtectedValue({
+        event: captured.event,
+        metadata: {
+          ...metadata,
+          wrapped_device_key: {
+            ...metadata.wrapped_device_key,
+            aad: { ...metadata.wrapped_device_key.aad, key_ref: "key_wrong" },
+          },
+        },
+        ciphertext: transfer.ciphertext,
+        trustZoneSyncKey,
+      }),
+    ).toThrow(/invalid protected value metadata|AAD key ref mismatch/);
+  });
+
+  it("keeps imports and sync cursors restart-safe and idempotent", () => {
+    const trustZoneId = "tz_restart_safe_zone";
+    const source = new LocalCaptureStore({
+      runtimeDir: tempDir(),
+      workspaceRoot: tempDir(),
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+    });
+    const captured = source.captureHook(makeEnvelope());
+    const transfer = source.exportProtectedValueForSync({
+      protectedValueId: captured.protected_value_id,
+      trustZoneSyncKey,
+    });
+    const remoteEvent = { ...captured.event, zone_sequence: 7 };
+    const metadata = metadataFromIntent(transfer.intent, captured.event.event_id);
+    const runtimeDir = tempDir();
+    const dbPath = join(runtimeDir, "carpeos.sqlite");
+    const first = new LocalCaptureStore({
+      runtimeDir,
+      dbPath,
+      workspaceRoot: runtimeDir,
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(otherStaticMaterial),
+    });
+    expect(
+      first.importPulledProtectedValue({
+        event: remoteEvent,
+        metadata,
+        ciphertext: transfer.ciphertext,
+        trustZoneSyncKey,
+      }).status,
+    ).toBe("imported");
+    first.persistSyncCursor({ afterSequence: 7, cursor: "cursor_7", now });
+    first.close();
+
+    const reopened = new LocalCaptureStore({
+      runtimeDir,
+      dbPath,
+      workspaceRoot: runtimeDir,
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(otherStaticMaterial),
+    });
+    expect(
+      reopened.importPulledProtectedValue({
+        event: remoteEvent,
+        metadata,
+        ciphertext: transfer.ciphertext,
+        trustZoneSyncKey,
+      }).status,
+    ).toBe("replay");
+    expect(reopened.countRows("canonical_events")).toBe(1);
+    expect(reopened.countRows("protected_value_imports")).toBe(1);
+    expect(reopened.getSyncCursor()).toEqual({
+      trust_zone_id: trustZoneId,
+      after_sequence: 7,
+      cursor: "cursor_7",
+    });
+  });
+
+  it("imports non-protected pulled events idempotently and rejects divergent replay", () => {
+    const trustZoneId = "tz_general_import_zone";
+    const target = new LocalCaptureStore({
+      runtimeDir: tempDir(),
+      workspaceRoot: tempDir(),
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(otherStaticMaterial),
+    });
+    const event = makeExternalEvent("evt_general_import_0001", trustZoneId);
+
+    expect(target.importPulledEvent(event, now)).toEqual({
+      status: "imported",
+      event_id: event.event_id,
+    });
+    expect(target.importPulledEvent(event, now).status).toBe("replay");
+    expect(target.getEvent(event.event_id)).toEqual(event);
+    expect(() =>
+      target.importPulledEvent({ ...event, subject_ref: "subject_changed" }, now),
+    ).toThrow(/replay diverges/);
+  });
+
+  it("rejects pulled events and erasures outside the local trust zone", () => {
+    const target = new LocalCaptureStore({
+      runtimeDir: tempDir(),
+      workspaceRoot: tempDir(),
+      trustZoneId: "tz_local_import_zone",
+      keyProvider: new StaticKeyProvider(otherStaticMaterial),
+    });
+
+    expect(() =>
+      target.importPulledEvent(makeExternalEvent("evt_wrong_zone0001", "tz_other_import_zone")),
+    ).toThrow(/different trust zone/);
+    expect(() =>
+      target.importPulledErasure(makeErasure("era_wrong_zone0001", "tz_other_import_zone")),
+    ).toThrow(/different trust zone/);
+  });
 });
 
 describe("project identity", () => {
@@ -462,6 +684,60 @@ function makeEnvelope(overrides: Partial<CaptureEnvelope> = {}): CaptureEnvelope
   };
 }
 
+function makeExternalEvent(eventId: string, trustZoneId: string): CanonicalEvent {
+  return {
+    schema_version: "v1",
+    event_id: eventId,
+    event_type: "EvidenceArtifact",
+    subject_ref: "subject_synthetic",
+    valid_time: { start: "2026-01-01T00:00:00Z", end: null },
+    recorded_time: { start: "2026-01-01T00:00:00Z", end: null },
+    lifecycle_status: "active",
+    epistemic_authority: "observed",
+    trust_zone: { trust_zone_id: trustZoneId, isolation: "user_cloud" },
+    provenance: [
+      { ref_type: "external", ref_id: "external_synthetic", relationship: "derived_from" },
+    ],
+    idempotency_key: `idem_${eventId.slice(4)}000000000000`,
+    request_fingerprint: "sha-256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    zone_sequence: 3,
+    payload: {
+      artifact_id: `art_${eventId.slice(4)}0000`,
+      kind: "message",
+      media_type: "text/plain",
+      content_ref: {
+        ref_type: "external_uri",
+        uri: `https://example.invalid/${eventId}`,
+        digest: {
+          algorithm: "sha-256",
+          value: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        },
+        visibility: "public",
+        reachability: "online",
+      },
+    },
+  };
+}
+
+function makeErasure(erasureId: string, trustZoneId: string): ErasureLedgerRecord {
+  return {
+    schema_version: "v1",
+    erasure_id: erasureId,
+    target_ref: {
+      target_kind: "event",
+      target_id: "evt_general_import_0001",
+      reason: "synthetic erasure",
+    },
+    requested_at: "2026-01-01T00:00:00Z",
+    completed_at: null,
+    method: "tombstone",
+    actor_ref: "actor_synthetic",
+    trust_zone: { trust_zone_id: trustZoneId, isolation: "user_cloud" },
+    evidence_refs: [{ ref_type: "external", ref_id: "external_erasure", relationship: "supports" }],
+    zone_sequence: 4,
+  };
+}
+
 function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "carpeos-local-store-"));
   createdDirs.push(dir);
@@ -487,4 +763,31 @@ function searchRuntimeBytes(runtimeDir: string, needle: string): boolean {
     }
   }
   return false;
+}
+
+function metadataFromIntent(
+  intent: ProtectedValueUploadIntent,
+  eventId: string,
+): ProtectedValueMetadata {
+  return {
+    schema_version: "v1",
+    metadata_type: "protected_value",
+    protected_value_id: intent.protected_value_id,
+    trust_zone_id: intent.trust_zone_id,
+    object_key: intent.object_key,
+    vault_ref: intent.vault_ref,
+    encryption_algorithm: intent.encryption_algorithm,
+    encoding: intent.encoding,
+    ciphertext_nonce: intent.ciphertext_nonce,
+    ciphertext_auth_tag: intent.ciphertext_auth_tag,
+    original_ciphertext_digest: intent.original_ciphertext_digest,
+    original_ciphertext_size_bytes: intent.original_ciphertext_size_bytes,
+    key_ref: intent.key_ref,
+    wrapped_device_key: intent.wrapped_device_key,
+    linked_event_ids: [eventId],
+    orphan_status: "linked",
+    uploaded_at: now.toISOString().replace(".000Z", "Z"),
+    ...(intent.nonce_ref === undefined ? {} : { nonce_ref: intent.nonce_ref }),
+    ...(intent.tag_ref === undefined ? {} : { tag_ref: intent.tag_ref }),
+  };
 }

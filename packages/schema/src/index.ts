@@ -221,21 +221,108 @@ export type SyncErrorItem = {
     | "idempotency_conflict"
     | "unauthorized"
     | "not_found"
+    | "protected_value_missing"
+    | "protected_value_digest_mismatch"
+    | "protected_value_orphaned"
     | "internal_error";
   message: string;
   ref_id?: string;
 };
 
-export type SyncPushRequest = {
+export type WrappedDeviceKeyEnvelope = {
+  schema_version: SchemaVersion;
+  envelope_version: "wrapped-device-key/v1";
+  wrapping_algorithm: "aes-256-gcm";
+  encoding: "base64url";
+  wrap_key_ref: string;
+  wrapped_key_ref: string;
+  wrap_nonce: string;
+  wrap_auth_tag: string;
+  wrapped_key_ciphertext: string;
+  wrapped_key_digest: Digest;
+  wrapped_key_size_bytes: number;
+  aad: {
+    trust_zone_id: string;
+    protected_value_id: string;
+    key_ref: string;
+  };
+};
+
+export type ProtectedValueUploadIntent = {
+  schema_version: SchemaVersion;
+  intent_type: "protected_value_upload";
+  protected_value_id: string;
+  trust_zone_id: string;
+  vault_ref: string;
+  key_ref: string;
+  object_key: string;
+  encryption_algorithm: "aes-256-gcm";
+  encoding: "base64url";
+  ciphertext_nonce: string;
+  ciphertext_auth_tag: string;
+  original_ciphertext_digest: Digest;
+  original_ciphertext_size_bytes: number;
+  nonce_ref?: string;
+  tag_ref?: string;
+  wrapped_device_key: WrappedDeviceKeyEnvelope;
+};
+
+export type ProtectedValueUploadReceipt = {
+  schema_version: SchemaVersion;
+  receipt_type: "protected_value_upload";
+  protected_value_id: string;
+  trust_zone_id: string;
+  object_key: string;
+  original_ciphertext_digest: Digest;
+  original_ciphertext_size_bytes: number;
+  uploaded_at: string;
+  status: "uploaded" | "already_exists";
+  upload_receipt_id: string;
+};
+
+export type ProtectedValueMetadata = {
+  schema_version: SchemaVersion;
+  metadata_type: "protected_value";
+  protected_value_id: string;
+  trust_zone_id: string;
+  object_key: string;
+  vault_ref: string;
+  encryption_algorithm: "aes-256-gcm";
+  encoding: "base64url";
+  ciphertext_nonce: string;
+  ciphertext_auth_tag: string;
+  original_ciphertext_digest: Digest;
+  original_ciphertext_size_bytes: number;
+  nonce_ref?: string;
+  tag_ref?: string;
+  key_ref: string;
+  wrapped_device_key: WrappedDeviceKeyEnvelope;
+  linked_event_ids: string[];
+  orphan_status: "linked" | "orphaned";
+  uploaded_at: string;
+};
+
+export type SyncPushRequestBase = {
   schema_version: SchemaVersion;
   request_id: string;
   client_id: string;
   trust_zone_id: string;
   idempotency_key: string;
   request_fingerprint: string;
-  events: CanonicalEvent[];
-  erasures: ErasureLedgerRecord[];
+  protected_value_receipts?: ProtectedValueUploadReceipt[];
 };
+
+export type SyncPushEventRequest = SyncPushRequestBase & {
+  events: [CanonicalEvent];
+  erasures: [];
+};
+
+export type SyncPushErasureRequest = SyncPushRequestBase & {
+  events: [];
+  erasures: [ErasureLedgerRecord];
+};
+
+export type SyncPushRequest = SyncPushEventRequest | SyncPushErasureRequest;
 
 export type SyncPushResult = {
   schema_version: SchemaVersion;
@@ -263,6 +350,7 @@ export type SyncPullResult = {
   events: CanonicalEvent[];
   erasures: ErasureLedgerRecord[];
   cursor?: string;
+  after_sequence?: number;
   has_more: boolean;
 };
 
@@ -272,6 +360,9 @@ export type SyncError = {
 };
 
 export type SyncApiMessage =
+  | ProtectedValueUploadIntent
+  | ProtectedValueUploadReceipt
+  | ProtectedValueMetadata
   | SyncPushRequest
   | SyncPushResult
   | SyncPullRequest
@@ -378,6 +469,7 @@ export function validateConformance(schemaName: SchemaName, value: unknown): Con
 
   if (schemaName === "syncApi" && isObject(value)) {
     errors.push(...collectSyncSemanticErrors(value));
+    errors.push(...collectProtectedTransferSemanticErrors(value));
   }
 
   return {
@@ -438,6 +530,44 @@ function collectSyncSemanticErrors(message: Record<string, unknown>): string[] {
           `event ${event.event_id} trust_zone_id must match sync push trust_zone_id ${message.trust_zone_id}`,
         );
       }
+
+      const protectedRef = getEventProtectedValueRef(event);
+      if (protectedRef !== undefined && Array.isArray(message.protected_value_receipts)) {
+        const receipt = message.protected_value_receipts.find(
+          (item) => isObject(item) && item.protected_value_id === protectedRef.protected_value_id,
+        );
+
+        if (receipt === undefined) {
+          errors.push(
+            `event ${event.event_id} protected_value_id ${protectedRef.protected_value_id} has no matching upload receipt`,
+          );
+        } else {
+          if (receipt.trust_zone_id !== message.trust_zone_id) {
+            errors.push(
+              `upload receipt ${protectedRef.protected_value_id} trust_zone_id must match sync push trust_zone_id ${message.trust_zone_id}`,
+            );
+          }
+
+          const receiptDigest = isObject(receipt.original_ciphertext_digest)
+            ? receipt.original_ciphertext_digest
+            : undefined;
+          if (
+            isDigestLike(receiptDigest) &&
+            (receiptDigest.algorithm !== protectedRef.encrypted_blob.digest.algorithm ||
+              receiptDigest.value !== protectedRef.encrypted_blob.digest.value)
+          ) {
+            errors.push(
+              `upload receipt ${protectedRef.protected_value_id} digest must match event protected value digest`,
+            );
+          }
+
+          if (receipt.original_ciphertext_size_bytes !== protectedRef.encrypted_blob.size_bytes) {
+            errors.push(
+              `upload receipt ${protectedRef.protected_value_id} size must match event protected value size`,
+            );
+          }
+        }
+      }
     }
   }
 
@@ -452,6 +582,36 @@ function collectSyncSemanticErrors(message: Record<string, unknown>): string[] {
         `erasure ${erasure.erasure_id} trust_zone_id must match sync push trust_zone_id ${message.trust_zone_id}`,
       );
     }
+  }
+
+  return errors;
+}
+
+function collectProtectedTransferSemanticErrors(message: Record<string, unknown>): string[] {
+  if (!isProtectedTransferLike(message)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  const aad = message.wrapped_device_key.aad;
+
+  if (aad.trust_zone_id !== message.trust_zone_id) {
+    errors.push("wrapped device-key aad.trust_zone_id must match protected value trust_zone_id");
+  }
+
+  if (aad.protected_value_id !== message.protected_value_id) {
+    errors.push("wrapped device-key aad.protected_value_id must match protected_value_id");
+  }
+
+  if (aad.key_ref !== message.key_ref) {
+    errors.push("wrapped device-key aad.key_ref must match key_ref");
+  }
+
+  if (
+    typeof message.object_key === "string" &&
+    !message.object_key.includes(`/${message.protected_value_id}/`)
+  ) {
+    errors.push("protected value object_key must include protected_value_id");
   }
 
   return errors;
@@ -478,6 +638,45 @@ function isCanonicalEventLike(value: unknown): value is CanonicalEvent {
     typeof value.recorded_time.start === "string" &&
     (typeof value.recorded_time.end === "string" || value.recorded_time.end === null)
   );
+}
+
+function getEventProtectedValueRef(event: CanonicalEvent): ProtectedValueRef | undefined {
+  const payload: unknown = event.payload;
+
+  if (
+    isObject(payload) &&
+    isObject(payload.content_ref) &&
+    payload.content_ref.ref_type === "protected_value" &&
+    typeof payload.content_ref.protected_value_id === "string" &&
+    isObject(payload.content_ref.encrypted_blob) &&
+    isObject(payload.content_ref.encrypted_blob.digest) &&
+    typeof payload.content_ref.encrypted_blob.size_bytes === "number"
+  ) {
+    return payload.content_ref as ProtectedValueRef;
+  }
+
+  return undefined;
+}
+
+function isProtectedTransferLike(
+  value: Record<string, unknown>,
+): value is ProtectedValueUploadIntent | ProtectedValueMetadata {
+  return (
+    (value.intent_type === "protected_value_upload" || value.metadata_type === "protected_value") &&
+    typeof value.protected_value_id === "string" &&
+    typeof value.trust_zone_id === "string" &&
+    typeof value.key_ref === "string" &&
+    typeof value.object_key === "string" &&
+    isObject(value.wrapped_device_key) &&
+    isObject(value.wrapped_device_key.aad) &&
+    typeof value.wrapped_device_key.aad.trust_zone_id === "string" &&
+    typeof value.wrapped_device_key.aad.protected_value_id === "string" &&
+    typeof value.wrapped_device_key.aad.key_ref === "string"
+  );
+}
+
+function isDigestLike(value: unknown): value is Digest {
+  return isObject(value) && typeof value.algorithm === "string" && typeof value.value === "string";
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

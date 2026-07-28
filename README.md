@@ -9,9 +9,11 @@ CarpeOS is a personal knowledge operating system for AI-assisted work.
 It is designed to capture work across AI agents, structure it as
 provenance-aware knowledge, synchronize it across devices, and expose that
 knowledge through retrieval interfaces for both humans and LLMs. The current
-G004 implementation covers local capture and outbox storage only. Remote sync,
-cross-device sharing, retrieval, MCP, embedding, GraphRAG, and Obsidian
-projections are planned milestones, not active features.
+G005 implementation covers local capture, durable outbox storage, and a
+Cloudflare Worker/D1/R2 sync backend and client that are locally integration
+tested with synthetic data. No live Cloudflare deployment is claimed.
+Retrieval, MCP, embedding, GraphRAG, and Obsidian projections are planned
+milestones, not active features.
 
 This repository is the canonical place for the public design, specifications,
 implementation, and roadmap. It does not contain a user's private knowledge
@@ -65,10 +67,21 @@ leased outbox metadata, and future erasure target. Local capture assigns
 `local_sequence` for device ordering. It does not assign canonical
 `zone_sequence`; that remains a server-side G005 responsibility.
 
-Remote sync is not implemented in G004. Events can accumulate locally in the
-metadata outbox, but another machine will not receive them until a future sync
-service defines encrypted blob transfer, uploads the events, and reconciles
-them.
+G005 adds the first sync boundary:
+
+- authenticated `sync push`, `sync pull`, `sync once`, and `sync status` CLI
+  commands;
+- encrypted protected-value upload/download before metadata acceptance;
+- D1-backed idempotency, replay, conflict, per-zone sequence, and pull cursor
+  state;
+- R2-backed encrypted protected-value ciphertext storage;
+- out-of-band trust-zone sync key enrollment for MacBook/Mac mini sharing;
+- synthetic local integration tests for the Worker, client, local store, and
+  CLI.
+
+The sync backend is deployable code and local test infrastructure only. This
+repository does not claim that a production Cloudflare Worker, D1 database, or
+R2 bucket has been provisioned.
 
 ## Quick Start
 
@@ -109,13 +122,31 @@ Inspect the local outbox:
 node apps/carpeos-cli/dist/index.js outbox status
 ```
 
+Inspect sync readiness without exposing secrets:
+
+```sh
+node apps/carpeos-cli/dist/index.js sync status
+```
+
+After configuring a private Worker URL plus local `0600` credential and
+trust-zone sync key files, run one bounded sync cycle:
+
+```sh
+node apps/carpeos-cli/dist/index.js sync once \
+  --url https://carpeos-sync.example.workers.dev \
+  --credential-file "$HOME/.carpeos/sync-credential" \
+  --sync-key-file "$HOME/.carpeos/trust-zone-sync.key"
+```
+
 The provider templates in `adapters/` expect a `carpeos` binary on `PATH`. In
 this repository, command behavior is tested through the compiled CLI entrypoint
 under `apps/carpeos-cli/dist/index.js`; package installation and binary
 distribution are separate packaging work.
 
 See [Local Capture Guide](docs/guides/local-capture.md) for the complete command
-surface and hook template notes.
+surface and hook template notes. See
+[Cloudflare Sync Guide](docs/guides/cloudflare-sync.md) for local Worker, D1,
+R2, secret-file, and MacBook/Mac mini sync setup.
 
 ## Architecture Model
 
@@ -128,7 +159,7 @@ AI lifecycle hooks
 Local append-only outbox
         |
         v
-Private sync service           <- planned G005+
+Private sync service
         |
         v
 Canonical event store
@@ -247,16 +278,24 @@ CarpeOS is designed to work locally first:
 - conflicts are resolved at the event, decision, supersession, and
   erasure-ledger layers, not by editing generated notes directly.
 
-G004 implements the first bullet only. Cross-Mac sharing is not active until a
-G005+ remote sync service exists.
+G005 implements the first remote sync backend and client path with synthetic
+local integration tests. Cross-Mac sharing becomes real only after a private
+operator provisions Cloudflare D1/R2/Worker resources, seeds authorization, and
+enrolls each Mac with the same out-of-band trust-zone sync key.
 
 ## Cloudflare Path
 
-The planned hosted path can use Cloudflare components:
+The hosted path uses Cloudflare components for the G005 sync backend:
 
-- Workers for API and extraction jobs;
+- Workers for the sync API;
 - D1 for canonical event metadata;
-- R2 for encrypted evidence artifacts and protected-value blobs;
+- R2 for encrypted protected-value blobs;
+- external operator/local credential custody: authorization token hashes live in
+  D1, while raw credentials remain local and outside Git.
+
+Planned future hosted components may include:
+
+- Workers for extraction jobs;
 - Workers AI for optional extraction and embedding;
 - Vectorize for optional semantic search;
 - Pages for an optional dashboard.
@@ -361,9 +400,10 @@ copyright and license notices.
 
 ## Project Status
 
-CarpeOS is pre-MVP. The G004 local capture runtime is implemented and tested,
-but the project is not ready as a packaged end-user release.
+CarpeOS is pre-MVP. The G005 local capture and Cloudflare sync runtime is
+implemented and locally tested with synthetic data, but the project is not ready
+as a packaged end-user release and no live deployment is claimed.
 
-Do not treat planned sync, retrieval, MCP, adapter installation, projection, or
+Do not treat planned retrieval, MCP, adapter installation, projection, or live
 deployment paths as stable until they are implemented, tested, and documented in
 this repository.

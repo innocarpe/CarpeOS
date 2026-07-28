@@ -1,0 +1,33 @@
+{
+  "name": "@carpeos/sync-worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cloudflare Worker sync boundary for CarpeOS canonical metadata and protected blobs.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "d1:migrations:local": "wrangler d1 migrations apply carpeos_sync --local",
+    "d1:migrations:remote": "wrangler d1 migrations apply carpeos_sync --remote",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --project tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@carpeos/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260728.1",
+    "wrangler": "^4.114.0"
+  }
+}

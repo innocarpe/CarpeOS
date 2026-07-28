@@ -4,3 +4,6 @@ packages:
   - "adapters/*"
 allowBuilds:
   esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@5.20260728.1'
