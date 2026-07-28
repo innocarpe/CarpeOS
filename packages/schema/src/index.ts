@@ -7,6 +7,9 @@ import commonSchema from "../../../spec/v1/schema/common.schema.json" with { typ
 import erasureLedgerSchema from "../../../spec/v1/schema/erasure-ledger.schema.json" with {
   type: "json",
 };
+import retrievalProjectionSchema from "../../../spec/v1/schema/retrieval-projection.schema.json" with {
+  type: "json",
+};
 import syncApiSchema from "../../../spec/v1/schema/sync-api.schema.json" with { type: "json" };
 
 export const SCHEMA_VERSION = "v1" as const;
@@ -15,6 +18,7 @@ export const schemas = {
   common: commonSchema,
   canonicalEvent: canonicalEventSchema,
   erasureLedger: erasureLedgerSchema,
+  retrievalProjection: retrievalProjectionSchema,
   syncApi: syncApiSchema,
 } as const;
 
@@ -369,6 +373,217 @@ export type SyncApiMessage =
   | SyncPullResult
   | SyncError;
 
+export type RetrievalSourceRecordKind = "event" | "erasure";
+
+export type RetrievalRelationshipRole =
+  | "primary"
+  | "support"
+  | "acceptance"
+  | "supersession"
+  | "erasure"
+  | "lineage";
+
+export type RetrievalSourceRecord = {
+  source_record_kind: RetrievalSourceRecordKind;
+  source_record_id: string;
+  trust_zone_id: string;
+  zone_sequence: number;
+  source_fingerprint: string;
+  relationship_role: RetrievalRelationshipRole;
+  event_type?: EventType;
+  lifecycle_status?: LifecycleStatus;
+  epistemic_authority?: EpistemicAuthority;
+  valid_time?: BitemporalInterval;
+  recorded_time: BitemporalInterval;
+};
+
+export type RetrievalDerivation = {
+  algorithm: "canonical_retrieval_chunk_v1";
+  algorithm_version: string;
+  config_digest: string;
+  input_manifest_digest: string;
+};
+
+export type RetrievalChunk = {
+  schema_version: SchemaVersion;
+  record_type: "retrieval_chunk";
+  chunk_id: string;
+  chunk_kind: "summary" | "claim" | "decision" | "evidence_excerpt" | "open_loop";
+  trust_zone_id: string;
+  projection_version: string;
+  chunker_version: string;
+  chunk_index: number;
+  text: string;
+  text_digest: string;
+  source_records: RetrievalSourceRecord[];
+  derivation: RetrievalDerivation;
+  lifecycle_status: LifecycleStatus;
+  epistemic_authority: EpistemicAuthority;
+  status: "active" | "stale" | "projection_deleted";
+  created_at: string;
+};
+
+export type EmbeddingFailureKind =
+  | "workers_ai_allocation_exhausted"
+  | "rate_limited"
+  | "server_error"
+  | "timeout"
+  | "dimension_mismatch"
+  | "invalid_request"
+  | "metadata_limit"
+  | "vector_id_limit"
+  | "unknown_retryable"
+  | "unknown_blocked";
+
+export type EmbeddingJob = {
+  schema_version: SchemaVersion;
+  record_type: "embedding_job";
+  job_id: string;
+  chunk_id: string;
+  embedding_model: string;
+  embedding_version: string;
+  pooling: "mean" | "cls";
+  state: "pending" | "leased" | "retryable_failed" | "blocked" | "embedded";
+  attempts: number;
+  available_at: string;
+  lease_id?: string;
+  lease_expires_at?: string;
+  failure_kind?: EmbeddingFailureKind;
+  retry_after?: string;
+  quota_reset_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmbeddingProvenance = {
+  embedding_model: string;
+  embedding_dimensions: 768;
+  embedding_version: string;
+  pooling: "mean" | "cls";
+  input_token_limit: 512;
+  input_text_sha256: string;
+  created_at: string;
+};
+
+export type EmbeddingRecord = {
+  schema_version: SchemaVersion;
+  record_type: "embedding_record";
+  embedding_id: string;
+  chunk_id: string;
+  vector_ref: string;
+  vector_digest: string;
+  provenance: EmbeddingProvenance;
+  created_at: string;
+};
+
+export type ProjectionFreshness = {
+  schema_version: SchemaVersion;
+  record_type: "projection_freshness";
+  projection_name: string;
+  projection_version: string;
+  trust_zone_id: string;
+  last_indexed_zone_sequence: number;
+  sync_cursor_after_sequence: number;
+  stale: boolean;
+  reason?: "behind_sync_cursor" | "version_changed" | "erasure_pending";
+  checked_at: string;
+} & (
+  | {
+      stale: true;
+      reason: "behind_sync_cursor" | "version_changed" | "erasure_pending";
+    }
+  | {
+      stale: false;
+      reason?: undefined;
+    }
+);
+
+export type RetrievalFilters = {
+  visible_trust_zone_ids: string[];
+  lifecycle_status?: LifecycleStatus[];
+  epistemic_authority?: EpistemicAuthority[];
+  valid_time?: BitemporalInterval;
+  recorded_time?: BitemporalInterval;
+  protected_value_policy: "metadata_only" | "allow_decrypt" | "deny";
+  conflict_policy: "surface_conflicts" | "exclude_conflicts" | "review_required";
+};
+
+export type RetrievalScore = {
+  total: number;
+  structured: number;
+  fts: number;
+  semantic: number;
+  recency: number;
+};
+
+export type RetrievalLineage = {
+  source_records: RetrievalSourceRecord[];
+  canonical_rechecked: true;
+  accepted_decision_event_ids?: string[];
+  rejected_decision_event_ids?: string[];
+  supersession_event_ids?: string[];
+  erasure_ids?: string[];
+};
+
+export type RetrievalQuery = {
+  schema_version: SchemaVersion;
+  record_type: "retrieval_query";
+  query_id: string;
+  query_text: string;
+  filters: RetrievalFilters;
+  ranking: {
+    mode: "structured" | "fts" | "semantic" | "hybrid";
+    weights: {
+      structured: number;
+      fts: number;
+      semantic: number;
+      recency: number;
+    };
+  };
+  limit: number;
+};
+
+export type VisibleRetrievalResultItem = {
+  candidate_id: string;
+  chunk_id: string;
+  status: "visible";
+  text: string;
+  score: RetrievalScore;
+  lineage: RetrievalLineage;
+  canonical_rechecked: true;
+};
+
+export type HiddenRetrievalResultItem = {
+  candidate_id: string;
+  chunk_id: string;
+  status: "redacted" | "excluded";
+  score: RetrievalScore;
+  lineage: RetrievalLineage;
+  canonical_rechecked: true;
+  reason: string;
+};
+
+export type RetrievalResultItem = VisibleRetrievalResultItem | HiddenRetrievalResultItem;
+
+export type RetrievalResult = {
+  schema_version: SchemaVersion;
+  record_type: "retrieval_result";
+  query_id: string;
+  projection_freshness: ProjectionFreshness[];
+  filters_applied: RetrievalFilters;
+  results: RetrievalResultItem[];
+  warnings: string[];
+};
+
+export type RetrievalProjectionMessage =
+  | RetrievalChunk
+  | EmbeddingJob
+  | EmbeddingRecord
+  | ProjectionFreshness
+  | RetrievalQuery
+  | RetrievalResult;
+
 export type IdempotencyInput = {
   trust_zone_id: string;
   idempotency_key: string;
@@ -403,6 +618,7 @@ export function compileSchemaValidators(): SchemaValidatorSet {
     common: mustGetSchema(ajv, schemas.common.$id),
     canonicalEvent: mustGetSchema(ajv, schemas.canonicalEvent.$id),
     erasureLedger: mustGetSchema(ajv, schemas.erasureLedger.$id),
+    retrievalProjection: mustGetSchema(ajv, schemas.retrievalProjection.$id),
     syncApi: mustGetSchema(ajv, schemas.syncApi.$id),
   };
 }
@@ -470,6 +686,10 @@ export function validateConformance(schemaName: SchemaName, value: unknown): Con
   if (schemaName === "syncApi" && isObject(value)) {
     errors.push(...collectSyncSemanticErrors(value));
     errors.push(...collectProtectedTransferSemanticErrors(value));
+  }
+
+  if (schemaName === "retrievalProjection" && isObject(value)) {
+    errors.push(...collectRetrievalProjectionSemanticErrors(value));
   }
 
   return {
@@ -615,6 +835,162 @@ function collectProtectedTransferSemanticErrors(message: Record<string, unknown>
   }
 
   return errors;
+}
+
+function collectRetrievalProjectionSemanticErrors(message: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  if (Array.isArray(message.source_records)) {
+    errors.push(...collectSourceRecordManifestErrors(message.source_records));
+    if (
+      typeof message.trust_zone_id === "string" &&
+      message.source_records.some(
+        (record) => isObject(record) && record.trust_zone_id !== message.trust_zone_id,
+      )
+    ) {
+      errors.push("retrieval chunk trust_zone_id must match every source_records trust_zone_id");
+    }
+  }
+
+  if (message.record_type === "projection_freshness") {
+    errors.push(...collectProjectionFreshnessErrors(message));
+  }
+
+  if (message.record_type === "retrieval_result" && Array.isArray(message.results)) {
+    const visibleTrustZones = isObject(message.filters_applied)
+      ? asStringSet(message.filters_applied.visible_trust_zone_ids)
+      : new Set<string>();
+
+    for (const item of message.results) {
+      if (!isObject(item)) {
+        continue;
+      }
+
+      if (item.status === "visible" && item.canonical_rechecked !== true) {
+        errors.push("visible retrieval results must be canonically rechecked");
+      }
+
+      if (item.status === "visible" && typeof item.text !== "string") {
+        errors.push("visible retrieval results must include text");
+      }
+
+      if ((item.status === "redacted" || item.status === "excluded") && "text" in item) {
+        errors.push("redacted and excluded retrieval results must not include text");
+      }
+
+      if (
+        (item.status === "redacted" || item.status === "excluded") &&
+        typeof item.reason !== "string"
+      ) {
+        errors.push("redacted and excluded retrieval results must include reason");
+      }
+
+      if (isObject(item.lineage) && Array.isArray(item.lineage.source_records)) {
+        errors.push(...collectSourceRecordManifestErrors(item.lineage.source_records));
+        for (const sourceRecord of item.lineage.source_records) {
+          if (
+            isObject(sourceRecord) &&
+            typeof sourceRecord.trust_zone_id === "string" &&
+            !visibleTrustZones.has(sourceRecord.trust_zone_id)
+          ) {
+            errors.push(
+              `lineage source trust_zone_id ${sourceRecord.trust_zone_id} must be visible in filters_applied.visible_trust_zone_ids`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  if (
+    message.record_type === "embedding_job" &&
+    message.state === "retryable_failed" &&
+    typeof message.failure_kind !== "string"
+  ) {
+    errors.push("retryable embedding jobs must include failure_kind");
+  }
+
+  if (
+    message.record_type === "embedding_job" &&
+    message.failure_kind === "workers_ai_allocation_exhausted" &&
+    typeof message.quota_reset_at !== "string"
+  ) {
+    errors.push("Workers AI allocation failures must include quota_reset_at");
+  }
+
+  return errors;
+}
+
+function collectProjectionFreshnessErrors(message: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  if (
+    typeof message.last_indexed_zone_sequence !== "number" ||
+    typeof message.sync_cursor_after_sequence !== "number" ||
+    typeof message.stale !== "boolean"
+  ) {
+    return errors;
+  }
+
+  if (message.last_indexed_zone_sequence > message.sync_cursor_after_sequence) {
+    errors.push(
+      "projection freshness last_indexed_zone_sequence must not exceed sync_cursor_after_sequence",
+    );
+  }
+
+  if (message.last_indexed_zone_sequence < message.sync_cursor_after_sequence) {
+    if (message.stale !== true || message.reason !== "behind_sync_cursor") {
+      errors.push(
+        "projection freshness behind sync cursor must be stale with reason behind_sync_cursor",
+      );
+    }
+  }
+
+  if (message.stale === true && typeof message.reason !== "string") {
+    errors.push("stale projection freshness must include reason");
+  }
+
+  if (message.stale === false && typeof message.reason === "string") {
+    errors.push("fresh projection freshness must not include reason");
+  }
+
+  return errors;
+}
+
+function collectSourceRecordManifestErrors(sourceRecords: unknown[]): string[] {
+  const errors: string[] = [];
+  const keys = sourceRecords.map((record) =>
+    isObject(record) ? sourceRecordSortKey(record) : "invalid",
+  );
+  const sorted = [...keys].sort();
+
+  if (keys.some((key, index) => key !== sorted[index])) {
+    errors.push("source_records must be sorted deterministically");
+  }
+
+  if (new Set(keys).size !== keys.length) {
+    errors.push("source_records must be deduplicated");
+  }
+
+  return errors;
+}
+
+function sourceRecordSortKey(record: Record<string, unknown>): string {
+  return [
+    String(record.trust_zone_id ?? ""),
+    String(record.zone_sequence ?? "").padStart(16, "0"),
+    String(record.source_record_kind ?? ""),
+    String(record.source_record_id ?? ""),
+    String(record.relationship_role ?? ""),
+  ].join("\u0000");
+}
+
+function asStringSet(value: unknown): Set<string> {
+  if (!Array.isArray(value)) {
+    return new Set();
+  }
+
+  return new Set(value.filter((item): item is string => typeof item === "string"));
 }
 
 function isSyncPushRequestLike(value: Record<string, unknown>): value is SyncPushRequest {

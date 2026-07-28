@@ -8,12 +8,13 @@ CarpeOS는 AI-assisted work를 위한 개인 지식 운영체제입니다.
 
 CarpeOS는 여러 AI agent에서 발생하는 작업 맥락을 수집하고,
 provenance-aware knowledge로 구조화하며, 여러 기기 사이에서 동기화하고, 사람과
-LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G005
-구현 범위는 local capture, durable outbox storage, 그리고 synthetic data로 local
-integration test된 Cloudflare Worker/D1/R2 sync backend와 client입니다. Live
-Cloudflare deployment를 완료했다고 주장하지 않습니다. Retrieval, MCP, embedding,
-GraphRAG, Obsidian projection은 계획된 milestone이며 아직 active feature가
-아닙니다.
+LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G006
+구현 범위는 local capture, durable outbox storage, Cloudflare Worker/D1/R2 sync
+backend와 client, 그리고 local rebuildable retrieval projection과 CLI
+search/get command입니다. 이 경로들은 synthetic data로 local test되어 있습니다.
+Live Cloudflare deployment를 완료했다고 주장하지 않습니다. MCP, GraphRAG,
+Obsidian projection, hosted embedding job, production semantic retrieval quality는
+계획된 milestone이며 아직 active feature가 아닙니다.
 
 이 저장소는 공개 설계, specification, 구현, roadmap의 canonical 위치입니다. 이
 저장소에는 사용자의 private knowledge store가 들어가지 않습니다.
@@ -78,6 +79,23 @@ Sync backend는 deployable code와 local test infrastructure로 구현되어 있
 이 저장소는 production Cloudflare Worker, D1 database, R2 bucket이 실제로
 provision되었다고 주장하지 않습니다.
 
+G006은 첫 local retrieval boundary를 추가합니다.
+
+- canonical event와 erasure record에서 파생되는 rebuildable retrieval chunk;
+- raw hook JSON이 아니라 claim, observation, decision, selected evidence metadata
+  같은 meaningful-unit chunking;
+- FTS, structured metadata, recency, locally stored vector candidate path;
+- trust-zone visibility, lifecycle, authority, supersession, erasure,
+  projection freshness에 대한 모든 result의 canonical recheck;
+- test와 local smoke check를 위한 deterministic local development embedding;
+- `retrieval rebuild`, `retrieval embed`, `memory search`, `memory get` CLI
+  command.
+
+Deterministic embedding provider는 synthetic development-only provider입니다.
+Workers AI와 Vectorize binding은 adapter boundary로 코드에 있지만, 이 저장소는
+live Workers AI/Vectorize resource, hosted embedding execution, production
+semantic quality를 주장하지 않습니다.
+
 ## 빠른 시작
 
 Prerequisite:
@@ -141,7 +159,9 @@ command behavior를 테스트합니다. Package installation과 binary distribut
 전체 command surface와 hook template note는
 [Local Capture Guide](docs/guides/local-capture.md)를 참고하십시오. Local Worker,
 D1, R2, secret file, MacBook/Mac mini sync setup은
-[Cloudflare Sync Guide](docs/guides/cloudflare-sync.md)를 참고하십시오.
+[Cloudflare Sync Guide](docs/guides/cloudflare-sync.md)를 참고하십시오. Local
+projection rebuild, development embedding, search/get command는
+[Retrieval Guide](docs/guides/retrieval.md)를 참고하십시오.
 
 ## Architecture Model
 
@@ -224,14 +244,26 @@ processing lifecycle 측면에서 captured, extracted, reviewed, projected, sync
 
 ## Retrieval Model
 
-CarpeOS는 hybrid retrieval을 지향합니다.
+CarpeOS에는 local hybrid retrieval MVP가 구현되어 있습니다.
 
 - project, bitemporal time, lifecycle, authority, trust-zone filter를 위한
   structured query;
 - 정확한 용어 검색을 위한 full-text search;
-- semantic similarity를 위한 vector search;
-- lineage, dependency, supersession path를 위한 graph traversal;
-- LLM prompt를 위한 bounded context packing.
+- stored embedding을 위한 vector candidate support;
+- provenance, supersession, erasure, projection freshness를 위한 lineage-aware
+  result metadata;
+- chunk를 visible하게 반환하기 전 수행되는 canonical result recheck.
+
+Vector search는 candidate-retrieval mechanism이며 authority model이 아닙니다.
+모든 result는 canonical source record로 추적 가능해야 하며, vector hit가 claim을
+accepted fact로 만들지 않습니다.
+
+현재 CLI command는 다음과 같습니다.
+
+- `carpeos retrieval rebuild`
+- `carpeos retrieval embed --provider deterministic-local-dev`
+- `carpeos memory search --query ... --visible-trust-zone ...`
+- `carpeos memory get --chunk-id ... --visible-trust-zone ...`
 
 목표 LLM-facing interface는 MCP입니다. 계획 중인 tool은 다음과 같습니다.
 
@@ -298,6 +330,11 @@ Workers AI와 Vectorize는 optional adapter입니다. CarpeOS는 가능한 경�
 개인 MVP에서는 모든 raw hook event를 embedding하지 않고 session summary,
 decision, claim, selected evidence chunk 같은 의미 있는 knowledge unit만
 embedding한다면 free-tier path가 유용할 것으로 예상합니다.
+실제 운영 전에는 current Cloudflare limit을 official documentation 기준으로 다시
+확인해야 합니다. G006 design update 기준으로 Workers AI free usage는
+Neurons/day로, Vectorize free usage는 queried/stored vector dimensions로
+문서화되어 있습니다. 이 quota는 operational limit이며 correctness guarantee가
+아닙니다.
 
 ## MVP Roadmap
 
@@ -327,15 +364,22 @@ embedding한다면 free-tier path가 유용할 것으로 예상합니다.
    - Grok Build lifecycle hooks
    - provider-neutral capture envelope
 
-5. Retrieval 추가.
+5. Sync 추가.
+   - Cloudflare sync adapter
+   - encrypted protected-value upload/download
+   - cross-Mac private operator setup
+
+6. Retrieval 추가.
    - structured search
+   - full-text search
+   - local vector projection
+   - canonical recheck
+
+7. Projection과 interface 추가.
+   - Obsidian projection generator
    - context pack generation
    - MCP server
-   - optional vector adapter
-
-6. Projection과 sync 추가.
-   - Obsidian projection generator
-   - Cloudflare sync adapter
+   - graph projection
    - optional dashboard
 
 ## Repository Boundary
@@ -393,9 +437,10 @@ CarpeOS는 다른 architecture model을 가진 독립적인 구현입니다.
 
 ## Project Status
 
-CarpeOS는 pre-MVP 단계입니다. G005 local capture와 Cloudflare sync runtime은
+CarpeOS는 pre-MVP 단계입니다. G006 local capture, sync, local retrieval runtime은
 synthetic data로 구현 및 local test되어 있지만, packaged end-user release로
 사용할 준비는 아직 되지 않았고 live deployment도 주장하지 않습니다.
 
-계획된 retrieval, MCP, adapter installation, projection, live deployment path는
-이 저장소에서 구현, 테스트, 문서화되기 전까지 stable한 것으로 간주하지 마십시오.
+계획된 MCP, adapter installation, Obsidian projection, GraphRAG, hosted
+embedding, Vectorize operation, live deployment path는 이 저장소에서 구현, 테스트,
+문서화되기 전까지 stable한 것으로 간주하지 마십시오.

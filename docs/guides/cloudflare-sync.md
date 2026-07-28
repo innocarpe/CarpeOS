@@ -147,3 +147,15 @@ early private use, but free-tier limits are operational limits, not correctness
 guarantees. Keep pushes bounded, avoid uploading unnecessary raw data, and treat
 Workers AI, Vectorize, extraction, embedding, dashboards, and GraphRAG as future
 work.
+
+G006 adds local retrieval and adapter boundaries for future hosted embedding,
+but the sync Worker does not expose a live retrieval route. Workers AI and
+Vectorize bindings in code are placeholders for private operator experiments
+until real resources, quotas, migrations, deployment evidence, and tests exist.
+
+Before enabling hosted embedding, verify current official Cloudflare Workers AI
+and Vectorize limits. As of the G006 design update, Workers AI free usage is
+documented in Neurons/day, and Vectorize free usage is documented in monthly
+queried vector dimensions plus stored vector dimensions. These limits affect
+batch sizing and queue retry policy; they do not change canonical event
+correctness.

@@ -1,13 +1,10 @@
 {
-  "name": "@carpeos/cli",
+  "name": "@carpeos/retrieval",
   "version": "0.0.0",
   "private": true,
-  "description": "Local CarpeOS command-line interface and provider hook bridge.",
+  "description": "Schema-aligned deterministic retrieval projection core.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": {
-    "carpeos": "./dist/index.js"
-  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -25,10 +22,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@carpeos/capture": "workspace:*",
-    "@carpeos/local-store": "workspace:*",
-    "@carpeos/retrieval": "workspace:*",
-    "@carpeos/schema": "workspace:*",
-    "@carpeos/sync-client": "workspace:*"
+    "@carpeos/schema": "workspace:*"
   }
 }

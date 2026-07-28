@@ -2,12 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   type CanonicalEvent,
   type CryptoShredErasureTargetRef,
+  type EmbeddingJob,
+  type EmbeddingRecord,
   type ErasureLedgerRecord,
+  type ProjectionFreshness,
   type ProtectedValueMetadata,
   type ProtectedValueUploadIntent,
   type ProtectedValueUploadReceipt,
   type ProjectionDeleteErasureTargetRef,
   type ProvenanceRef,
+  type RetrievalChunk,
+  type RetrievalProjectionMessage,
+  type RetrievalQuery,
+  type RetrievalResult,
+  type RetrievalSourceRecord,
   type SyncApiMessage,
   type TombstoneErasureTargetRef,
   type TrustZone,
@@ -370,6 +378,254 @@ const syncFixtures: SyncApiMessage[] = [
   },
 ];
 
+const sourceRecords: RetrievalSourceRecord[] = [
+  {
+    source_record_kind: "event",
+    source_record_id: "evt_00000001",
+    trust_zone_id: "tz_local_default",
+    zone_sequence: 1,
+    source_fingerprint: `sha-256:${"1".repeat(64)}`,
+    relationship_role: "primary",
+    event_type: "EvidenceArtifact",
+    lifecycle_status: "active",
+    epistemic_authority: "observed",
+    valid_time: {
+      start: "2026-01-01T00:00:00Z",
+      end: null,
+    },
+    recorded_time: {
+      start: "2026-01-01T00:00:01Z",
+      end: null,
+    },
+  },
+  {
+    source_record_kind: "event",
+    source_record_id: "evt_00000003",
+    trust_zone_id: "tz_local_default",
+    zone_sequence: 3,
+    source_fingerprint: `sha-256:${"3".repeat(64)}`,
+    relationship_role: "support",
+    event_type: "Claim",
+    lifecycle_status: "active",
+    epistemic_authority: "derived",
+    valid_time: {
+      start: "2026-01-01T00:00:00Z",
+      end: null,
+    },
+    recorded_time: {
+      start: "2026-01-01T00:03:00Z",
+      end: null,
+    },
+  },
+  {
+    source_record_kind: "event",
+    source_record_id: "evt_00000004",
+    trust_zone_id: "tz_local_default",
+    zone_sequence: 4,
+    source_fingerprint: `sha-256:${"4".repeat(64)}`,
+    relationship_role: "acceptance",
+    event_type: "AcceptanceDecision",
+    lifecycle_status: "active",
+    epistemic_authority: "verified",
+    valid_time: {
+      start: "2026-01-01T00:00:00Z",
+      end: null,
+    },
+    recorded_time: {
+      start: "2026-01-01T00:04:00Z",
+      end: null,
+    },
+  },
+  {
+    source_record_kind: "event",
+    source_record_id: "evt_00000005",
+    trust_zone_id: "tz_local_default",
+    zone_sequence: 5,
+    source_fingerprint: `sha-256:${"5".repeat(64)}`,
+    relationship_role: "supersession",
+    event_type: "Supersession",
+    lifecycle_status: "active",
+    epistemic_authority: "verified",
+    valid_time: {
+      start: "2026-01-01T00:00:00Z",
+      end: null,
+    },
+    recorded_time: {
+      start: "2026-01-01T00:05:00Z",
+      end: null,
+    },
+  },
+  {
+    source_record_kind: "erasure",
+    source_record_id: "era_00000001",
+    trust_zone_id: "tz_local_default",
+    zone_sequence: 6,
+    source_fingerprint: `sha-256:${"6".repeat(64)}`,
+    relationship_role: "erasure",
+    recorded_time: {
+      start: "2026-01-02T00:00:00Z",
+      end: null,
+    },
+  },
+];
+
+const retrievalChunk: RetrievalChunk = {
+  schema_version: "v1",
+  record_type: "retrieval_chunk",
+  chunk_id: `chk_${"a".repeat(40)}`,
+  chunk_kind: "claim",
+  trust_zone_id: "tz_local_default",
+  projection_version: "retrieval/v1",
+  chunker_version: "v1",
+  chunk_index: 0,
+  text: "Synthetic accepted claim chunk with lineage.",
+  text_digest: `sha-256:${"7".repeat(64)}`,
+  source_records: sourceRecords,
+  derivation: {
+    algorithm: "canonical_retrieval_chunk_v1",
+    algorithm_version: "v1",
+    config_digest: `sha-256:${"8".repeat(64)}`,
+    input_manifest_digest: `sha-256:${"9".repeat(64)}`,
+  },
+  lifecycle_status: "active",
+  epistemic_authority: "derived",
+  status: "active",
+  created_at: "2026-01-02T00:00:00Z",
+};
+
+const embeddingJob: EmbeddingJob = {
+  schema_version: "v1",
+  record_type: "embedding_job",
+  job_id: `embjob_${"a".repeat(32)}`,
+  chunk_id: retrievalChunk.chunk_id,
+  embedding_model: "@cf/baai/bge-base-en-v1.5",
+  embedding_version: "v1",
+  pooling: "mean",
+  state: "retryable_failed",
+  attempts: 1,
+  available_at: "2026-01-02T00:00:00Z",
+  failure_kind: "workers_ai_allocation_exhausted",
+  retry_after: "2026-01-02T00:00:00Z",
+  quota_reset_at: "2026-01-02T00:00:00Z",
+  last_error: "workers ai allocation exhausted",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:30:00Z",
+};
+
+const embeddingRecord: EmbeddingRecord = {
+  schema_version: "v1",
+  record_type: "embedding_record",
+  embedding_id: `emb_${"b".repeat(40)}`,
+  chunk_id: retrievalChunk.chunk_id,
+  vector_ref: "local_vector:retrieval:v1:chunk_0001",
+  vector_digest: `sha-256:${"b".repeat(64)}`,
+  provenance: {
+    embedding_model: "@cf/baai/bge-base-en-v1.5",
+    embedding_dimensions: 768,
+    embedding_version: "v1",
+    pooling: "mean",
+    input_token_limit: 512,
+    input_text_sha256: retrievalChunk.text_digest,
+    created_at: "2026-01-02T00:00:00Z",
+  },
+  created_at: "2026-01-02T00:00:00Z",
+};
+
+const projectionFreshness: ProjectionFreshness = {
+  schema_version: "v1",
+  record_type: "projection_freshness",
+  projection_name: "retrieval_projection",
+  projection_version: "retrieval/v1",
+  trust_zone_id: "tz_local_default",
+  last_indexed_zone_sequence: 6,
+  sync_cursor_after_sequence: 6,
+  stale: false,
+  checked_at: "2026-01-02T00:00:00Z",
+};
+
+const retrievalQuery: RetrievalQuery = {
+  schema_version: "v1",
+  record_type: "retrieval_query",
+  query_id: `query_${"c".repeat(24)}`,
+  query_text: "synthetic accepted claim",
+  filters: {
+    visible_trust_zone_ids: ["tz_local_default"],
+    lifecycle_status: ["active"],
+    epistemic_authority: ["derived", "verified"],
+    protected_value_policy: "metadata_only",
+    conflict_policy: "surface_conflicts",
+  },
+  ranking: {
+    mode: "hybrid",
+    weights: {
+      structured: 1,
+      fts: 1,
+      semantic: 1,
+      recency: 0.25,
+    },
+  },
+  limit: 10,
+};
+
+const retrievalResult: RetrievalResult = {
+  schema_version: "v1",
+  record_type: "retrieval_result",
+  query_id: retrievalQuery.query_id,
+  projection_freshness: [projectionFreshness],
+  filters_applied: retrievalQuery.filters,
+  results: [
+    {
+      candidate_id: `cand_${"d".repeat(24)}`,
+      chunk_id: retrievalChunk.chunk_id,
+      status: "visible",
+      text: retrievalChunk.text,
+      score: {
+        total: 2.5,
+        structured: 1,
+        fts: 0.75,
+        semantic: 0.5,
+        recency: 0.25,
+      },
+      lineage: {
+        source_records: sourceRecords,
+        canonical_rechecked: true,
+        accepted_decision_event_ids: ["evt_00000004"],
+        supersession_event_ids: ["evt_00000005"],
+        erasure_ids: ["era_00000001"],
+      },
+      canonical_rechecked: true,
+    },
+    {
+      candidate_id: `cand_${"e".repeat(24)}`,
+      chunk_id: `chk_${"e".repeat(40)}`,
+      status: "redacted",
+      reason: "protected value denied",
+      score: {
+        total: 0.5,
+        structured: 0.5,
+        fts: 0,
+        semantic: 0,
+        recency: 0,
+      },
+      lineage: {
+        source_records: [sourceRecords[0] as RetrievalSourceRecord],
+        canonical_rechecked: true,
+      },
+      canonical_rechecked: true,
+    },
+  ],
+  warnings: ["synthetic projection warning"],
+};
+
+const retrievalFixtures: RetrievalProjectionMessage[] = [
+  retrievalChunk,
+  embeddingJob,
+  embeddingRecord,
+  projectionFreshness,
+  retrievalQuery,
+  retrievalResult,
+];
+
 describe("CarpeOS v1 schemas", () => {
   it("compiles every exported schema", () => {
     const validators = compileSchemaValidators();
@@ -378,6 +634,7 @@ describe("CarpeOS v1 schemas", () => {
       "canonicalEvent",
       "common",
       "erasureLedger",
+      "retrievalProjection",
       "syncApi",
     ]);
   });
@@ -403,6 +660,269 @@ describe("CarpeOS v1 schemas", () => {
         errors: [],
       });
     }
+  });
+
+  it("accepts schema-backed retrieval projection examples", () => {
+    const validators = compileSchemaValidators();
+
+    for (const fixture of retrievalFixtures) {
+      expect(
+        validators.retrievalProjection(fixture),
+        JSON.stringify(validators.retrievalProjection.errors),
+      ).toBe(true);
+      expect(validateConformance("retrievalProjection", fixture), JSON.stringify(fixture)).toEqual({
+        valid: true,
+        errors: [],
+      });
+    }
+  });
+
+  it("rejects invalid retrieval source manifests and derivation metadata", () => {
+    const validators = compileSchemaValidators();
+    const emptySources = {
+      ...retrievalChunk,
+      source_records: [],
+    };
+    const unsortedSources = {
+      ...retrievalChunk,
+      source_records: [sourceRecords[1], sourceRecords[0]],
+    };
+    const duplicatedSources = {
+      ...retrievalChunk,
+      source_records: [sourceRecords[0], sourceRecords[0]],
+    };
+    const missingDerivationDigest = {
+      ...retrievalChunk,
+      derivation: {
+        algorithm: "canonical_retrieval_chunk_v1",
+        algorithm_version: "v1",
+        config_digest: `sha-256:${"8".repeat(64)}`,
+      },
+    };
+    const crossZoneManifest = {
+      ...retrievalChunk,
+      source_records: [
+        sourceRecords[0],
+        {
+          ...(sourceRecords[1] as RetrievalSourceRecord),
+          trust_zone_id: "tz_remote_default",
+        },
+      ],
+    };
+
+    expect(validators.retrievalProjection(emptySources)).toBe(false);
+    expect(validateConformance("retrievalProjection", unsortedSources).errors).toContain(
+      "source_records must be sorted deterministically",
+    );
+    expect(validateConformance("retrievalProjection", duplicatedSources).errors).toContain(
+      "source_records must be deduplicated",
+    );
+    expect(validators.retrievalProjection(missingDerivationDigest)).toBe(false);
+    expect(validateConformance("retrievalProjection", crossZoneManifest).errors).toContain(
+      "retrieval chunk trust_zone_id must match every source_records trust_zone_id",
+    );
+  });
+
+  it("enforces embedding provenance, retry fields, and vector-non-authority result contracts", () => {
+    const validators = compileSchemaValidators();
+    const invalidDimensions = {
+      ...embeddingRecord,
+      provenance: {
+        ...embeddingRecord.provenance,
+        embedding_dimensions: 1536,
+      },
+    };
+    const retryMissingFailureKind = {
+      ...embeddingJob,
+      failure_kind: undefined,
+    } as Record<string, unknown>;
+    delete retryMissingFailureKind.failure_kind;
+    const quotaMissingReset = {
+      ...embeddingJob,
+      quota_reset_at: undefined,
+    } as Record<string, unknown>;
+    delete quotaMissingReset.quota_reset_at;
+    const vectorAsAuthority = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[0] as NonNullable<RetrievalResult["results"][number]>),
+          canonical_rechecked: false,
+          lineage: {
+            ...(retrievalResult.results[0]?.lineage as NonNullable<
+              RetrievalResult["results"][number]["lineage"]
+            >),
+            canonical_rechecked: false,
+          },
+        },
+      ],
+    };
+
+    expect(validators.retrievalProjection(invalidDimensions)).toBe(false);
+    expect(validateConformance("retrievalProjection", retryMissingFailureKind).errors).toContain(
+      "retryable embedding jobs must include failure_kind",
+    );
+    expect(validateConformance("retrievalProjection", quotaMissingReset).errors).toContain(
+      "Workers AI allocation failures must include quota_reset_at",
+    );
+    expect(validators.retrievalProjection(vectorAsAuthority)).toBe(false);
+  });
+
+  it("enforces retrieval result status-dependent text and reason contracts", () => {
+    const visibleWithoutText = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[0] as RetrievalResult["results"][number]),
+          text: undefined,
+        },
+      ],
+    } as Record<string, unknown>;
+    delete ((visibleWithoutText.results as Record<string, unknown>[])[0] as Record<string, unknown>)
+      .text;
+
+    const visibleWithReason = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[0] as RetrievalResult["results"][number]),
+          reason: "not allowed on visible results",
+        },
+      ],
+    };
+    const redactedWithText = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[1] as RetrievalResult["results"][number]),
+          text: "must not appear",
+        },
+      ],
+    };
+    const excludedWithoutReason = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[1] as RetrievalResult["results"][number]),
+          status: "excluded",
+          reason: undefined,
+        },
+      ],
+    } as Record<string, unknown>;
+    delete (
+      (excludedWithoutReason.results as Record<string, unknown>[])[0] as Record<string, unknown>
+    ).reason;
+
+    expect(compileSchemaValidators().retrievalProjection(visibleWithoutText)).toBe(false);
+    expect(compileSchemaValidators().retrievalProjection(visibleWithReason)).toBe(false);
+    expect(compileSchemaValidators().retrievalProjection(redactedWithText)).toBe(false);
+    expect(compileSchemaValidators().retrievalProjection(excludedWithoutReason)).toBe(false);
+  });
+
+  it("recursively validates retrieval result lineage manifests and visible trust zones", () => {
+    const unsortedLineage = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[0] as RetrievalResult["results"][number]),
+          lineage: {
+            ...(retrievalResult.results[0]?.lineage as NonNullable<
+              RetrievalResult["results"][number]["lineage"]
+            >),
+            source_records: [sourceRecords[1], sourceRecords[0]],
+          },
+        },
+      ],
+    };
+    const duplicatedLineage = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[0] as RetrievalResult["results"][number]),
+          lineage: {
+            ...(retrievalResult.results[0]?.lineage as NonNullable<
+              RetrievalResult["results"][number]["lineage"]
+            >),
+            source_records: [sourceRecords[0], sourceRecords[0]],
+          },
+        },
+      ],
+    };
+    const invisibleZoneLineage = {
+      ...retrievalResult,
+      results: [
+        {
+          ...(retrievalResult.results[0] as RetrievalResult["results"][number]),
+          lineage: {
+            ...(retrievalResult.results[0]?.lineage as NonNullable<
+              RetrievalResult["results"][number]["lineage"]
+            >),
+            source_records: [
+              {
+                ...(sourceRecords[0] as RetrievalSourceRecord),
+                trust_zone_id: "tz_remote_default",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    expect(validateConformance("retrievalProjection", unsortedLineage).errors).toContain(
+      "source_records must be sorted deterministically",
+    );
+    expect(validateConformance("retrievalProjection", duplicatedLineage).errors).toContain(
+      "source_records must be deduplicated",
+    );
+    expect(validateConformance("retrievalProjection", invisibleZoneLineage).errors).toContain(
+      "lineage source trust_zone_id tz_remote_default must be visible in filters_applied.visible_trust_zone_ids",
+    );
+  });
+
+  it("enforces projection freshness sequence and stale reason consistency", () => {
+    const behindWithoutReason = {
+      ...projectionFreshness,
+      last_indexed_zone_sequence: 5,
+      sync_cursor_after_sequence: 6,
+      stale: false,
+    };
+    const staleWithoutReason = {
+      ...projectionFreshness,
+      stale: true,
+    } as Record<string, unknown>;
+    const freshWithReason = {
+      ...projectionFreshness,
+      stale: false,
+      reason: "version_changed",
+    };
+    const futureIndexed = {
+      ...projectionFreshness,
+      last_indexed_zone_sequence: 7,
+      sync_cursor_after_sequence: 6,
+      stale: false,
+    };
+    const validBehind = {
+      ...projectionFreshness,
+      last_indexed_zone_sequence: 5,
+      sync_cursor_after_sequence: 6,
+      stale: true,
+      reason: "behind_sync_cursor",
+    };
+
+    expect(validateConformance("retrievalProjection", behindWithoutReason).errors).toContain(
+      "projection freshness behind sync cursor must be stale with reason behind_sync_cursor",
+    );
+    expect(compileSchemaValidators().retrievalProjection(staleWithoutReason)).toBe(false);
+    expect(validateConformance("retrievalProjection", freshWithReason).errors).toContain(
+      "fresh projection freshness must not include reason",
+    );
+    expect(validateConformance("retrievalProjection", futureIndexed).errors).toContain(
+      "projection freshness last_indexed_zone_sequence must not exceed sync_cursor_after_sequence",
+    );
+    expect(validateConformance("retrievalProjection", validBehind)).toEqual({
+      valid: true,
+      errors: [],
+    });
   });
 
   it("rejects missing and invalid canonical event fields", () => {
