@@ -15,7 +15,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
-    "labels:check": "node scripts/check-label-catalog.mjs",
+    "labels:check": "node scripts/check-label-catalog.mjs && node --test scripts/check-pr-labels.test.mjs",
     "public-boundary": "node scripts/check-public-boundary.mjs",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"

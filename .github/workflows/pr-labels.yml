@@ -1,0 +1,32 @@
+name: Pull request labels
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+jobs:
+  labels:
+    name: Required label contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted base revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+
+      - name: Validate pull request labels
+        run: node scripts/check-pr-labels.mjs
