@@ -23,6 +23,19 @@ one atomic commit unless a maintainer explicitly requests otherwise.
 
 -
 
+## Labels
+
+<!--
+Use only labels defined in .github/labels.json. Replace each placeholder with
+the exact label applied to this PR.
+-->
+
+- Type: `<type-label>`
+- Area: `<area-label>`; `<area-label-if-needed>`
+- Size: `<size-label>`
+- Status: `<status-label>`
+- Milestone: `<milestone-label>`
+
 ## Architecture/data-contract impact
 
 <!--
@@ -44,6 +57,7 @@ or tests. Write "None" if there is no contract impact.
 | `pnpm typecheck` | Not run |
 | `pnpm test` | Not run |
 | `pnpm public-boundary` | Not run |
+| `pnpm labels:check` | Not run |
 | `pnpm check` | Not run |
 
 ## Public-data/security boundary
@@ -106,3 +120,7 @@ schema recovery notes when relevant.
 - [ ] Local checks were run, or any skipped checks are explicitly explained above.
 - [ ] CI status is passing or the current failure is documented above.
 - [ ] Deploy and migration status is explicit above, including "Not applicable" when there is no deploy or migration.
+- [ ] Labels use only entries from `.github/labels.json`.
+- [ ] Labels include exactly one type, one size, one status, and one milestone.
+- [ ] Labels include at least one area.
+- [ ] Size label was computed from GitHub additions plus deletions.
