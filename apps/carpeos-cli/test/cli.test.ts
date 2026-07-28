@@ -1,14 +1,26 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { LocalCaptureStore } from "@carpeos/local-store";
+import { LocalCaptureStore, StaticKeyProvider } from "@carpeos/local-store";
+import type {
+  ProtectedValueMetadata,
+  ProtectedValueUploadIntent,
+  ProtectedValueUploadReceipt,
+  SyncPullRequest,
+  SyncPushRequest,
+  SyncPushResult,
+} from "@carpeos/schema";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { runCli } from "../src/index.js";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const cliPath = join(packageRoot, "dist", "index.js");
 const createdDirs: string[] = [];
+const syncKey = new Uint8Array(32).fill(7);
+const syncCredential = "synthetic_sync_credential_00000000000000000001";
 
 beforeAll(() => {
   execFileSync(
@@ -245,6 +257,328 @@ describe("carpeos CLI", () => {
     expect(result.stdout.status).toBe("captured");
   });
 
+  it("reports sync status without reading or printing credentials", () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+    const result = runJson(
+      [
+        "sync",
+        "status",
+        "--url",
+        "https://sync.example.test",
+        "--credential-file",
+        secrets.credentialFile,
+        "--sync-key-file",
+        secrets.syncKeyFile,
+      ],
+      context,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatchObject({
+      ok: true,
+      command: "sync status",
+      sync: {
+        url_configured: true,
+        credential_file_configured: true,
+        sync_key_file_configured: true,
+      },
+      local: {
+        outbox: { pending: 0, leased: 0, delivered: 0 },
+      },
+    });
+    expect(result.rawStdout).not.toContain(syncCredential);
+    expect(result.rawStdout).not.toContain(Buffer.from(syncKey).toString("hex"));
+  });
+
+  it("rejects missing and unsafe sync secret files", () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+    chmodSync(secrets.credentialFile, 0o644);
+
+    const unsafe = runJson(
+      [
+        "sync",
+        "push",
+        "--url",
+        "https://sync.example.test",
+        "--credential-file",
+        secrets.credentialFile,
+        "--sync-key-file",
+        secrets.syncKeyFile,
+      ],
+      context,
+    );
+    expect(unsafe.status).toBe(2);
+    expect(unsafe.stderr).toMatchObject({
+      ok: false,
+      error: { code: "invalid_usage" },
+    });
+    expect(JSON.stringify(unsafe.stderr)).not.toContain(syncCredential);
+
+    const missing = runJson(
+      [
+        "sync",
+        "pull",
+        "--url",
+        "https://sync.example.test",
+        "--credential-file",
+        join(context.home, "missing-token"),
+        "--sync-key-file",
+        secrets.syncKeyFile,
+      ],
+      context,
+    );
+    expect(missing.status).toBe(2);
+    expect(missing.stderr).toMatchObject({
+      ok: false,
+      error: { code: "invalid_usage" },
+    });
+  });
+
+  it("hashes a 0600 credential file for D1 authorization seeding without printing the token", () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+
+    const hashed = runJson(
+      ["sync", "credential-hash", "--credential-file", secrets.credentialFile],
+      context,
+    );
+
+    expect(hashed.status).toBe(0);
+    expect(hashed.stdout).toMatchObject({
+      ok: true,
+      command: "sync credential-hash",
+      hash_algorithm: "sha-256",
+    });
+    expect(String(hashed.stdout.token_hash_sha256)).toMatch(/^[a-f0-9]{64}$/);
+    expect(hashed.rawStdout).not.toContain(syncCredential);
+  });
+
+  it("rejects non-loopback HTTP sync URLs", () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+
+    const result = runJson(
+      [
+        "sync",
+        "push",
+        "--url",
+        "http://example.com",
+        "--credential-file",
+        secrets.credentialFile,
+        "--sync-key-file",
+        secrets.syncKeyFile,
+      ],
+      context,
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatchObject({
+      ok: false,
+      error: { code: "invalid_usage" },
+    });
+  });
+
+  it("pushes one outbox item through the sync coordinator and ACKs after acceptance", async () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+    const captured = runJson(
+      ["capture-hook", "--provider", "codex"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_sync_push",
+        message: "synthetic sync push",
+      }),
+    );
+    const calls: string[] = [];
+    const server = await startSyntheticSyncServer(async (request, response) => {
+      calls.push(`${request.method ?? "GET"} ${request.url ?? "/"}`);
+      expect(request.headers.authorization).toBe(`Bearer ${syncCredential}`);
+      if (request.method === "HEAD") {
+        response.writeHead(404).end();
+        return;
+      }
+      if (request.method === "PUT") {
+        await readRequestBody(request);
+        const intent = decodeHeaderJson<ProtectedValueUploadIntent>(
+          String(request.headers["x-carpeos-upload-intent"] ?? ""),
+        );
+        writeJsonResponse(response, receiptFromIntent(intent, "uploaded"));
+        return;
+      }
+      const body = JSON.parse(await readRequestBody(request)) as SyncPushRequest;
+      expect(body.protected_value_receipts).toHaveLength(1);
+      writeJsonResponse(response, {
+        schema_version: "v1",
+        request_id: body.request_id,
+        status: "accepted",
+        accepted_event_ids: [String(captured.stdout.event_id)],
+        accepted_erasure_ids: [],
+        errors: [],
+      } satisfies SyncPushResult);
+    });
+
+    try {
+      const pushed = await runCliJson(
+        [
+          "sync",
+          "push",
+          "--url",
+          server.url,
+          "--credential-file",
+          secrets.credentialFile,
+          "--sync-key-file",
+          secrets.syncKeyFile,
+        ],
+        context,
+      );
+
+      expect(pushed.status).toBe(0);
+      expect(pushed.stdout).toMatchObject({
+        ok: true,
+        command: "sync push",
+        processed: 1,
+        status: { pending: 0, leased: 0, delivered: 1 },
+      });
+      expect(calls.map((call) => call.split(" ")[0])).toEqual(["HEAD", "PUT", "POST"]);
+      expect(pushed.rawStdout).not.toContain(syncCredential);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("does not ACK auth failures or idempotency conflicts", async () => {
+    await expectSyncPushNoAck(401);
+    await expectSyncPushNoAck(409);
+  });
+
+  it("pulls one page, imports protected values, and persists the cursor", async () => {
+    const target = makeContext();
+    const secrets = writeSyncSecrets(target.home);
+    const source = makeSourceSyncCapture();
+    const transfer = source.store.exportProtectedValueForSync({
+      protectedValueId: source.protectedValueId,
+      trustZoneSyncKey: syncKey,
+    });
+    const remoteEvent = { ...source.event, zone_sequence: 5 };
+    const metadata = metadataFromIntent(transfer.intent, source.event.event_id);
+    const server = await startSyntheticSyncServer(async (request, response) => {
+      expect(request.headers.authorization).toBe(`Bearer ${syncCredential}`);
+      if (request.method === "POST") {
+        const body = JSON.parse(await readRequestBody(request)) as SyncPullRequest;
+        expect(body.after_sequence).toBeUndefined();
+        writeJsonResponse(response, {
+          schema_version: "v1",
+          events: [remoteEvent],
+          erasures: [],
+          cursor: "cursor_5",
+          after_sequence: 5,
+          has_more: false,
+        });
+        return;
+      }
+      response.writeHead(200, {
+        "X-CarpeOS-Protected-Metadata": encodeHeaderJson(metadata),
+      });
+      response.end(Buffer.from(transfer.ciphertext));
+    });
+
+    try {
+      const pulled = await runCliJson(
+        [
+          "sync",
+          "pull",
+          "--url",
+          server.url,
+          "--credential-file",
+          secrets.credentialFile,
+          "--sync-key-file",
+          secrets.syncKeyFile,
+          "--trust-zone",
+          "tz_cli_sync_zone",
+          "--pull-limit",
+          "1",
+        ],
+        target,
+      );
+
+      expect(pulled.status).toBe(0);
+      expect(pulled.stdout).toMatchObject({
+        ok: true,
+        command: "sync pull",
+        pages: 1,
+        cursor: {
+          trust_zone_id: "tz_cli_sync_zone",
+          after_sequence: 5,
+          cursor: "cursor_5",
+        },
+      });
+      const store = new LocalCaptureStore({
+        runtimeDir: target.home,
+        workspaceRoot: target.cwd,
+        trustZoneId: "tz_cli_sync_zone",
+      });
+      expect(
+        Buffer.from(store.decryptProtectedValue(source.protectedValueId)).toString("utf8"),
+      ).toContain("synthetic pull capture");
+      store.close();
+    } finally {
+      source.store.close();
+      await server.close();
+    }
+  });
+
+  it("runs bounded sync once and rejects unknown sync subcommands", async () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+    const server = await startSyntheticSyncServer(async (request, response) => {
+      if (request.method === "POST" && request.url === "/v1/sync/pull") {
+        writeJsonResponse(response, {
+          schema_version: "v1",
+          events: [],
+          erasures: [],
+          cursor: "cursor_0",
+          has_more: false,
+        });
+        return;
+      }
+      response.writeHead(404).end();
+    });
+
+    try {
+      const once = await runCliJson(
+        [
+          "sync",
+          "once",
+          "--url",
+          server.url,
+          "--credential-file",
+          secrets.credentialFile,
+          "--sync-key-file",
+          secrets.syncKeyFile,
+          "--limit",
+          "1",
+          "--max-pages",
+          "1",
+        ],
+        context,
+      );
+      expect(once.status).toBe(0);
+      expect(once.stdout).toMatchObject({ ok: true, command: "sync once", pushed: [] });
+    } finally {
+      await server.close();
+    }
+
+    const unknown = runJson(["sync", "stream"], context);
+    expect(unknown.status).toBe(2);
+    expect(unknown.stderr).toMatchObject({
+      ok: false,
+      error: { code: "invalid_usage" },
+    });
+  });
+
   it("initializes shared key and device identity atomically across concurrent hooks", async () => {
     const context = makeContext();
     const results = await Promise.all(
@@ -333,6 +667,46 @@ function runJson(
   };
 }
 
+async function runCliJson(
+  args: string[],
+  context: { home: string; cwd: string },
+): Promise<{
+  status: number;
+  stdout: Record<string, unknown>;
+  stderr: Record<string, unknown>;
+  rawStdout: string;
+}> {
+  const originalCwd = process.cwd();
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  let stdout = "";
+  let stderr = "";
+  process.chdir(context.cwd);
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    stdout += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    const status = await runCli(args, { ...process.env, CARPEOS_HOME: context.home });
+    const rawStdout = stdout.trim();
+    const rawStderr = stderr.trim();
+    return {
+      status,
+      stdout: rawStdout.length === 0 ? {} : (JSON.parse(rawStdout) as Record<string, unknown>),
+      stderr: rawStderr.length === 0 ? {} : (JSON.parse(rawStderr) as Record<string, unknown>),
+      rawStdout,
+    };
+  } finally {
+    process.chdir(originalCwd);
+    process.stdout.write = originalStdoutWrite as typeof process.stdout.write;
+    process.stderr.write = originalStderrWrite as typeof process.stderr.write;
+  }
+}
+
 function runProcess(
   args: string[],
   context: { home: string; cwd: string },
@@ -374,4 +748,192 @@ function runProcess(
     });
     child.stdin.end(input);
   });
+}
+
+async function expectSyncPushNoAck(status: 401 | 409): Promise<void> {
+  const context = makeContext();
+  const secrets = writeSyncSecrets(context.home);
+  runJson(
+    ["capture-hook", "--provider", "codex"],
+    context,
+    JSON.stringify({
+      hook_event_name: "SessionEnd",
+      session_id: `session_sync_blocked_${status}`,
+      message: "synthetic blocked push",
+    }),
+  );
+  const server = await startSyntheticSyncServer(async (request, response) => {
+    if (request.method === "HEAD") {
+      response.writeHead(404).end();
+      return;
+    }
+    if (request.method === "PUT") {
+      await readRequestBody(request);
+      const intent = decodeHeaderJson<ProtectedValueUploadIntent>(
+        String(request.headers["x-carpeos-upload-intent"] ?? ""),
+      );
+      writeJsonResponse(response, receiptFromIntent(intent, "uploaded"));
+      return;
+    }
+    writeJsonResponse(
+      response,
+      { schema_version: "v1", error: { code: "unauthorized", message: "synthetic" } },
+      status,
+    );
+  });
+
+  try {
+    const pushed = await runCliJson(
+      [
+        "sync",
+        "push",
+        "--url",
+        server.url,
+        "--credential-file",
+        secrets.credentialFile,
+        "--sync-key-file",
+        secrets.syncKeyFile,
+      ],
+      context,
+    );
+    expect(pushed.status).toBe(4);
+    expect(pushed.stdout).toMatchObject({
+      ok: false,
+      processed: 1,
+      status: { delivered: 0 },
+    });
+    expect(pushed.rawStdout).not.toContain("synthetic");
+  } finally {
+    await server.close();
+  }
+}
+
+function writeSyncSecrets(home: string): { credentialFile: string; syncKeyFile: string } {
+  const credentialFile = join(home, "sync-credential");
+  const syncKeyFile = join(home, "trust-zone-sync.key");
+  writeFileSync(credentialFile, `${syncCredential}\n`, { mode: 0o600 });
+  writeFileSync(syncKeyFile, `${Buffer.from(syncKey).toString("hex")}\n`, { mode: 0o600 });
+  chmodSync(credentialFile, 0o600);
+  chmodSync(syncKeyFile, 0o600);
+  return { credentialFile, syncKeyFile };
+}
+
+function makeSourceSyncCapture(): {
+  store: LocalCaptureStore;
+  event: ReturnType<LocalCaptureStore["captureHook"]>["event"];
+  protectedValueId: string;
+} {
+  const runtimeDir = tempDir("carpeos-cli-source-");
+  const store = new LocalCaptureStore({
+    runtimeDir,
+    workspaceRoot: runtimeDir,
+    trustZoneId: "tz_cli_sync_zone",
+    keyProvider: new StaticKeyProvider(new Uint8Array(32).fill(8)),
+  });
+  const captured = store.captureHook({
+    provider: "codex",
+    hook_event_name: "SessionEnd",
+    captured_at: "2026-01-01T00:00:00Z",
+    session_id: "session_pull_synthetic",
+    media_type: "application/json",
+    subject_ref: "subject_synthetic",
+    payload: { transcript: "synthetic pull capture" },
+  });
+  return { store, event: captured.event, protectedValueId: captured.protected_value_id };
+}
+
+async function startSyntheticSyncServer(
+  handler: (request: IncomingMessage, response: ServerResponse) => Promise<void> | void,
+): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    void Promise.resolve(handler(request, response)).catch((error: unknown) => {
+      response.writeHead(500, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: String(error) }));
+    });
+  });
+  await new Promise<void>((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("expected TCP test server");
+  }
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>((resolvePromise, rejectPromise) => {
+        server.close((error) => (error === undefined ? resolvePromise() : rejectPromise(error)));
+      }),
+  };
+}
+
+function receiptFromIntent(
+  intent: ProtectedValueUploadIntent,
+  status: "uploaded" | "already_exists",
+): ProtectedValueUploadReceipt {
+  return {
+    schema_version: "v1",
+    receipt_type: "protected_value_upload",
+    protected_value_id: intent.protected_value_id,
+    trust_zone_id: intent.trust_zone_id,
+    object_key: intent.object_key,
+    original_ciphertext_digest: intent.original_ciphertext_digest,
+    original_ciphertext_size_bytes: intent.original_ciphertext_size_bytes,
+    uploaded_at: "2026-01-01T00:00:00Z",
+    status,
+    upload_receipt_id: `receipt_${intent.protected_value_id.slice(3)}`,
+  };
+}
+
+function metadataFromIntent(
+  intent: ProtectedValueUploadIntent,
+  eventId: string,
+): ProtectedValueMetadata {
+  return {
+    schema_version: "v1",
+    metadata_type: "protected_value",
+    protected_value_id: intent.protected_value_id,
+    trust_zone_id: intent.trust_zone_id,
+    object_key: intent.object_key,
+    vault_ref: intent.vault_ref,
+    encryption_algorithm: intent.encryption_algorithm,
+    encoding: intent.encoding,
+    ciphertext_nonce: intent.ciphertext_nonce,
+    ciphertext_auth_tag: intent.ciphertext_auth_tag,
+    original_ciphertext_digest: intent.original_ciphertext_digest,
+    original_ciphertext_size_bytes: intent.original_ciphertext_size_bytes,
+    key_ref: intent.key_ref,
+    wrapped_device_key: intent.wrapped_device_key,
+    linked_event_ids: [eventId],
+    orphan_status: "linked",
+    uploaded_at: "2026-01-01T00:00:00Z",
+    ...(intent.nonce_ref === undefined ? {} : { nonce_ref: intent.nonce_ref }),
+    ...(intent.tag_ref === undefined ? {} : { tag_ref: intent.tag_ref }),
+  };
+}
+
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  let body = "";
+  request.setEncoding("utf8");
+  for await (const chunk of request) {
+    body += chunk;
+  }
+  return body;
+}
+
+function writeJsonResponse(response: ServerResponse, value: unknown, status = 200): void {
+  response.writeHead(status, { "Content-Type": "application/json" });
+  response.end(JSON.stringify(value));
+}
+
+function encodeHeaderJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+function decodeHeaderJson<T>(value: string): T {
+  return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as T;
+}
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  createdDirs.push(dir);
+  return dir;
 }

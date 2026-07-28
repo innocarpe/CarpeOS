@@ -2,6 +2,9 @@
 
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { isIdempotencyKey } from "@carpeos/capture";
 import {
   IdempotencyConflictError,
@@ -9,6 +12,7 @@ import {
   LocalCaptureStore,
   runtimeDirFromEnv,
 } from "@carpeos/local-store";
+import { OutboxSyncCoordinator, SyncHttpError, SyncHttpTransport } from "@carpeos/sync-client";
 import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
 
 type JsonObject = Record<string, unknown>;
@@ -38,6 +42,8 @@ export async function runCli(
         return await runCaptureHook(rest, env);
       case "outbox":
         return runOutbox(rest, env);
+      case "sync":
+        return await runSync(rest, env);
       default:
         throw new CliUsageError(`unknown command: ${command}`);
     }
@@ -261,6 +267,167 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   }
 }
 
+async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
+  const [subcommand, ...rest] = argv;
+  if (subcommand === undefined) {
+    throw new CliUsageError("sync requires status, push, pull, or once");
+  }
+
+  const parsed = parseArgs({
+    args: rest,
+    allowPositionals: false,
+    strict: true,
+    options: {
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+      url: { type: "string" },
+      "credential-file": { type: "string" },
+      "sync-key-file": { type: "string" },
+      limit: { type: "string", default: "1" },
+      "max-pages": { type: "string", default: "1" },
+      "lease-ms": { type: "string", default: "30000" },
+      "retry-delay-ms": { type: "string", default: "1000" },
+      "pull-limit": { type: "string", default: "100" },
+    },
+  });
+  const store = openStore(
+    compactCommonOptions(
+      parsed.values.home,
+      parsed.values["project-id"],
+      parsed.values["trust-zone"],
+    ),
+    env,
+  );
+
+  try {
+    switch (subcommand) {
+      case "status": {
+        const config = resolveSyncConfig(parsed.values, env, store.runtimeDir, false);
+        const cursor = store.getSyncCursor();
+        writeJson(process.stdout, {
+          ok: true,
+          command: "sync status",
+          sync: {
+            url_configured: config.urlConfigured,
+            credential_file_configured: config.credentialFileConfigured,
+            sync_key_file_configured: config.syncKeyFileConfigured,
+          },
+          local: {
+            outbox: store.outboxStatus(),
+            cursor,
+            trust_zone_id: store.trustZone.trust_zone_id,
+            client_id: store.clientId,
+          },
+        });
+        return 0;
+      }
+      case "push": {
+        const coordinator = createSyncCoordinator(parsed.values, env, store);
+        const limit = parseInteger(parsed.values.limit, "--limit", 1);
+        const results = [];
+        let exitCode = 0;
+        for (let index = 0; index < limit; index += 1) {
+          const result = await coordinator.pushOne();
+          if (result === undefined) {
+            break;
+          }
+          results.push(redactPushResult(result));
+          if (result.status !== "acked") {
+            exitCode = result.status === "retried" ? Math.max(exitCode, 1) : 4;
+            break;
+          }
+        }
+        writeJson(process.stdout, {
+          ok: exitCode === 0,
+          command: "sync push",
+          processed: results.length,
+          results,
+          status: store.outboxStatus(),
+        });
+        return exitCode;
+      }
+      case "pull": {
+        const coordinator = createSyncCoordinator(parsed.values, env, store);
+        const maxPages = parseInteger(parsed.values["max-pages"], "--max-pages", 1);
+        const results = [];
+        for (let index = 0; index < maxPages; index += 1) {
+          const page = await coordinator.pullPage();
+          results.push(page);
+          if (!page.has_more) {
+            break;
+          }
+        }
+        writeJson(process.stdout, {
+          ok: true,
+          command: "sync pull",
+          pages: results.length,
+          results,
+          cursor: store.getSyncCursor(),
+        });
+        return 0;
+      }
+      case "once": {
+        const coordinator = createSyncCoordinator(parsed.values, env, store);
+        const limit = parseInteger(parsed.values.limit, "--limit", 1);
+        const maxPages = parseInteger(parsed.values["max-pages"], "--max-pages", 1);
+        const pushed = [];
+        let exitCode = 0;
+        for (let index = 0; index < limit; index += 1) {
+          const result = await coordinator.pushOne();
+          if (result === undefined) {
+            break;
+          }
+          pushed.push(redactPushResult(result));
+          if (result.status !== "acked") {
+            exitCode = result.status === "retried" ? Math.max(exitCode, 1) : 4;
+            break;
+          }
+        }
+        const pulled = [];
+        if (exitCode === 0) {
+          for (let index = 0; index < maxPages; index += 1) {
+            const page = await coordinator.pullPage();
+            pulled.push(page);
+            if (!page.has_more) {
+              break;
+            }
+          }
+        }
+        writeJson(process.stdout, {
+          ok: exitCode === 0,
+          command: "sync once",
+          pushed,
+          pulled,
+          status: store.outboxStatus(),
+          cursor: store.getSyncCursor(),
+        });
+        return exitCode;
+      }
+      case "credential-hash": {
+        const credentialFile =
+          firstConfigured(
+            parsed.values["credential-file"],
+            env.CARPEOS_SYNC_CREDENTIAL_FILE,
+            join(store.runtimeDir, "sync-credential"),
+          ) ?? join(store.runtimeDir, "sync-credential");
+        const credential = readCredentialFile(credentialFile);
+        writeJson(process.stdout, {
+          ok: true,
+          command: "sync credential-hash",
+          hash_algorithm: "sha-256",
+          token_hash_sha256: sha256Hex(credential),
+        });
+        return 0;
+      }
+      default:
+        throw new CliUsageError(`unknown sync subcommand: ${subcommand}`);
+    }
+  } finally {
+    store.close();
+  }
+}
+
 type CommonOptions = {
   home?: string;
   projectId?: string;
@@ -314,10 +481,218 @@ function splitCommand(argv: readonly string[]): { command: string; rest: readonl
   const [command, ...rest] = argv;
   if (command === undefined) {
     throw new CliUsageError(
-      "a command is required: init, project identify, capture-hook, or outbox",
+      "a command is required: init, project identify, capture-hook, outbox, or sync",
     );
   }
   return { command, rest };
+}
+
+type SyncParsedValues = {
+  url?: string;
+  "credential-file"?: string;
+  "sync-key-file"?: string;
+  "lease-ms"?: string;
+  "retry-delay-ms"?: string;
+  "pull-limit"?: string;
+};
+
+type ResolvedSyncConfig =
+  | {
+      urlConfigured: boolean;
+      credentialFileConfigured: boolean;
+      syncKeyFileConfigured: boolean;
+    }
+  | {
+      baseUrl: string;
+      bearerCredential: string;
+      trustZoneSyncKey: Uint8Array;
+      urlConfigured: true;
+      credentialFileConfigured: true;
+      syncKeyFileConfigured: true;
+    };
+
+function createSyncCoordinator(
+  values: SyncParsedValues,
+  env: NodeJS.ProcessEnv,
+  store: LocalCaptureStore,
+): OutboxSyncCoordinator {
+  const config = resolveSyncConfig(values, env, store.runtimeDir, true);
+  if (!("baseUrl" in config)) {
+    throw new CliUsageError("sync credentials are required");
+  }
+  return new OutboxSyncCoordinator({
+    store,
+    transport: new SyncHttpTransport({
+      baseUrl: config.baseUrl,
+      bearerCredential: config.bearerCredential,
+      clientId: store.clientId,
+      fetch: globalThis.fetch,
+    }),
+    trustZoneSyncKey: config.trustZoneSyncKey,
+    leaseMs: parseInteger(values["lease-ms"], "--lease-ms", 1),
+    retryDelayMs: parseInteger(values["retry-delay-ms"], "--retry-delay-ms", 0),
+    pullLimit: parseInteger(values["pull-limit"], "--pull-limit", 1),
+  });
+}
+
+function resolveSyncConfig(
+  values: SyncParsedValues,
+  env: NodeJS.ProcessEnv,
+  runtimeDir: string,
+  requireSecrets: false,
+): Pick<ResolvedSyncConfig, "urlConfigured" | "credentialFileConfigured" | "syncKeyFileConfigured">;
+function resolveSyncConfig(
+  values: SyncParsedValues,
+  env: NodeJS.ProcessEnv,
+  runtimeDir: string,
+  requireSecrets: true,
+): ResolvedSyncConfig;
+function resolveSyncConfig(
+  values: SyncParsedValues,
+  env: NodeJS.ProcessEnv,
+  runtimeDir: string,
+  requireSecrets: boolean,
+): ResolvedSyncConfig {
+  const url = firstConfigured(values.url, env.CARPEOS_SYNC_URL);
+  const credentialFile =
+    firstConfigured(
+      values["credential-file"],
+      env.CARPEOS_SYNC_CREDENTIAL_FILE,
+      join(runtimeDir, "sync-credential"),
+    ) ?? join(runtimeDir, "sync-credential");
+  const syncKeyFile =
+    firstConfigured(
+      values["sync-key-file"],
+      env.CARPEOS_SYNC_KEY_FILE,
+      join(runtimeDir, "trust-zone-sync.key"),
+    ) ?? join(runtimeDir, "trust-zone-sync.key");
+  const baseStatus = {
+    urlConfigured: url !== undefined,
+    credentialFileConfigured: fileExists(credentialFile),
+    syncKeyFileConfigured: fileExists(syncKeyFile),
+  };
+  if (!requireSecrets) {
+    return baseStatus;
+  }
+  if (url === undefined) {
+    throw new CliUsageError("sync requires --url or CARPEOS_SYNC_URL");
+  }
+  return {
+    baseUrl: normalizeSyncUrl(url),
+    bearerCredential: readCredentialFile(credentialFile),
+    trustZoneSyncKey: readSyncKeyFile(syncKeyFile),
+    urlConfigured: true,
+    credentialFileConfigured: true,
+    syncKeyFileConfigured: true,
+  };
+}
+
+function readCredentialFile(path: string): string {
+  assertSecretFile(path, "sync credential file");
+  const credential = readFileSync(path, "utf8").trim();
+  if (!/^[A-Za-z0-9._~:-]{32,512}$/.test(credential)) {
+    throw new CliUsageError("sync credential file must contain one high-entropy token");
+  }
+  return credential;
+}
+
+function readSyncKeyFile(path: string): Uint8Array {
+  assertSecretFile(path, "trust-zone sync key file");
+  const raw = readFileSync(path, "utf8").trim();
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return new Uint8Array(Buffer.from(raw, "hex"));
+  }
+  if (/^[A-Za-z0-9_-]{43}$/.test(raw)) {
+    const decoded = Buffer.from(raw, "base64url");
+    if (decoded.byteLength === 32) {
+      return new Uint8Array(decoded);
+    }
+  }
+  throw new CliUsageError(
+    "trust-zone sync key file must contain a 32-byte key as 64-hex or base64url",
+  );
+}
+
+function assertSecretFile(path: string, label: string): void {
+  let stat: ReturnType<typeof statSync>;
+  try {
+    stat = statSync(path);
+  } catch {
+    throw new CliUsageError(`${label} is required`);
+  }
+  if (!stat.isFile()) {
+    throw new CliUsageError(`${label} must be a regular file`);
+  }
+  if ((stat.mode & 0o777) !== 0o600) {
+    throw new CliUsageError(`${label} must use mode 0600`);
+  }
+}
+
+function normalizeSyncUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new CliUsageError("sync URL must be an absolute http or https URL");
+  }
+  if (url.protocol === "https:") {
+    return url.toString().replace(/\/+$/, "");
+  }
+  if (url.protocol === "http:" && isLoopbackHost(url.hostname)) {
+    return url.toString().replace(/\/+$/, "");
+  }
+  throw new CliUsageError("sync URL must use https except for loopback local development");
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+}
+
+function firstConfigured(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    if (value !== undefined && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function fileExists(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function redactPushResult(result: Awaited<ReturnType<OutboxSyncCoordinator["pushOne"]>>): unknown {
+  if (result === undefined) {
+    return undefined;
+  }
+  if (result.status === "acked") {
+    return {
+      status: result.status,
+      outbox_id: result.outbox_id,
+      remote_status: result.remote_status,
+      accepted_event_ids: result.result.accepted_event_ids,
+      accepted_erasure_ids: result.result.accepted_erasure_ids,
+    };
+  }
+  if (result.status === "retried") {
+    return { status: result.status, outbox_id: result.outbox_id, error: result.error };
+  }
+  return {
+    status: result.status,
+    outbox_id: result.outbox_id,
+    reason: result.reason,
+    remote_status: result.result?.status,
+    conflict_with: result.result?.conflict_with,
+  };
 }
 
 function parseArgvInput(positionals: readonly string[]): string {
@@ -387,6 +762,13 @@ function toPublicError(error: unknown): { code: string; message: string; exitCod
   }
   if (isParseArgsError(error)) {
     return { code: "invalid_usage", message: "The command options are invalid.", exitCode: 2 };
+  }
+  if (error instanceof SyncHttpError) {
+    return {
+      code: error.retryable ? "sync_retryable_failure" : "sync_blocked",
+      message: "The remote sync request failed without exposing the server response body.",
+      exitCode: error.retryable ? 1 : 4,
+    };
   }
   return {
     code: "internal_error",

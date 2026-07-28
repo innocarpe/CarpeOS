@@ -3,6 +3,9 @@ import {
   type CanonicalEvent,
   type CryptoShredErasureTargetRef,
   type ErasureLedgerRecord,
+  type ProtectedValueMetadata,
+  type ProtectedValueUploadIntent,
+  type ProtectedValueUploadReceipt,
   type ProjectionDeleteErasureTargetRef,
   type ProvenanceRef,
   type SyncApiMessage,
@@ -202,7 +205,86 @@ const erasureFixture: ErasureLedgerRecord = {
   evidence_refs: [{ ref_type: "artifact", ref_id: "art_00000001", relationship: "redacts" }],
 };
 
+const wrappedDeviceKeyEnvelope = {
+  schema_version: "v1",
+  envelope_version: "wrapped-device-key/v1",
+  wrapping_algorithm: "aes-256-gcm",
+  encoding: "base64url",
+  wrap_key_ref: "sync_key_synthetic_zone",
+  wrapped_key_ref: "key_active",
+  wrap_nonce: "d3JhcF9ub25jZV8wMDE",
+  wrap_auth_tag: "d3JhcF90YWdfMDAx",
+  wrapped_key_ciphertext: "d3JhcHBlZF9kZXZpY2Vfa2V5XzAwMQ",
+  wrapped_key_digest: {
+    algorithm: "sha-256",
+    value: "d".repeat(64),
+  },
+  wrapped_key_size_bytes: 48,
+  aad: {
+    trust_zone_id: "tz_local_default",
+    protected_value_id: "pv_synthetic_artifact_001",
+    key_ref: "key_active",
+  },
+} as const;
+
+const protectedValueUploadIntent: ProtectedValueUploadIntent = {
+  schema_version: "v1",
+  intent_type: "protected_value_upload",
+  protected_value_id: "pv_synthetic_artifact_001",
+  trust_zone_id: "tz_local_default",
+  vault_ref: "vault_primary",
+  key_ref: "key_active",
+  object_key: `protected-values/tz_local_default/pv_synthetic_artifact_001/${"a".repeat(64)}`,
+  encryption_algorithm: "aes-256-gcm",
+  encoding: "base64url",
+  ciphertext_nonce: "YmxvYl9ub25jZV8wMDE",
+  ciphertext_auth_tag: "YmxvYl90YWdfMDAx",
+  original_ciphertext_digest: digest,
+  original_ciphertext_size_bytes: 512,
+  nonce_ref: "nonce_artifact_001",
+  tag_ref: "tag_artifact_001",
+  wrapped_device_key: wrappedDeviceKeyEnvelope,
+};
+
+const protectedValueUploadReceipt: ProtectedValueUploadReceipt = {
+  schema_version: "v1",
+  receipt_type: "protected_value_upload",
+  protected_value_id: "pv_synthetic_artifact_001",
+  trust_zone_id: "tz_local_default",
+  object_key: protectedValueUploadIntent.object_key,
+  original_ciphertext_digest: digest,
+  original_ciphertext_size_bytes: 512,
+  uploaded_at: "2026-01-01T00:00:02Z",
+  status: "uploaded",
+  upload_receipt_id: "receipt_synthetic_001",
+};
+
+const protectedValueMetadata: ProtectedValueMetadata = {
+  schema_version: "v1",
+  metadata_type: "protected_value",
+  protected_value_id: "pv_synthetic_artifact_001",
+  trust_zone_id: "tz_local_default",
+  object_key: protectedValueUploadIntent.object_key,
+  vault_ref: protectedValueUploadIntent.vault_ref,
+  encryption_algorithm: "aes-256-gcm",
+  encoding: "base64url",
+  ciphertext_nonce: "YmxvYl9ub25jZV8wMDE",
+  ciphertext_auth_tag: "YmxvYl90YWdfMDAx",
+  original_ciphertext_digest: digest,
+  original_ciphertext_size_bytes: 512,
+  nonce_ref: "nonce_artifact_001",
+  tag_ref: "tag_artifact_001",
+  key_ref: "key_active",
+  wrapped_device_key: wrappedDeviceKeyEnvelope,
+  linked_event_ids: ["evt_00000001"],
+  orphan_status: "linked",
+  uploaded_at: "2026-01-01T00:00:02Z",
+};
+
 const syncFixtures: SyncApiMessage[] = [
+  protectedValueUploadIntent,
+  protectedValueUploadReceipt,
+  protectedValueMetadata,
   {
     schema_version: "v1",
     request_id: "req_push_001",
@@ -210,7 +292,18 @@ const syncFixtures: SyncApiMessage[] = [
     trust_zone_id: "tz_local_default",
     idempotency_key: "idem_abcdefghijklmnop",
     request_fingerprint: `sha-256:${"b".repeat(64)}`,
-    events: eventFixtures,
+    events: [eventFixtures[0] as CanonicalEvent],
+    erasures: [],
+    protected_value_receipts: [protectedValueUploadReceipt],
+  },
+  {
+    schema_version: "v1",
+    request_id: "req_push_001_erasure",
+    client_id: "client_alpha",
+    trust_zone_id: "tz_local_default",
+    idempotency_key: "idem_erasureabcdefghi",
+    request_fingerprint: `sha-256:${"e".repeat(64)}`,
+    events: [],
     erasures: [erasureFixture],
   },
   {
@@ -264,6 +357,7 @@ const syncFixtures: SyncApiMessage[] = [
     events: eventFixtures,
     erasures: [erasureFixture],
     cursor: "cursor_next",
+    after_sequence: 5,
     has_more: false,
   },
   {
@@ -303,7 +397,7 @@ describe("CarpeOS v1 schemas", () => {
 
     expect(validators.erasureLedger(erasureFixture)).toBe(true);
     for (const fixture of syncFixtures) {
-      expect(validators.syncApi(fixture)).toBe(true);
+      expect(validators.syncApi(fixture), JSON.stringify(validators.syncApi.errors)).toBe(true);
       expect(validateConformance("syncApi", fixture), JSON.stringify(fixture)).toEqual({
         valid: true,
         errors: [],
@@ -523,6 +617,16 @@ describe("CarpeOS v1 schemas", () => {
       events: [],
       erasures: [],
     };
+    const mixedPush = {
+      ...(syncFixtures[0] as Record<string, unknown>),
+      events: [eventFixtures[0]],
+      erasures: [erasureFixture],
+    };
+    const multiEventPush = {
+      ...(syncFixtures[0] as Record<string, unknown>),
+      events: [eventFixtures[0], eventFixtures[1]],
+      erasures: [],
+    };
     const replayMissingReplayOf = {
       schema_version: "v1",
       request_id: "req_push_005",
@@ -551,6 +655,8 @@ describe("CarpeOS v1 schemas", () => {
     expect(validators.erasureLedger(tombstoneProtectedValue)).toBe(false);
     expect(validators.erasureLedger(cryptoShredWithNonProtectedValueId)).toBe(false);
     expect(validators.syncApi(emptyPush)).toBe(false);
+    expect(validators.syncApi(mixedPush)).toBe(false);
+    expect(validators.syncApi(multiEventPush)).toBe(false);
     expect(validateConformance("syncApi", emptyPush).errors).toContain(
       "sync push request must contain at least one event or erasure",
     );
@@ -559,9 +665,76 @@ describe("CarpeOS v1 schemas", () => {
     expect(validators.syncApi(replayWithConflictMarker)).toBe(false);
   });
 
+  it("keeps G004 push compatibility while validating optional protected-value receipts", () => {
+    const compatibleG004Push: Record<string, unknown> = {
+      ...(syncFixtures[3] as Record<string, unknown>),
+      protected_value_receipts: undefined,
+    };
+    delete compatibleG004Push.protected_value_receipts;
+
+    const mismatchedReceiptPush = {
+      ...(syncFixtures[3] as Record<string, unknown>),
+      protected_value_receipts: [
+        {
+          ...protectedValueUploadReceipt,
+          original_ciphertext_size_bytes: 513,
+        },
+      ],
+    };
+    const missingReceiptPush = {
+      ...(syncFixtures[3] as Record<string, unknown>),
+      protected_value_receipts: [],
+    };
+
+    expect(compileSchemaValidators().syncApi(compatibleG004Push)).toBe(true);
+    expect(validateConformance("syncApi", compatibleG004Push).valid).toBe(true);
+    expect(validateConformance("syncApi", mismatchedReceiptPush).errors).toContain(
+      "upload receipt pv_synthetic_artifact_001 size must match event protected value size",
+    );
+    expect(validateConformance("syncApi", missingReceiptPush).errors).toContain(
+      "event evt_00000001 protected_value_id pv_synthetic_artifact_001 has no matching upload receipt",
+    );
+  });
+
+  it("validates decryptable protected-value transfer metadata without accepting secret material", () => {
+    const invalidWrappedAad = {
+      ...protectedValueUploadIntent,
+      wrapped_device_key: {
+        ...wrappedDeviceKeyEnvelope,
+        aad: {
+          ...wrappedDeviceKeyEnvelope.aad,
+          protected_value_id: "pv_synthetic_other_001",
+        },
+      },
+    };
+    const missingCiphertextNonce = {
+      ...protectedValueMetadata,
+      ciphertext_nonce: undefined,
+    } as Record<string, unknown>;
+    delete missingCiphertextNonce.ciphertext_nonce;
+    const invalidPlaintextLeak = {
+      ...protectedValueUploadIntent,
+      plaintext_device_key: "not allowed",
+    };
+
+    expect(validateConformance("syncApi", protectedValueUploadIntent)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    expect(validateConformance("syncApi", protectedValueMetadata)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    expect(validateConformance("syncApi", invalidWrappedAad).errors).toContain(
+      "wrapped device-key aad.protected_value_id must match protected_value_id",
+    );
+    expect(compileSchemaValidators().syncApi(missingCiphertextNonce)).toBe(false);
+    expect(compileSchemaValidators().syncApi(invalidPlaintextLeak)).toBe(false);
+  });
+
   it("rejects cross-zone push conformance while allowing same key in another zone as new", () => {
     const crossZoneEvent = {
-      ...(syncFixtures[0] as Record<string, unknown>),
+      ...(syncFixtures[3] as Record<string, unknown>),
       events: [
         makeBaseEvent({
           trust_zone: {
@@ -572,7 +745,7 @@ describe("CarpeOS v1 schemas", () => {
       ],
     };
     const crossZoneErasure = {
-      ...(syncFixtures[0] as Record<string, unknown>),
+      ...(syncFixtures[3] as Record<string, unknown>),
       events: [],
       erasures: [
         {

@@ -1,0 +1,17 @@
+name = "carpeos-sync-worker-test"
+main = "src/index.ts"
+compatibility_date = "2026-07-22"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "carpeos_sync_test"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "PROTECTED_VALUES"
+bucket_name = "carpeos-protected-values-test"
+
+[vars]
+CARPEOS_ENV = "test"

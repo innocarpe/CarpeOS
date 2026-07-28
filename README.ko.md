@@ -8,10 +8,12 @@ CarpeOS는 AI-assisted work를 위한 개인 지식 운영체제입니다.
 
 CarpeOS는 여러 AI agent에서 발생하는 작업 맥락을 수집하고,
 provenance-aware knowledge로 구조화하며, 여러 기기 사이에서 동기화하고, 사람과
-LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G004
-구현 범위는 local capture와 outbox storage입니다. Remote sync, cross-device
-sharing, retrieval, MCP, embedding, GraphRAG, Obsidian projection은 계획된
-milestone이며 아직 active feature가 아닙니다.
+LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G005
+구현 범위는 local capture, durable outbox storage, 그리고 synthetic data로 local
+integration test된 Cloudflare Worker/D1/R2 sync backend와 client입니다. Live
+Cloudflare deployment를 완료했다고 주장하지 않습니다. Retrieval, MCP, embedding,
+GraphRAG, Obsidian projection은 계획된 milestone이며 아직 active feature가
+아닙니다.
 
 이 저장소는 공개 설계, specification, 구현, roadmap의 canonical 위치입니다. 이
 저장소에는 사용자의 private knowledge store가 들어가지 않습니다.
@@ -63,9 +65,18 @@ metadata, 향후 erasure target을 연결합니다. Local capture는 device orde
 위한 `local_sequence`를 부여합니다. Canonical `zone_sequence`는 부여하지 않으며,
 이는 G005 server-side 책임입니다.
 
-Remote sync는 G004에서 구현되지 않았습니다. Event는 local metadata outbox에
-쌓일 수 있지만, future sync service가 encrypted blob transfer, upload,
-reconciliation을 구현하기 전까지 다른 machine으로 전달되지 않습니다.
+G005는 첫 sync boundary를 추가합니다.
+
+- authenticated `sync push`, `sync pull`, `sync once`, `sync status` CLI command;
+- metadata acceptance 전에 수행되는 encrypted protected-value upload/download;
+- idempotency, replay, conflict, per-zone sequence, pull cursor state를 위한 D1;
+- encrypted protected-value ciphertext storage를 위한 R2;
+- MacBook/Mac mini sharing을 위한 out-of-band trust-zone sync key enrollment;
+- Worker, client, local store, CLI에 대한 synthetic local integration test.
+
+Sync backend는 deployable code와 local test infrastructure로 구현되어 있습니다.
+이 저장소는 production Cloudflare Worker, D1 database, R2 bucket이 실제로
+provision되었다고 주장하지 않습니다.
 
 ## 빠른 시작
 
@@ -106,13 +117,31 @@ Local outbox를 확인합니다.
 node apps/carpeos-cli/dist/index.js outbox status
 ```
 
+Secret을 노출하지 않고 sync readiness를 확인합니다.
+
+```sh
+node apps/carpeos-cli/dist/index.js sync status
+```
+
+Private Worker URL과 local `0600` credential/trust-zone sync key file을 설정한
+뒤 bounded sync cycle을 한 번 실행합니다.
+
+```sh
+node apps/carpeos-cli/dist/index.js sync once \
+  --url https://carpeos-sync.example.workers.dev \
+  --credential-file "$HOME/.carpeos/sync-credential" \
+  --sync-key-file "$HOME/.carpeos/trust-zone-sync.key"
+```
+
 `adapters/`의 provider template은 `PATH`에 `carpeos` binary가 있다고 가정합니다.
 이 저장소에서는 compiled CLI entrypoint인 `apps/carpeos-cli/dist/index.js`를 통해
 command behavior를 테스트합니다. Package installation과 binary distribution은
 별도의 packaging work입니다.
 
 전체 command surface와 hook template note는
-[Local Capture Guide](docs/guides/local-capture.md)를 참고하십시오.
+[Local Capture Guide](docs/guides/local-capture.md)를 참고하십시오. Local Worker,
+D1, R2, secret file, MacBook/Mac mini sync setup은
+[Cloudflare Sync Guide](docs/guides/cloudflare-sync.md)를 참고하십시오.
 
 ## Architecture Model
 
@@ -125,7 +154,7 @@ AI lifecycle hooks
 Local append-only outbox
         |
         v
-Private sync service           <- planned G005+
+Private sync service
         |
         v
 Canonical event store
@@ -241,16 +270,24 @@ CarpeOS는 local-first로 동작하도록 설계됩니다.
 - conflict는 generated note를 직접 수정하는 대신 event, decision, supersession,
   erasure-ledger 계층에서 해결합니다.
 
-G004는 첫 번째 항목만 구현합니다. G005+ remote sync service가 생기기 전까지
-cross-Mac sharing은 active하지 않습니다.
+G005는 synthetic local integration test와 함께 첫 remote sync backend와 client
+path를 구현합니다. Cross-Mac sharing은 private operator가 Cloudflare D1/R2/Worker
+resource를 provision하고, authorization을 seed하고, 각 Mac을 같은 out-of-band
+trust-zone sync key로 enroll한 뒤에만 실제로 동작합니다.
 
 ## Cloudflare Path
 
-계획된 hosted path는 Cloudflare component를 사용할 수 있습니다.
+G005 sync backend의 hosted path는 Cloudflare component를 사용합니다.
 
-- API와 extraction job을 위한 Workers;
+- sync API를 위한 Workers;
 - canonical event metadata를 위한 D1;
-- encrypted evidence artifact와 protected-value blob을 위한 R2;
+- encrypted protected-value blob을 위한 R2;
+- external operator/local credential custody. Authorization token hash는 D1에
+  저장하고 raw credential은 local에 두며 Git 밖에 유지합니다.
+
+향후 hosted component는 다음을 포함할 수 있습니다.
+
+- extraction job을 위한 Workers;
 - optional extraction과 embedding을 위한 Workers AI;
 - optional semantic search를 위한 Vectorize;
 - optional dashboard를 위한 Pages.
@@ -356,8 +393,9 @@ CarpeOS는 다른 architecture model을 가진 독립적인 구현입니다.
 
 ## Project Status
 
-CarpeOS는 pre-MVP 단계입니다. G004 local capture runtime은 구현 및 테스트되어
-있지만, packaged end-user release로 사용할 준비는 아직 되지 않았습니다.
+CarpeOS는 pre-MVP 단계입니다. G005 local capture와 Cloudflare sync runtime은
+synthetic data로 구현 및 local test되어 있지만, packaged end-user release로
+사용할 준비는 아직 되지 않았고 live deployment도 주장하지 않습니다.
 
-계획된 sync, retrieval, MCP, adapter installation, projection, deployment path는
+계획된 retrieval, MCP, adapter installation, projection, live deployment path는
 이 저장소에서 구현, 테스트, 문서화되기 전까지 stable한 것으로 간주하지 마십시오.

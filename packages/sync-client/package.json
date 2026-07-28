@@ -1,13 +1,10 @@
 {
-  "name": "@carpeos/cli",
+  "name": "@carpeos/sync-client",
   "version": "0.0.0",
   "private": true,
-  "description": "Local CarpeOS command-line interface and provider hook bridge.",
+  "description": "Provider-neutral CarpeOS sync HTTP transport and local outbox coordinator.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": {
-    "carpeos": "./dist/index.js"
-  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -16,18 +13,13 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@carpeos/capture": "workspace:*",
     "@carpeos/local-store": "workspace:*",
-    "@carpeos/schema": "workspace:*",
-    "@carpeos/sync-client": "workspace:*"
+    "@carpeos/schema": "workspace:*"
   }
 }

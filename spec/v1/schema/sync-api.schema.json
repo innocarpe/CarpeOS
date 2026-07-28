@@ -16,6 +16,9 @@
             "idempotency_conflict",
             "unauthorized",
             "not_found",
+            "protected_value_missing",
+            "protected_value_digest_mismatch",
+            "protected_value_orphaned",
             "internal_error"
           ]
         },
@@ -25,6 +28,305 @@
         },
         "ref_id": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    "wrappedDeviceKeyEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "envelope_version",
+        "wrapping_algorithm",
+        "encoding",
+        "wrap_key_ref",
+        "wrapped_key_ref",
+        "wrap_nonce",
+        "wrap_auth_tag",
+        "wrapped_key_ciphertext",
+        "wrapped_key_digest",
+        "wrapped_key_size_bytes",
+        "aad"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "envelope_version": {
+          "type": "string",
+          "const": "wrapped-device-key/v1"
+        },
+        "wrapping_algorithm": {
+          "type": "string",
+          "const": "aes-256-gcm"
+        },
+        "encoding": {
+          "type": "string",
+          "const": "base64url"
+        },
+        "wrap_key_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "wrapped_key_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "wrap_nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "wrap_auth_tag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "wrapped_key_ciphertext": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "wrapped_key_digest": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/digest"
+        },
+        "wrapped_key_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "aad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["trust_zone_id", "protected_value_id", "key_ref"],
+          "properties": {
+            "trust_zone_id": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+            },
+            "protected_value_id": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueId"
+            },
+            "key_ref": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+            }
+          }
+        }
+      }
+    },
+    "protectedValueUploadIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "intent_type",
+        "protected_value_id",
+        "trust_zone_id",
+        "vault_ref",
+        "key_ref",
+        "object_key",
+        "encryption_algorithm",
+        "encoding",
+        "ciphertext_nonce",
+        "ciphertext_auth_tag",
+        "original_ciphertext_digest",
+        "original_ciphertext_size_bytes",
+        "wrapped_device_key"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "intent_type": {
+          "type": "string",
+          "const": "protected_value_upload"
+        },
+        "protected_value_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueId"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "vault_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "key_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "object_key": {
+          "type": "string",
+          "pattern": "^protected-values/[a-z0-9_-]+/pv_[a-z0-9][a-z0-9_-]{7,127}/[A-Fa-f0-9]{64}$"
+        },
+        "encryption_algorithm": {
+          "type": "string",
+          "const": "aes-256-gcm"
+        },
+        "encoding": {
+          "type": "string",
+          "const": "base64url"
+        },
+        "ciphertext_nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "ciphertext_auth_tag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "original_ciphertext_digest": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/digest"
+        },
+        "original_ciphertext_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nonce_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "tag_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "wrapped_device_key": {
+          "$ref": "#/$defs/wrappedDeviceKeyEnvelope"
+        }
+      }
+    },
+    "protectedValueUploadReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "receipt_type",
+        "protected_value_id",
+        "trust_zone_id",
+        "object_key",
+        "original_ciphertext_digest",
+        "original_ciphertext_size_bytes",
+        "uploaded_at",
+        "status",
+        "upload_receipt_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "receipt_type": {
+          "type": "string",
+          "const": "protected_value_upload"
+        },
+        "protected_value_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueId"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "object_key": {
+          "type": "string",
+          "pattern": "^protected-values/[a-z0-9_-]+/pv_[a-z0-9][a-z0-9_-]{7,127}/[A-Fa-f0-9]{64}$"
+        },
+        "original_ciphertext_digest": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/digest"
+        },
+        "original_ciphertext_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "uploaded_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["uploaded", "already_exists"]
+        },
+        "upload_receipt_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    "protectedValueMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "metadata_type",
+        "protected_value_id",
+        "trust_zone_id",
+        "object_key",
+        "vault_ref",
+        "encryption_algorithm",
+        "encoding",
+        "ciphertext_nonce",
+        "ciphertext_auth_tag",
+        "original_ciphertext_digest",
+        "original_ciphertext_size_bytes",
+        "key_ref",
+        "wrapped_device_key",
+        "linked_event_ids",
+        "orphan_status",
+        "uploaded_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "metadata_type": {
+          "type": "string",
+          "const": "protected_value"
+        },
+        "protected_value_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueId"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "object_key": {
+          "type": "string",
+          "pattern": "^protected-values/[a-z0-9_-]+/pv_[a-z0-9][a-z0-9_-]{7,127}/[A-Fa-f0-9]{64}$"
+        },
+        "vault_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "encryption_algorithm": {
+          "type": "string",
+          "const": "aes-256-gcm"
+        },
+        "encoding": {
+          "type": "string",
+          "const": "base64url"
+        },
+        "ciphertext_nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "ciphertext_auth_tag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "original_ciphertext_digest": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/digest"
+        },
+        "original_ciphertext_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nonce_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "tag_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "key_ref": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "wrapped_device_key": {
+          "$ref": "#/$defs/wrappedDeviceKeyEnvelope"
+        },
+        "linked_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          },
+          "uniqueItems": true
+        },
+        "orphan_status": {
+          "type": "string",
+          "enum": ["linked", "orphaned"]
+        },
+        "uploaded_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
         }
       }
     },
@@ -62,31 +364,50 @@
         },
         "events": {
           "type": "array",
+          "maxItems": 1,
           "items": {
             "$ref": "https://spec.carpeos.org/v1/schema/canonical-event.schema.json"
           }
         },
         "erasures": {
           "type": "array",
+          "maxItems": 1,
           "items": {
             "$ref": "https://spec.carpeos.org/v1/schema/erasure-ledger.schema.json"
           }
+        },
+        "protected_value_receipts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protectedValueUploadReceipt"
+          },
+          "uniqueItems": true
         }
       },
-      "anyOf": [
+      "oneOf": [
         {
           "properties": {
             "events": {
               "type": "array",
-              "minItems": 1
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "erasures": {
+              "type": "array",
+              "maxItems": 0
             }
           }
         },
         {
           "properties": {
+            "events": {
+              "type": "array",
+              "maxItems": 0
+            },
             "erasures": {
               "type": "array",
-              "minItems": 1
+              "minItems": 1,
+              "maxItems": 1
             }
           }
         }
@@ -272,6 +593,9 @@
           "type": "string",
           "minLength": 1
         },
+        "after_sequence": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+        },
         "has_more": {
           "type": "boolean"
         }
@@ -292,6 +616,15 @@
     }
   },
   "oneOf": [
+    {
+      "$ref": "#/$defs/protectedValueUploadIntent"
+    },
+    {
+      "$ref": "#/$defs/protectedValueUploadReceipt"
+    },
+    {
+      "$ref": "#/$defs/protectedValueMetadata"
+    },
     {
       "$ref": "#/$defs/syncPushRequest"
     },

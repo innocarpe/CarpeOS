@@ -12,9 +12,13 @@ import {
 } from "@carpeos/capture";
 import type {
   CanonicalEvent,
+  ProtectedValueMetadata,
   ProtectedValueRef,
+  ProtectedValueUploadIntent,
+  ErasureLedgerRecord,
   SyncPushRequest,
   TrustZone,
+  WrappedDeviceKeyEnvelope,
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
 import { resolveProjectIdentity } from "./project-identity.js";
@@ -87,10 +91,15 @@ type EventRow = {
 };
 
 type ProtectedValueRow = {
+  vault_ref: string;
+  key_ref: string;
+  nonce_ref: string;
+  tag_ref: string;
   nonce: Uint8Array;
   tag: Uint8Array;
   ciphertext: Uint8Array;
   plaintext_digest: string;
+  size_bytes: number;
 };
 
 type OutboxStatusRow = {
@@ -112,6 +121,42 @@ type OutboxIdRow = {
 };
 
 const MIGRATION_ID = "001_local_capture_store";
+const SYNC_MIGRATION_ID = "002_sync_transfer_imports";
+
+export type ProtectedValueTransferExport = {
+  protected_value_id: string;
+  ciphertext: Uint8Array;
+  intent: ProtectedValueUploadIntent;
+};
+
+export type ProtectedValueImportInput = {
+  event: CanonicalEvent;
+  metadata: ProtectedValueMetadata;
+  ciphertext: Uint8Array;
+  trustZoneSyncKey: Uint8Array;
+};
+
+export type ProtectedValueImportResult = {
+  status: "imported" | "replay";
+  event_id: string;
+  protected_value_id: string;
+};
+
+export type GeneralEventImportResult = {
+  status: "imported" | "replay";
+  event_id: string;
+};
+
+export type SyncCursor = {
+  trust_zone_id: string;
+  after_sequence: number;
+  cursor: string | null;
+};
+
+export type ImportedErasureResult = {
+  status: "imported" | "replay";
+  erasure_id: string;
+};
 
 export class IdempotencyConflictError extends Error {
   readonly existingFingerprint: string;
@@ -564,8 +609,343 @@ export class LocalCaptureStore {
     return plaintext;
   }
 
+  exportProtectedValueForSync(input: {
+    protectedValueId: string;
+    trustZoneSyncKey: Uint8Array;
+    wrapKeyRef?: string;
+  }): ProtectedValueTransferExport {
+    const syncKey = assertAes256Key(input.trustZoneSyncKey, "trust-zone sync key");
+    const row = this.db
+      .prepare(`
+        SELECT
+          vault_ref,
+          key_ref,
+          nonce_ref,
+          tag_ref,
+          nonce,
+          tag,
+          ciphertext,
+          plaintext_digest,
+          size_bytes
+        FROM protected_values
+        WHERE protected_value_id = ?
+      `)
+      .get(input.protectedValueId) as ProtectedValueRow | undefined;
+    if (row === undefined) {
+      throw new Error(`protected value not found: ${input.protectedValueId}`);
+    }
+
+    const ciphertext = toBuffer(row.ciphertext);
+    const ciphertextDigest = hashHex(ciphertext);
+    const keyRef = row.key_ref;
+    const wrappedDeviceKey = wrapDeviceKey({
+      deviceKey: this.keyBytes,
+      trustZoneSyncKey: syncKey,
+      trustZoneId: this.trustZone.trust_zone_id,
+      protectedValueId: input.protectedValueId,
+      keyRef,
+      wrapKeyRef: input.wrapKeyRef ?? `sync_key_${hashHex(syncKey).slice(0, 16)}`,
+    });
+    const objectKey = protectedValueObjectKey(
+      this.trustZone.trust_zone_id,
+      input.protectedValueId,
+      ciphertextDigest,
+    );
+    const intent: ProtectedValueUploadIntent = {
+      schema_version: "v1",
+      intent_type: "protected_value_upload",
+      protected_value_id: input.protectedValueId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      vault_ref: row.vault_ref,
+      key_ref: keyRef,
+      object_key: objectKey,
+      encryption_algorithm: "aes-256-gcm",
+      encoding: "base64url",
+      ciphertext_nonce: base64urlEncode(row.nonce),
+      ciphertext_auth_tag: base64urlEncode(row.tag),
+      original_ciphertext_digest: {
+        algorithm: "sha-256",
+        value: ciphertextDigest,
+      },
+      original_ciphertext_size_bytes: ciphertext.byteLength,
+      nonce_ref: row.nonce_ref,
+      tag_ref: row.tag_ref,
+      wrapped_device_key: wrappedDeviceKey,
+    };
+    assertValidSyncApi(intent, "protected value upload intent");
+
+    return {
+      protected_value_id: input.protectedValueId,
+      ciphertext: new Uint8Array(ciphertext),
+      intent,
+    };
+  }
+
+  importPulledProtectedValue(input: ProtectedValueImportInput): ProtectedValueImportResult {
+    const syncKey = assertAes256Key(input.trustZoneSyncKey, "trust-zone sync key");
+    assertCanonicalEventConformance(input.event);
+    assertValidSyncApi(input.metadata, "protected value metadata");
+    this.assertLocalTrustZone(input.event.trust_zone.trust_zone_id, input.event.event_id);
+    if (input.metadata.trust_zone_id !== input.event.trust_zone.trust_zone_id) {
+      throw new Error("protected value metadata trust zone does not match event");
+    }
+    const protectedRef = getEventProtectedValueRef(input.event);
+    if (protectedRef === undefined) {
+      throw new Error(`event ${input.event.event_id} does not reference a protected value`);
+    }
+    if (protectedRef.protected_value_id !== input.metadata.protected_value_id) {
+      throw new Error("protected value metadata id does not match event");
+    }
+    if (
+      protectedRef.encrypted_blob.digest.algorithm !==
+        input.metadata.original_ciphertext_digest.algorithm ||
+      protectedRef.encrypted_blob.digest.value !== input.metadata.original_ciphertext_digest.value
+    ) {
+      throw new Error("protected value metadata digest does not match event");
+    }
+    if (protectedRef.encrypted_blob.size_bytes !== input.metadata.original_ciphertext_size_bytes) {
+      throw new Error("protected value metadata size does not match event");
+    }
+
+    const ciphertext = toBuffer(input.ciphertext);
+    const ciphertextDigest = hashHex(ciphertext);
+    if (ciphertextDigest !== input.metadata.original_ciphertext_digest.value) {
+      throw new Error("protected value ciphertext digest mismatch");
+    }
+    if (ciphertext.byteLength !== input.metadata.original_ciphertext_size_bytes) {
+      throw new Error("protected value ciphertext size mismatch");
+    }
+
+    const sourceDeviceKey = unwrapDeviceKey({
+      envelope: input.metadata.wrapped_device_key,
+      trustZoneSyncKey: syncKey,
+      trustZoneId: input.metadata.trust_zone_id,
+      protectedValueId: input.metadata.protected_value_id,
+      keyRef: input.metadata.key_ref,
+    });
+    const plaintext = decrypt(
+      ciphertext,
+      sourceDeviceKey,
+      base64urlDecode(input.metadata.ciphertext_nonce),
+      base64urlDecode(input.metadata.ciphertext_auth_tag),
+    );
+    const encrypted = encrypt(plaintext, this.keyBytes);
+    const plaintextDigest = hashHex(plaintext);
+    const importedAt = this.clock.now().toISOString();
+    const eventJson = stableJson(input.event);
+    const metadataJson = stableJson(input.metadata);
+
+    return this.withImmediateTransaction(() => {
+      const existingEvent = this.getEvent(input.event.event_id);
+      if (existingEvent !== undefined) {
+        assertSameCanonicalJson(existingEvent, input.event, "event", input.event.event_id);
+        this.recordProtectedValueImport({
+          eventId: input.event.event_id,
+          protectedValueId: input.metadata.protected_value_id,
+          trustZoneId: input.metadata.trust_zone_id,
+          zoneSequence: input.event.zone_sequence,
+          sourceCiphertextDigest: ciphertextDigest,
+          sourceCiphertextSizeBytes: ciphertext.byteLength,
+          sourceMetadataJson: metadataJson,
+          importedAt,
+        });
+        return {
+          status: "replay",
+          event_id: input.event.event_id,
+          protected_value_id: input.metadata.protected_value_id,
+        };
+      }
+
+      this.db
+        .prepare(`
+          INSERT INTO protected_values (
+            protected_value_id, vault_ref, key_ref, nonce_ref, tag_ref,
+            nonce, tag, ciphertext, plaintext_digest, size_bytes, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(protected_value_id) DO NOTHING
+        `)
+        .run(
+          input.metadata.protected_value_id,
+          protectedRef.vault_ref,
+          protectedRef.key_ref,
+          protectedRef.encrypted_blob.nonce_ref,
+          protectedRef.encrypted_blob.tag_ref,
+          encrypted.nonce,
+          encrypted.tag,
+          encrypted.ciphertext,
+          plaintextDigest,
+          plaintext.byteLength,
+          importedAt,
+        );
+
+      this.db
+        .prepare(`
+          INSERT INTO canonical_events (
+            event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+            protected_value_id, event_json, recorded_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          input.event.event_id,
+          input.event.event_type,
+          input.event.trust_zone.trust_zone_id,
+          input.event.idempotency_key,
+          input.event.request_fingerprint,
+          input.metadata.protected_value_id,
+          eventJson,
+          input.event.recorded_time.start,
+        );
+
+      this.db
+        .prepare(`
+          INSERT INTO sync_inbox_events (
+            event_id, trust_zone_id, zone_sequence, protected_value_id, event_json, imported_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(event_id) DO NOTHING
+        `)
+        .run(
+          input.event.event_id,
+          input.event.trust_zone.trust_zone_id,
+          input.event.zone_sequence ?? 0,
+          input.metadata.protected_value_id,
+          eventJson,
+          importedAt,
+        );
+      this.recordProtectedValueImport({
+        eventId: input.event.event_id,
+        protectedValueId: input.metadata.protected_value_id,
+        trustZoneId: input.metadata.trust_zone_id,
+        zoneSequence: input.event.zone_sequence,
+        sourceCiphertextDigest: ciphertextDigest,
+        sourceCiphertextSizeBytes: ciphertext.byteLength,
+        sourceMetadataJson: metadataJson,
+        importedAt,
+      });
+
+      return {
+        status: "imported",
+        event_id: input.event.event_id,
+        protected_value_id: input.metadata.protected_value_id,
+      };
+    });
+  }
+
+  importPulledEvent(event: CanonicalEvent, now = this.clock.now()): GeneralEventImportResult {
+    assertCanonicalEventConformance(event);
+    this.assertLocalTrustZone(event.trust_zone.trust_zone_id, event.event_id);
+    const eventJson = stableJson(event);
+    const importedAt = now.toISOString();
+
+    return this.withImmediateTransaction(() => {
+      const existing = this.getEvent(event.event_id);
+      if (existing !== undefined) {
+        assertSameCanonicalJson(existing, event, "event", event.event_id);
+        return { status: "replay", event_id: event.event_id };
+      }
+
+      this.db
+        .prepare(`
+          INSERT INTO sync_inbox_events (
+            event_id, trust_zone_id, zone_sequence, protected_value_id, event_json, imported_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          event.event_id,
+          event.trust_zone.trust_zone_id,
+          event.zone_sequence ?? 0,
+          "",
+          eventJson,
+          importedAt,
+        );
+      return { status: "imported", event_id: event.event_id };
+    });
+  }
+
+  getSyncCursor(trustZoneId = this.trustZone.trust_zone_id): SyncCursor {
+    const row = this.db
+      .prepare(`
+        SELECT trust_zone_id, after_sequence, cursor
+        FROM sync_cursors
+        WHERE trust_zone_id = ?
+      `)
+      .get(trustZoneId) as SyncCursor | undefined;
+    return row === undefined
+      ? { trust_zone_id: trustZoneId, after_sequence: 0, cursor: null }
+      : {
+          trust_zone_id: row.trust_zone_id,
+          after_sequence: Number(row.after_sequence),
+          cursor: row.cursor,
+        };
+  }
+
+  persistSyncCursor(input: {
+    trustZoneId?: string;
+    afterSequence: number;
+    cursor?: string;
+    now?: Date;
+  }): void {
+    if (!Number.isInteger(input.afterSequence) || input.afterSequence < 0) {
+      throw new Error("afterSequence must be a non-negative integer");
+    }
+    const trustZoneId = input.trustZoneId ?? this.trustZone.trust_zone_id;
+    const updatedAt = (input.now ?? this.clock.now()).toISOString();
+    this.db
+      .prepare(`
+        INSERT INTO sync_cursors (trust_zone_id, after_sequence, cursor, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(trust_zone_id) DO UPDATE SET
+          after_sequence=excluded.after_sequence,
+          cursor=excluded.cursor,
+          updated_at=excluded.updated_at
+      `)
+      .run(trustZoneId, input.afterSequence, input.cursor ?? null, updatedAt);
+  }
+
+  importPulledErasure(erasure: ErasureLedgerRecord, now = this.clock.now()): ImportedErasureResult {
+    assertValidErasure(erasure);
+    this.assertLocalTrustZone(erasure.trust_zone.trust_zone_id, erasure.erasure_id);
+    const erasureJson = stableJson(erasure);
+    return this.withImmediateTransaction(() => {
+      const existing = this.db
+        .prepare("SELECT erasure_json FROM sync_inbox_erasures WHERE erasure_id = ?")
+        .get(erasure.erasure_id) as { erasure_json: string } | undefined;
+      if (existing !== undefined) {
+        assertSameJson(existing.erasure_json, erasureJson, "erasure", erasure.erasure_id);
+        return { status: "replay", erasure_id: erasure.erasure_id };
+      }
+
+      this.db
+        .prepare(`
+          INSERT INTO sync_inbox_erasures (
+            erasure_id, trust_zone_id, zone_sequence, erasure_json, imported_at
+          )
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .run(
+          erasure.erasure_id,
+          erasure.trust_zone.trust_zone_id,
+          erasure.zone_sequence ?? 0,
+          erasureJson,
+          now.toISOString(),
+        );
+      return { status: "imported", erasure_id: erasure.erasure_id };
+    });
+  }
+
   countRows(
-    table: "capture_requests" | "canonical_events" | "protected_values" | "outbox",
+    table:
+      | "capture_requests"
+      | "canonical_events"
+      | "protected_values"
+      | "outbox"
+      | "protected_value_imports"
+      | "sync_inbox_events"
+      | "sync_inbox_erasures"
+      | "sync_cursors",
   ): number {
     const row = this.db.prepare(`SELECT count(*) AS count FROM ${table}`).get() as {
       count: number;
@@ -577,7 +957,19 @@ export class LocalCaptureStore {
     const row = this.db
       .prepare("SELECT event_json FROM canonical_events WHERE event_id = ?")
       .get(eventId) as { event_json: string } | undefined;
-    return row === undefined ? undefined : (JSON.parse(row.event_json) as CanonicalEvent);
+    if (row !== undefined) {
+      return JSON.parse(row.event_json) as CanonicalEvent;
+    }
+    const inboxRow = this.db
+      .prepare("SELECT event_json FROM sync_inbox_events WHERE event_id = ?")
+      .get(eventId) as { event_json: string } | undefined;
+    return inboxRow === undefined ? undefined : (JSON.parse(inboxRow.event_json) as CanonicalEvent);
+  }
+
+  private assertLocalTrustZone(trustZoneId: string, refId: string): void {
+    if (trustZoneId !== this.trustZone.trust_zone_id) {
+      throw new Error(`remote record ${refId} belongs to a different trust zone`);
+    }
   }
 
   private migrate(): void {
@@ -592,12 +984,9 @@ export class LocalCaptureStore {
       const existing = this.db
         .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
         .get(MIGRATION_ID);
-      if (existing !== undefined) {
-        return;
-      }
-
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS projects (
+      if (existing === undefined) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS projects (
           project_id TEXT PRIMARY KEY,
           basis_kind TEXT NOT NULL CHECK (basis_kind IN ('explicit', 'git_remote_hash', 'device_local_root_hash')),
           device_client_id TEXT NOT NULL,
@@ -683,11 +1072,59 @@ export class LocalCaptureStore {
         BEGIN
           SELECT RAISE(ABORT, 'capture_requests are append-only');
         END;
-      `);
+        `);
 
-      this.db
-        .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
-        .run(MIGRATION_ID, this.clock.now().toISOString());
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(MIGRATION_ID, this.clock.now().toISOString());
+      }
+
+      const syncExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(SYNC_MIGRATION_ID);
+      if (syncExisting === undefined) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS protected_value_imports (
+            import_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL,
+            protected_value_id TEXT NOT NULL,
+            trust_zone_id TEXT NOT NULL,
+            zone_sequence INTEGER NOT NULL DEFAULT 0,
+            source_ciphertext_digest TEXT NOT NULL,
+            source_ciphertext_size_bytes INTEGER NOT NULL CHECK (source_ciphertext_size_bytes > 0),
+            source_metadata_json TEXT NOT NULL,
+            imported_at TEXT NOT NULL,
+            UNIQUE(event_id, protected_value_id)
+          );
+
+          CREATE TABLE IF NOT EXISTS sync_inbox_events (
+            event_id TEXT PRIMARY KEY,
+            trust_zone_id TEXT NOT NULL,
+            zone_sequence INTEGER NOT NULL DEFAULT 0,
+            protected_value_id TEXT NOT NULL,
+            event_json TEXT NOT NULL,
+            imported_at TEXT NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS sync_inbox_erasures (
+            erasure_id TEXT PRIMARY KEY,
+            trust_zone_id TEXT NOT NULL,
+            zone_sequence INTEGER NOT NULL DEFAULT 0,
+            erasure_json TEXT NOT NULL,
+            imported_at TEXT NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS sync_cursors (
+            trust_zone_id TEXT PRIMARY KEY,
+            after_sequence INTEGER NOT NULL CHECK (after_sequence >= 0),
+            cursor TEXT,
+            updated_at TEXT NOT NULL
+          );
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(SYNC_MIGRATION_ID, this.clock.now().toISOString());
+      }
     });
   }
 
@@ -722,6 +1159,43 @@ export class LocalCaptureStore {
       throw new Error(`outbox row not found for event ${eventId}`);
     }
     return Number(row.outbox_id);
+  }
+
+  private recordProtectedValueImport(input: {
+    eventId: string;
+    protectedValueId: string;
+    trustZoneId: string;
+    zoneSequence: number | undefined;
+    sourceCiphertextDigest: string;
+    sourceCiphertextSizeBytes: number;
+    sourceMetadataJson: string;
+    importedAt: string;
+  }): void {
+    this.db
+      .prepare(`
+        INSERT INTO protected_value_imports (
+          event_id,
+          protected_value_id,
+          trust_zone_id,
+          zone_sequence,
+          source_ciphertext_digest,
+          source_ciphertext_size_bytes,
+          source_metadata_json,
+          imported_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(event_id, protected_value_id) DO NOTHING
+      `)
+      .run(
+        input.eventId,
+        input.protectedValueId,
+        input.trustZoneId,
+        input.zoneSequence ?? 0,
+        input.sourceCiphertextDigest,
+        input.sourceCiphertextSizeBytes,
+        input.sourceMetadataJson,
+        input.importedAt,
+      );
   }
 
   private withImmediateTransaction<T>(work: () => T): T {
@@ -774,13 +1248,159 @@ function maybeFail(
 }
 
 function assertValidCanonicalEvent(event: CanonicalEvent): void {
+  assertCanonicalEventConformance(event);
+  if (event.zone_sequence !== undefined) {
+    throw new Error("local capture must not assign canonical zone_sequence");
+  }
+}
+
+function assertCanonicalEventConformance(event: CanonicalEvent): void {
   const conformance = validateConformance("canonicalEvent", event);
   if (!conformance.valid) {
     throw new Error(`invalid canonical event: ${conformance.errors.join("; ")}`);
   }
-  if (event.zone_sequence !== undefined) {
-    throw new Error("local capture must not assign canonical zone_sequence");
+}
+
+function assertValidSyncApi(value: unknown, label: string): void {
+  const conformance = validateConformance("syncApi", value);
+  if (!conformance.valid) {
+    throw new Error(`invalid ${label}: ${conformance.errors.join("; ")}`);
   }
+}
+
+function assertValidErasure(erasure: ErasureLedgerRecord): void {
+  const conformance = validateConformance("erasureLedger", erasure);
+  if (!conformance.valid) {
+    throw new Error(`invalid erasure ledger record: ${conformance.errors.join("; ")}`);
+  }
+}
+
+function getEventProtectedValueRef(event: CanonicalEvent): ProtectedValueRef | undefined {
+  return event.event_type === "EvidenceArtifact" &&
+    event.payload.content_ref.ref_type === "protected_value"
+    ? event.payload.content_ref
+    : undefined;
+}
+
+function protectedValueObjectKey(
+  trustZoneId: string,
+  protectedValueId: string,
+  ciphertextDigest: string,
+): string {
+  return `protected-values/${trustZoneId}/${protectedValueId}/${ciphertextDigest}`;
+}
+
+function wrapDeviceKey(input: {
+  deviceKey: Uint8Array;
+  trustZoneSyncKey: Uint8Array;
+  trustZoneId: string;
+  protectedValueId: string;
+  keyRef: string;
+  wrapKeyRef: string;
+}): WrappedDeviceKeyEnvelope {
+  const aad = protectedValueWrapAad(input.trustZoneId, input.protectedValueId, input.keyRef);
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", input.trustZoneSyncKey, nonce);
+  cipher.setAAD(aad);
+  const wrappedKeyCiphertext = Buffer.concat([cipher.update(input.deviceKey), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    schema_version: "v1",
+    envelope_version: "wrapped-device-key/v1",
+    wrapping_algorithm: "aes-256-gcm",
+    encoding: "base64url",
+    wrap_key_ref: input.wrapKeyRef,
+    wrapped_key_ref: `wrapped_${hashHex(
+      stableJson({
+        trust_zone_id: input.trustZoneId,
+        protected_value_id: input.protectedValueId,
+        key_ref: input.keyRef,
+        wrapped_key_digest: hashHex(wrappedKeyCiphertext),
+      }),
+    ).slice(0, 24)}`,
+    wrap_nonce: base64urlEncode(nonce),
+    wrap_auth_tag: base64urlEncode(tag),
+    wrapped_key_ciphertext: base64urlEncode(wrappedKeyCiphertext),
+    wrapped_key_digest: {
+      algorithm: "sha-256",
+      value: hashHex(wrappedKeyCiphertext),
+    },
+    wrapped_key_size_bytes: wrappedKeyCiphertext.byteLength,
+    aad: {
+      trust_zone_id: input.trustZoneId,
+      protected_value_id: input.protectedValueId,
+      key_ref: input.keyRef,
+    },
+  };
+}
+
+function unwrapDeviceKey(input: {
+  envelope: WrappedDeviceKeyEnvelope;
+  trustZoneSyncKey: Uint8Array;
+  trustZoneId: string;
+  protectedValueId: string;
+  keyRef: string;
+}): Uint8Array {
+  if (input.envelope.aad.trust_zone_id !== input.trustZoneId) {
+    throw new Error("wrapped device-key AAD trust zone mismatch");
+  }
+  if (input.envelope.aad.protected_value_id !== input.protectedValueId) {
+    throw new Error("wrapped device-key AAD protected value mismatch");
+  }
+  if (input.envelope.aad.key_ref !== input.keyRef) {
+    throw new Error("wrapped device-key AAD key ref mismatch");
+  }
+
+  const ciphertext = base64urlDecode(input.envelope.wrapped_key_ciphertext);
+  if (hashHex(ciphertext) !== input.envelope.wrapped_key_digest.value) {
+    throw new Error("wrapped device-key digest mismatch");
+  }
+  if (ciphertext.byteLength !== input.envelope.wrapped_key_size_bytes) {
+    throw new Error("wrapped device-key size mismatch");
+  }
+
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    input.trustZoneSyncKey,
+    base64urlDecode(input.envelope.wrap_nonce),
+  );
+  decipher.setAAD(protectedValueWrapAad(input.trustZoneId, input.protectedValueId, input.keyRef));
+  decipher.setAuthTag(base64urlDecode(input.envelope.wrap_auth_tag));
+  const key = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return assertAes256Key(key, "unwrapped device key");
+}
+
+function protectedValueWrapAad(
+  trustZoneId: string,
+  protectedValueId: string,
+  keyRef: string,
+): Buffer {
+  return Buffer.from(
+    stableJson({
+      key_ref: keyRef,
+      protected_value_id: protectedValueId,
+      trust_zone_id: trustZoneId,
+    }),
+    "utf8",
+  );
+}
+
+function assertAes256Key(value: Uint8Array, label: string): Uint8Array {
+  if (value.byteLength !== 32) {
+    throw new Error(`${label} must be exactly 32 bytes`);
+  }
+  return new Uint8Array(value);
+}
+
+function base64urlEncode(value: Uint8Array): string {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64urlDecode(value: string): Buffer {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("invalid base64url value");
+  }
+  return Buffer.from(value, "base64url");
 }
 
 function normalizeTimestamp(value: string): string {
@@ -823,6 +1443,26 @@ function decrypt(
 
 function toBuffer(value: Uint8Array): Buffer {
   return Buffer.isBuffer(value) ? value : Buffer.from(value);
+}
+
+function assertSameCanonicalJson(
+  existing: CanonicalEvent,
+  incoming: CanonicalEvent,
+  kind: string,
+  id: string,
+): void {
+  assertSameJson(stableJson(existing), stableJson(incoming), kind, id);
+}
+
+function assertSameJson(
+  existingJson: string,
+  incomingJson: string,
+  kind: string,
+  id: string,
+): void {
+  if (existingJson !== incomingJson) {
+    throw new Error(`remote ${kind} replay diverges for ${id}`);
+  }
 }
 
 function readKeyFile(keyPath: string): Uint8Array {

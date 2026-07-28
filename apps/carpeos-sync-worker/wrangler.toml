@@ -1,0 +1,21 @@
+name = "carpeos-sync-worker"
+main = "src/index.ts"
+compatibility_date = "2026-07-29"
+compatibility_flags = ["nodejs_compat"]
+
+# Example config only. The zero D1 ID below is a placeholder and is not
+# live-deployable until a private operator supplies a real Cloudflare resource
+# binding outside the public repository.
+[[d1_databases]]
+binding = "DB"
+database_name = "carpeos_sync"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Example bucket name only. Bind a real private R2 bucket before deployment.
+[[r2_buckets]]
+binding = "PROTECTED_VALUES"
+bucket_name = "carpeos-protected-values"
+
+[vars]
+CARPEOS_ENV = "local"

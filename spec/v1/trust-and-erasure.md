@@ -55,6 +55,17 @@ change canonical event semantics.
 If a key cannot be unwrapped, queries MAY return redacted lineage and metadata.
 They MUST NOT substitute guessed plaintext.
 
+For G005 cross-Mac sync, each protected blob remains encrypted under the
+originating device key. That device key is wrapped locally under an out-of-band
+trust-zone sync key before upload. The remote sync service stores only the
+wrapped device-key ciphertext, wrap nonce, wrap authentication tag, digest, size,
+and non-secret key references. The trust-zone sync key and raw device key MUST
+remain outside the Worker, D1, R2, repository fixtures, and logs.
+
+Another enrolled Mac may decrypt the same protected blob only if it already has
+the trust-zone sync key through a local or out-of-band enrollment path. The
+hosted service is a ciphertext and metadata relay, not a key escrow service.
+
 ## ErasureLedger
 
 `ErasureLedger` records erasure actions. Supported planned methods are:
