@@ -1,0 +1,27 @@
+{
+  "name": "@carpeos/root",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Public monorepo for CarpeOS, a personal knowledge operating system for AI-assisted work.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.16.0",
+  "engines": {
+    "node": ">=22.22.0",
+    "pnpm": ">=11.16.0"
+  },
+  "scripts": {
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm public-boundary",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "public-boundary": "node scripts/check-public-boundary.mjs",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

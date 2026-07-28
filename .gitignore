@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build and coverage output
+coverage/
+dist/
+build/
+.turbo/
+.vite/
+
+# Local environment
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local
+
+# CarpeOS runtime state and private data
+.omx/
+.carpeos/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+*.jsonl
+*.transcript
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS and editor noise
+.DS_Store
+.idea/
+.vscode/
