@@ -11,10 +11,11 @@
     "pnpm": ">=11.16.0"
   },
   "scripts": {
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm public-boundary",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm public-boundary && pnpm labels:check",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
+    "labels:check": "node scripts/check-label-catalog.mjs",
     "public-boundary": "node scripts/check-public-boundary.mjs",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"

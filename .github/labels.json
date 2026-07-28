@@ -1,0 +1,337 @@
+{
+  "version": 1,
+  "policy": {
+    "pullRequest": {
+      "cardinality": {
+        "type": "exactly-one",
+        "area": "one-or-more",
+        "size": "exactly-one",
+        "status": "exactly-one",
+        "milestone": "exactly-one"
+      }
+    }
+  },
+  "sizeBands": [
+    {
+      "name": "size:xs",
+      "min": 0,
+      "max": 19
+    },
+    {
+      "name": "size:s",
+      "min": 20,
+      "max": 99
+    },
+    {
+      "name": "size:m",
+      "min": 100,
+      "max": 499
+    },
+    {
+      "name": "size:l",
+      "min": 500,
+      "max": 999
+    },
+    {
+      "name": "size:xl",
+      "min": 1000,
+      "max": null
+    }
+  ],
+  "labels": [
+    {
+      "name": "type:feat",
+      "color": "0e8a16",
+      "description": "Adds or expands product behavior.",
+      "group": "type"
+    },
+    {
+      "name": "type:fix",
+      "color": "d73a4a",
+      "description": "Fixes incorrect or broken behavior.",
+      "group": "type"
+    },
+    {
+      "name": "type:spec",
+      "color": "1d76db",
+      "description": "Changes specifications, contracts, or formal models.",
+      "group": "type"
+    },
+    {
+      "name": "type:docs",
+      "color": "0075ca",
+      "description": "Changes documentation or examples only.",
+      "group": "type"
+    },
+    {
+      "name": "type:refactor",
+      "color": "c5def5",
+      "description": "Restructures code without intended behavior changes.",
+      "group": "type"
+    },
+    {
+      "name": "type:test",
+      "color": "bfdadc",
+      "description": "Adds or updates tests and fixtures.",
+      "group": "type"
+    },
+    {
+      "name": "type:perf",
+      "color": "fbca04",
+      "description": "Improves performance or resource use.",
+      "group": "type"
+    },
+    {
+      "name": "type:chore",
+      "color": "d4c5f9",
+      "description": "Maintains repository tasks or non-runtime upkeep.",
+      "group": "type"
+    },
+    {
+      "name": "type:ci",
+      "color": "0052cc",
+      "description": "Changes continuous integration or automation.",
+      "group": "type"
+    },
+    {
+      "name": "type:security",
+      "color": "b60205",
+      "description": "Addresses security posture, controls, or defects.",
+      "group": "type"
+    },
+    {
+      "name": "area:architecture",
+      "color": "5319e7",
+      "description": "Touches system design or component boundaries.",
+      "group": "area"
+    },
+    {
+      "name": "area:ontology",
+      "color": "6f42c1",
+      "description": "Touches concepts, relationships, or semantic models.",
+      "group": "area"
+    },
+    {
+      "name": "area:schema",
+      "color": "8a63d2",
+      "description": "Touches schemas, migrations, or validation shapes.",
+      "group": "area"
+    },
+    {
+      "name": "area:capture",
+      "color": "d93f0b",
+      "description": "Touches capture or ingestion flows.",
+      "group": "area"
+    },
+    {
+      "name": "area:storage",
+      "color": "c2e0c6",
+      "description": "Touches persistence, files, or database storage.",
+      "group": "area"
+    },
+    {
+      "name": "area:sync",
+      "color": "fef2c0",
+      "description": "Touches synchronization or replication behavior.",
+      "group": "area"
+    },
+    {
+      "name": "area:cloudflare",
+      "color": "f9d0c4",
+      "description": "Touches Cloudflare deployment or platform code.",
+      "group": "area"
+    },
+    {
+      "name": "area:retrieval",
+      "color": "1d76db",
+      "description": "Touches search, retrieval, or ranking behavior.",
+      "group": "area"
+    },
+    {
+      "name": "area:mcp",
+      "color": "0052cc",
+      "description": "Touches Model Context Protocol integration.",
+      "group": "area"
+    },
+    {
+      "name": "area:obsidian",
+      "color": "7057ff",
+      "description": "Touches Obsidian workflows or compatibility.",
+      "group": "area"
+    },
+    {
+      "name": "area:security",
+      "color": "b60205",
+      "description": "Touches security controls, boundaries, or review.",
+      "group": "area"
+    },
+    {
+      "name": "area:docs",
+      "color": "0075ca",
+      "description": "Touches documentation structure or content.",
+      "group": "area"
+    },
+    {
+      "name": "area:governance",
+      "color": "0b7285",
+      "description": "Touches project policy, process, or stewardship.",
+      "group": "area"
+    },
+    {
+      "name": "area:tooling",
+      "color": "5319e7",
+      "description": "Touches developer tools or local automation.",
+      "group": "area"
+    },
+    {
+      "name": "area:ci",
+      "color": "0052cc",
+      "description": "Touches CI configuration or checks.",
+      "group": "area"
+    },
+    {
+      "name": "size:xs",
+      "color": "c2e0c6",
+      "description": "Changes 0 to 19 total lines.",
+      "group": "size"
+    },
+    {
+      "name": "size:s",
+      "color": "7bc96f",
+      "description": "Changes 20 to 99 total lines.",
+      "group": "size"
+    },
+    {
+      "name": "size:m",
+      "color": "fbca04",
+      "description": "Changes 100 to 499 total lines.",
+      "group": "size"
+    },
+    {
+      "name": "size:l",
+      "color": "d93f0b",
+      "description": "Changes 500 to 999 total lines.",
+      "group": "size"
+    },
+    {
+      "name": "size:xl",
+      "color": "b60205",
+      "description": "Changes 1000 or more total lines.",
+      "group": "size"
+    },
+    {
+      "name": "status:needs-review",
+      "color": "fbca04",
+      "description": "Needs reviewer attention.",
+      "group": "status"
+    },
+    {
+      "name": "status:ready",
+      "color": "0e8a16",
+      "description": "Ready for merge once checks and review pass.",
+      "group": "status"
+    },
+    {
+      "name": "status:changes-requested",
+      "color": "d93f0b",
+      "description": "Needs author changes before review can continue.",
+      "group": "status"
+    },
+    {
+      "name": "status:blocked",
+      "color": "b60205",
+      "description": "Blocked by a dependency or unresolved decision.",
+      "group": "status"
+    },
+    {
+      "name": "status:merged",
+      "color": "5319e7",
+      "description": "Merged into the target branch.",
+      "group": "status"
+    },
+    {
+      "name": "milestone:G002-foundation",
+      "color": "0e8a16",
+      "description": "Tracks G002 foundation work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:G003-ontology",
+      "color": "6f42c1",
+      "description": "Tracks G003 ontology work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:G004-capture",
+      "color": "d93f0b",
+      "description": "Tracks G004 capture work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:G005-sync",
+      "color": "fef2c0",
+      "description": "Tracks G005 sync work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:G006-retrieval",
+      "color": "1d76db",
+      "description": "Tracks G006 retrieval work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:G007-interfaces",
+      "color": "0052cc",
+      "description": "Tracks G007 interface work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:G008-release",
+      "color": "fbca04",
+      "description": "Tracks G008 release work.",
+      "group": "milestone"
+    },
+    {
+      "name": "milestone:maintenance",
+      "color": "d4c5f9",
+      "description": "Tracks ongoing maintenance outside goal milestones.",
+      "group": "milestone"
+    },
+    {
+      "name": "good first issue",
+      "color": "7057ff",
+      "description": "Good entry point for a first contribution.",
+      "group": "community"
+    },
+    {
+      "name": "help wanted",
+      "color": "008672",
+      "description": "Maintainers welcome external help on this work.",
+      "group": "community"
+    },
+    {
+      "name": "duplicate",
+      "color": "cfd3d7",
+      "description": "Duplicates another issue or pull request.",
+      "group": "resolution"
+    },
+    {
+      "name": "invalid",
+      "color": "e4e669",
+      "description": "Does not match the project issue or PR criteria.",
+      "group": "resolution"
+    },
+    {
+      "name": "question",
+      "color": "d876e3",
+      "description": "Needs clarification before action is clear.",
+      "group": "community"
+    },
+    {
+      "name": "wontfix",
+      "color": "ffffff",
+      "description": "Will not be changed in this project.",
+      "group": "resolution"
+    }
+  ]
+}

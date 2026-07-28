@@ -79,6 +79,15 @@ fix: preserve claim supersession order
 Atomic commits are preferred. Each commit should explain one coherent change and
 include its verification when applicable.
 
+## Pull Request Labels
+
+Every pull request must use only labels from `.github/labels.json` and include
+exactly one type, one size, one status, one milestone, and at least one area.
+Compute size from GitHub additions plus deletions.
+
+See [GitHub Label Policy](docs/maintainers/github-labels.md) for the maintainer
+workflow and lifecycle rules.
+
 ## Before Opening a Pull Request
 
 Check the relevant items:
