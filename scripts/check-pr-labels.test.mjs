@@ -16,7 +16,7 @@ const requiredLabels = [
   "milestone:maintenance",
 ];
 
-function runCheck(overrides = {}) {
+function runCheck(overrides = {}, currentOverrides) {
   const fixtureDir = mkdtempSync(join(tmpdir(), "carpeos-pr-labels-"));
   const eventPath = join(fixtureDir, "event.json");
   const pullRequest = {
@@ -29,9 +29,16 @@ function runCheck(overrides = {}) {
   };
 
   writeFileSync(eventPath, JSON.stringify({ pull_request: pullRequest }));
+  const env = { ...process.env, GITHUB_EVENT_PATH: eventPath };
+  if (currentOverrides !== undefined) {
+    const currentPullRequestPath = join(fixtureDir, "current-pull-request.json");
+    writeFileSync(currentPullRequestPath, JSON.stringify({ ...pullRequest, ...currentOverrides }));
+    env.CARPEOS_CURRENT_PULL_REQUEST_PATH = currentPullRequestPath;
+  }
+
   const result = spawnSync(process.execPath, [checkerPath], {
     encoding: "utf8",
-    env: { ...process.env, GITHUB_EVENT_PATH: eventPath },
+    env,
   });
   rmSync(fixtureDir, { force: true, recursive: true });
   return result;
@@ -94,4 +101,18 @@ test("rejects status:merged while a pull request is open", () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Open pull request cannot use status:merged/);
+});
+
+test("validates the current pull request instead of an intermediate event snapshot", () => {
+  const result = runCheck(
+    {
+      labels: requiredLabels
+        .filter((name) => name !== "status:needs-review")
+        .map((name) => ({ name })),
+    },
+    { labels: requiredLabels.map((name) => ({ name })) },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /check passed/);
 });

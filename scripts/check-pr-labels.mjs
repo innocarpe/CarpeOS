@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const catalogPath = join(repoRoot, ".github", "labels.json");
 const eventPath = process.env.GITHUB_EVENT_PATH;
+const currentPullRequestPath = process.env.CARPEOS_CURRENT_PULL_REQUEST_PATH;
 const failures = [];
 
 function fail(message) {
@@ -27,11 +28,16 @@ if (typeof eventPath !== "string" || eventPath.trim() === "") {
 
 const catalog = readJson(catalogPath, "label catalog");
 const event = eventPath ? readJson(eventPath, "GitHub event") : null;
-const pullRequest = event?.pull_request;
+const eventPullRequest = event?.pull_request;
 
-if (pullRequest === undefined) {
+if (eventPullRequest === undefined) {
   fail("GitHub event payload must contain pull_request.");
 }
+
+const currentPullRequest = currentPullRequestPath
+  ? readJson(currentPullRequestPath, "current pull request")
+  : eventPullRequest;
+const pullRequest = currentPullRequest ?? undefined;
 
 if (catalog !== null && pullRequest !== undefined) {
   const catalogByName = new Map(catalog.labels.map((label) => [label.name, label]));

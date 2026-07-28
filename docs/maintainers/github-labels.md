@@ -32,8 +32,11 @@ Do not open a ready-for-review PR without all five groups represented.
 
 The `Pull request labels` workflow validates the labels on every pull request
 when it is opened, reopened, synchronized, marked ready for review, labeled, or
-unlabeled. It runs the checker and catalog from the trusted base revision, never
-code from the pull request branch. The job checks that:
+unlabeled. It runs the checker and catalog from the current trusted base branch,
+never code from the pull request branch. It fetches the current pull request
+metadata before validation so a label replacement does not fail on the
+intermediate `unlabeled` event snapshot. Concurrent checks for the same pull
+request cancel older in-progress runs. The job checks that:
 
 - every applied label exists in `.github/labels.json`;
 - type, size, status, and milestone each have exactly one label;

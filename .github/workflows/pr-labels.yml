@@ -12,21 +12,34 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: pull-request-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   labels:
     name: Required label contract
     runs-on: ubuntu-latest
     steps:
-      - name: Check out trusted base revision
+      - name: Check out trusted base branch
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 22.22.0
 
+      - name: Read current pull request metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > "$RUNNER_TEMP/pull-request.json"
+
       - name: Validate pull request labels
+        env:
+          CARPEOS_CURRENT_PULL_REQUEST_PATH: ${{ runner.temp }}/pull-request.json
         run: node scripts/check-pr-labels.mjs
