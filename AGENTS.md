@@ -1,0 +1,55 @@
+# CarpeOS Agent Guide
+
+This file defines repository-local guidance for AI agents working on CarpeOS.
+
+## Primary Boundary
+
+CarpeOS is a public implementation for private knowledge systems.
+
+Do not add:
+
+- real user project names;
+- real session transcripts;
+- real private repository URLs;
+- local user paths;
+- production logs;
+- credentials, tokens, cookies, or private keys;
+- runtime database exports;
+- private Obsidian vault exports.
+
+Use fictional, generic, synthetic examples only.
+
+## Documentation Rules
+
+- `README.md` is the canonical English README.
+- `README.ko.md` should track the same substance in Korean.
+- Planned features must be described as planned.
+- Do not document commands as working unless they have been verified.
+- Do not claim adapters, MCP tools, sync, projections, or hosted deployment are
+  complete until implementation and tests exist.
+
+## Architecture Rules
+
+- `spec/` is the design source of truth once it exists.
+- ADRs are required for durable architecture decisions.
+- Private runtime event stores are the knowledge source of truth.
+- Obsidian, vector, graph, dashboard, and context-pack outputs are projections,
+  not canonical knowledge.
+- Provider-specific integrations belong behind adapters.
+
+## Git Rules
+
+- Keep commits atomic.
+- Use English Conventional Commit subjects.
+- Do not commit without explicit user authorization.
+- Do not rewrite history, force-push, publish packages, or deploy services
+  without explicit authorization.
+
+## Verification Rules
+
+Before reporting completion:
+
+- run the smallest relevant verification;
+- inspect `git status --short`;
+- confirm no private data or credentials were introduced;
+- state any verification gap clearly.
