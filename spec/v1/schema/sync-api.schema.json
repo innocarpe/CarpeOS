@@ -1,0 +1,293 @@
+{
+  "$id": "https://spec.carpeos.org/v1/schema/sync-api.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarpeOS v1 sync API schemas",
+  "$defs": {
+    "syncErrorItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "invalid_schema",
+            "replay",
+            "idempotency_conflict",
+            "unauthorized",
+            "not_found",
+            "internal_error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    "syncPushRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "client_id",
+        "trust_zone_id",
+        "idempotency_key",
+        "request_fingerprint",
+        "events",
+        "erasures"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "request_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "client_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "idempotency_key": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
+        },
+        "request_fingerprint": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/requestFingerprint"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/canonical-event.schema.json"
+          }
+        },
+        "erasures": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/erasure-ledger.schema.json"
+          }
+        }
+      }
+    },
+    "syncPushResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "status",
+        "accepted_event_ids",
+        "accepted_erasure_ids",
+        "errors"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "request_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["accepted", "replay", "idempotency_conflict", "partial_error"]
+        },
+        "accepted_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          }
+        },
+        "accepted_erasure_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^era_[a-z0-9][a-z0-9_-]{7,127}$"
+          }
+        },
+        "zone_sequences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trust_zone_id", "last_sequence"],
+            "properties": {
+              "trust_zone_id": {
+                "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+              },
+              "last_sequence": {
+                "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+              }
+            }
+          }
+        },
+        "replay_of": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
+        },
+        "conflict_with": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syncErrorItem"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "replay"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["replay_of"],
+            "not": {
+              "required": ["conflict_with"]
+            },
+            "properties": {
+              "errors": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "required": ["code"],
+                  "properties": {
+                    "code": {
+                      "const": "replay"
+                    }
+                  }
+                },
+                "minContains": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "idempotency_conflict"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["conflict_with"],
+            "not": {
+              "required": ["replay_of"]
+            },
+            "properties": {
+              "errors": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "required": ["code"],
+                  "properties": {
+                    "code": {
+                      "const": "idempotency_conflict"
+                    }
+                  }
+                },
+                "minContains": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "syncPullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "client_id", "trust_zone_id", "limit"],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "client_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/identifier"
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "after_sequence": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+        },
+        "recorded_after": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      }
+    },
+    "syncPullResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "events", "erasures", "has_more"],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/canonical-event.schema.json"
+          }
+        },
+        "erasures": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/erasure-ledger.schema.json"
+          }
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "has_more": {
+          "type": "boolean"
+        }
+      }
+    },
+    "syncError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "error"],
+      "properties": {
+        "schema_version": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/schemaVersion"
+        },
+        "error": {
+          "$ref": "#/$defs/syncErrorItem"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/syncPushRequest"
+    },
+    {
+      "$ref": "#/$defs/syncPushResult"
+    },
+    {
+      "$ref": "#/$defs/syncPullRequest"
+    },
+    {
+      "$ref": "#/$defs/syncPullResult"
+    },
+    {
+      "$ref": "#/$defs/syncError"
+    }
+  ]
+}

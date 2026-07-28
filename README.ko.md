@@ -100,8 +100,8 @@ AI-assisted workflow에서 사용할 수 있어야 합니다.
 | `CanonicalEvent` | 무엇이 일어났는지, 언제 기록되었는지, 누가 만들었는지, 어떤 trust zone이 소유하는지를 기록하는 append-only envelope. |
 | `EvidenceArtifact` | 작업 중 생성되거나 외부에서 참조된 raw material. 크거나 민감한 값은 기본적으로 inline copy하지 않고 external encrypted blob을 가리키는 protected-value reference로 저장해야 합니다. |
 | `Observation` | evidence에서 추출되지만 accepted fact로 승격되지 않은 bounded statement. |
-| `Claim` | 이후 별도의 decision record로 accepted, rejected, superseded될 수 있는 immutable statement. |
-| `AcceptanceDecision` | stated authority, scope, rationale, evidence set 아래에서 claim을 accept 또는 reject하는 immutable decision. |
+| `Claim` | claim 자체를 변경하지 않고 별도의 acceptance decision으로 평가하며 supersession과 연결하는 immutable statement. |
+| `AcceptanceDecision` | stated authority, scope, rationale, evidence set 아래에서 claim에 대한 `accepted`, `rejected`, `needs_review`를 기록하는 immutable decision. |
 | `Supersession` | 이전 claim 또는 decision을 replace, narrow, invalidate, update하는 immutable record. |
 
 Derived/supporting concept는 다음을 포함할 수 있습니다.
@@ -122,11 +122,13 @@ CarpeOS는 bitemporal time을 사용합니다.
 - `valid_time`은 modeled domain에서 statement가 언제 true인지를 설명합니다;
 - `recorded_time`은 CarpeOS가 event를 언제 기록했는지를 설명합니다.
 
-CarpeOS는 lifecycle status와 epistemic authority도 분리합니다. Record는 processing
-lifecycle 측면에서 captured, extracted, reviewed, projected, synced 상태일 수
-있습니다. 반면 truth authority는 unaccepted, accepted for a scope, rejected,
-superseded, stale, unknown일 수 있습니다. 이 두 축은 하나의 mutable status field로
-합쳐지면 안 됩니다.
+CarpeOS는 processing lifecycle과 epistemic authority도 분리합니다. Record는
+processing lifecycle 측면에서 captured, extracted, reviewed, projected, synced
+상태일 수 있습니다. Epistemic authority에는 warrant class인 `unverified`,
+`self_reported`, `observed`, `imported`, `derived`, `verified`를 사용합니다.
+`accepted`, `rejected`, `needs_review` 값은 `AcceptanceDecision`에만 존재하며,
+`superseded`, `erased`, `stale`은 query 또는 projection에서 도출되는 상태입니다.
+이 축들은 하나의 mutable status field로 합쳐지면 안 됩니다.
 
 ## Retrieval Model
 
@@ -174,8 +176,8 @@ CarpeOS는 local-first로 동작하도록 설계됩니다.
 - 각 device는 local append-only outbox에 기록합니다;
 - sync는 event를 private remote instance에 업로드합니다;
 - projection은 canonical event에서 다시 생성할 수 있습니다;
-- conflict는 generated note를 직접 수정해서가 아니라 event와 claim-status
-  layer에서 해결합니다.
+- conflict는 generated note를 직접 수정하는 대신 event, decision, supersession,
+  erasure-ledger 계층에서 해결합니다.
 
 목표는 public repository를 사용자의 private memory store로 만들지 않으면서도,
 여러 기기 사이의 연속성을 제공하는 것입니다.
