@@ -28,6 +28,24 @@ Every pull request must have labels from these five groups:
 
 Do not open a ready-for-review PR without all five groups represented.
 
+## Automated Enforcement
+
+The `Pull request labels` workflow validates the labels on every pull request
+when it is opened, reopened, synchronized, marked ready for review, labeled, or
+unlabeled. It runs the checker and catalog from the trusted base revision, never
+code from the pull request branch. The job checks that:
+
+- every applied label exists in `.github/labels.json`;
+- type, size, status, and milestone each have exactly one label;
+- at least one area label is present;
+- the size label matches GitHub's additions plus deletions count;
+- an open pull request does not use `status:merged`; and
+- a merged pull request uses `status:merged` when a later label event runs.
+
+Create pull requests with the complete initial label set so the first CI run is
+valid. When a pull request changes size bands after a new commit, replace its
+size label before treating the checks as complete.
+
 ## Size Labels
 
 Compute size from the total GitHub diff count:
