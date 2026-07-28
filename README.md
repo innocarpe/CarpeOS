@@ -6,13 +6,16 @@
 
 CarpeOS is a personal knowledge operating system for AI-assisted work.
 
-It captures work across AI agents, structures it as provenance-aware knowledge,
-synchronizes it across devices, and exposes that knowledge through retrieval
-interfaces for both humans and LLMs.
+It is designed to capture work across AI agents, structure it as
+provenance-aware knowledge, synchronize it across devices, and expose that
+knowledge through retrieval interfaces for both humans and LLMs. The current
+G004 implementation covers local capture and outbox storage only. Remote sync,
+cross-device sharing, retrieval, MCP, embedding, GraphRAG, and Obsidian
+projections are planned milestones, not active features.
 
-CarpeOS is currently an early-stage project. This repository is the canonical
-place for the public design, specifications, implementation, and roadmap. It
-does not contain a user's private knowledge store.
+This repository is the canonical place for the public design, specifications,
+implementation, and roadmap. It does not contain a user's private knowledge
+store.
 
 ## Core Principle
 
@@ -38,22 +41,81 @@ A user's private CarpeOS instance contains:
 The repository should never include real user project names, real session data,
 credentials, production logs, private repositories, or exported runtime stores.
 
-## Why CarpeOS Exists
+## Current Implementation
 
-AI coding agents are useful inside a single session, but their context often
-disappears when the session ends, the machine changes, or another provider is
-used. A simple vector database helps with semantic recall, but it usually cannot
-answer higher-authority questions:
+G004 adds a local capture runtime:
 
-- Is this a fact, a suggestion, or a rejected hypothesis?
-- What evidence supports this claim?
-- When was it observed, recorded, and valid?
-- Has it been superseded?
-- Which agent, device, repository, or workflow produced it?
-- Is the current note, vector hit, or graph edge authoritative?
+- provider-neutral raw `EvidenceArtifact` capture;
+- Codex, Claude Code, and Grok Build hook template examples;
+- an AES-256-GCM protected-value store for raw hook JSON;
+- local key material stored outside the SQLite database;
+- a Node 22.22+ local store built on `node:sqlite`;
+- append-only `capture_requests` and `canonical_events` tables;
+- a durable, idempotent metadata outbox with `pending`, `leased`, and
+  `delivered` state;
+- project identity derived from an explicit project ID, sanitized Git remote
+  hash, or device-local workspace hash;
+- a CLI surface for local init, project identity, hook capture, and outbox
+  inspection.
 
-CarpeOS treats memory as an event-sourced knowledge system rather than a folder
-of notes or a vector index alone.
+The local store writes raw provider payloads as encrypted protected values and
+stores only metadata and protected-value references in canonical events. One
+`protected_value_id` connects the canonical reference, encrypted local row,
+leased outbox metadata, and future erasure target. Local capture assigns
+`local_sequence` for device ordering. It does not assign canonical
+`zone_sequence`; that remains a server-side G005 responsibility.
+
+Remote sync is not implemented in G004. Events can accumulate locally in the
+metadata outbox, but another machine will not receive them until a future sync
+service defines encrypted blob transfer, uploads the events, and reconciles
+them.
+
+## Quick Start
+
+Prerequisites:
+
+- Node.js 22.22 or newer;
+- pnpm 11.16 or newer.
+
+Build and verify the workspace:
+
+```sh
+pnpm install
+pnpm build
+```
+
+Initialize the local runtime:
+
+```sh
+node apps/carpeos-cli/dist/index.js init
+```
+
+Identify the current project:
+
+```sh
+node apps/carpeos-cli/dist/index.js project identify
+```
+
+Capture one synthetic Codex hook payload:
+
+```sh
+node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
+  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
+```
+
+Inspect the local outbox:
+
+```sh
+node apps/carpeos-cli/dist/index.js outbox status
+```
+
+The provider templates in `adapters/` expect a `carpeos` binary on `PATH`. In
+this repository, command behavior is tested through the compiled CLI entrypoint
+under `apps/carpeos-cli/dist/index.js`; package installation and binary
+distribution are separate packaging work.
+
+See [Local Capture Guide](docs/guides/local-capture.md) for the complete command
+surface and hook template notes.
 
 ## Architecture Model
 
@@ -64,6 +126,9 @@ AI lifecycle hooks
         |
         v
 Local append-only outbox
+        |
+        v
+Private sync service           <- planned G005+
         |
         v
 Canonical event store
@@ -94,7 +159,7 @@ The core ontology is intentionally generic. It should work for software
 development, research, writing, operations, and other AI-assisted workflows
 without including one user's private domain.
 
-Planned canonical record types include:
+The canonical record types are:
 
 | Type | Purpose |
 | --- | --- |
@@ -158,18 +223,19 @@ These tools are planned API surfaces, not completed features.
 
 ## Agent Integrations
 
-CarpeOS is provider-neutral by design. The intended integration model is a
-common capture protocol plus adapters for agent lifecycle hooks.
+CarpeOS is provider-neutral by design. The current templates normalize selected
+Codex, Claude Code, and Grok Build lifecycle events into a common capture
+envelope.
 
-Planned adapters include:
+References:
 
-- Codex CLI hooks;
-- Grok-based coding workflows;
-- Claude Code hooks;
-- generic shell hooks for other tools.
+- Codex hooks: <https://learn.chatgpt.com/docs/hooks>
+- Claude Code hooks: <https://code.claude.com/docs/en/hooks>
+- Grok Build hooks: <https://docs.x.ai/build/features/hooks>
 
-Agents should be able to read from the same knowledge plane through MCP without
-coupling the canonical store to one provider.
+Agents should eventually be able to read from the same knowledge plane through
+MCP without coupling the canonical store to one provider. That read path is not
+implemented yet.
 
 ## Local-First Sync
 
@@ -181,8 +247,8 @@ CarpeOS is designed to work locally first:
 - conflicts are resolved at the event, decision, supersession, and
   erasure-ledger layers, not by editing generated notes directly.
 
-The intended result is continuity across machines without making a public
-repository the user's private memory store.
+G004 implements the first bullet only. Cross-Mac sharing is not active until a
+G005+ remote sync service exists.
 
 ## Cloudflare Path
 
@@ -203,9 +269,6 @@ embeds only meaningful knowledge units, such as session summaries, decisions,
 claims, and selected evidence chunks, instead of embedding every raw hook event.
 
 ## MVP Roadmap
-
-This repository is being bootstrapped. The roadmap below describes intended
-work, not completed functionality.
 
 1. Define the public project contract.
    - README files
@@ -229,7 +292,8 @@ work, not completed functionality.
 
 4. Add agent capture adapters.
    - Codex CLI lifecycle hooks
-   - generic hook protocol
+   - Claude Code lifecycle hooks
+   - Grok Build lifecycle hooks
    - provider-neutral capture envelope
 
 5. Add retrieval.
@@ -297,8 +361,9 @@ copyright and license notices.
 
 ## Project Status
 
-CarpeOS is pre-MVP. The repository is being organized before the first usable
-runtime release.
+CarpeOS is pre-MVP. The G004 local capture runtime is implemented and tested,
+but the project is not ready as a packaged end-user release.
 
-Do not treat planned commands, APIs, adapters, or deployment paths as stable
-until they are implemented, tested, and documented in this repository.
+Do not treat planned sync, retrieval, MCP, adapter installation, projection, or
+deployment paths as stable until they are implemented, tested, and documented in
+this repository.

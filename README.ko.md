@@ -7,12 +7,14 @@
 CarpeOS는 AI-assisted work를 위한 개인 지식 운영체제입니다.
 
 CarpeOS는 여러 AI agent에서 발생하는 작업 맥락을 수집하고,
-provenance-aware knowledge로 구조화하며, 여러 기기 사이에서 동기화하고,
-사람과 LLM이 모두 탐색할 수 있는 retrieval interface로 노출합니다.
+provenance-aware knowledge로 구조화하며, 여러 기기 사이에서 동기화하고, 사람과
+LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G004
+구현 범위는 local capture와 outbox storage입니다. Remote sync, cross-device
+sharing, retrieval, MCP, embedding, GraphRAG, Obsidian projection은 계획된
+milestone이며 아직 active feature가 아닙니다.
 
-CarpeOS는 현재 초기 단계 프로젝트입니다. 이 저장소는 공개 설계,
-specification, 구현, roadmap의 canonical 위치입니다. 이 저장소에는 사용자의
-private knowledge store가 들어가지 않습니다.
+이 저장소는 공개 설계, specification, 구현, roadmap의 canonical 위치입니다. 이
+저장소에는 사용자의 private knowledge store가 들어가지 않습니다.
 
 ## 핵심 원칙
 
@@ -38,22 +40,79 @@ private knowledge store가 들어가지 않습니다.
 이 저장소에는 실제 사용자 프로젝트명, 실제 session data, credential,
 production log, private repository, exported runtime store가 들어가면 안 됩니다.
 
-## 왜 CarpeOS가 필요한가
+## 현재 구현
 
-AI coding agent는 단일 session 안에서는 유용하지만, session이 끝나거나,
-기기가 바뀌거나, 다른 provider를 쓰면 맥락이 쉽게 사라집니다. 단순 vector
-database는 semantic recall에 도움이 되지만, 보통 더 높은 authority 질문에
-답하지 못합니다.
+G004는 local capture runtime을 추가합니다.
 
-- 이것은 사실인가, 제안인가, rejected hypothesis인가?
-- 이 claim을 뒷받침하는 evidence는 무엇인가?
-- 언제 observed, recorded, valid 상태였는가?
-- supersede되었는가?
-- 어떤 agent, device, repository, workflow가 만들었는가?
-- 현재 note, vector hit, graph edge가 authoritative한가?
+- provider-neutral raw `EvidenceArtifact` capture;
+- Codex, Claude Code, Grok Build hook template example;
+- raw hook JSON을 위한 AES-256-GCM protected-value store;
+- SQLite database 외부에 저장되는 local key material;
+- Node 22.22+ `node:sqlite` 기반 local store;
+- append-only `capture_requests`, `canonical_events` table;
+- `pending`, `leased`, `delivered` 상태를 가진 durable idempotent metadata
+  outbox;
+- explicit project ID, sanitized Git remote hash, device-local workspace hash에서
+  파생되는 project identity;
+- local init, project identity, hook capture, outbox inspection을 위한 CLI surface.
 
-CarpeOS는 memory를 note folder나 vector index 하나가 아니라 event-sourced
-knowledge system으로 다룹니다.
+Local store는 raw provider payload를 encrypted protected value로 기록하고,
+canonical event에는 metadata와 protected-value reference만 저장합니다. 하나의
+`protected_value_id`가 canonical reference, encrypted local row, leased outbox
+metadata, 향후 erasure target을 연결합니다. Local capture는 device ordering을
+위한 `local_sequence`를 부여합니다. Canonical `zone_sequence`는 부여하지 않으며,
+이는 G005 server-side 책임입니다.
+
+Remote sync는 G004에서 구현되지 않았습니다. Event는 local metadata outbox에
+쌓일 수 있지만, future sync service가 encrypted blob transfer, upload,
+reconciliation을 구현하기 전까지 다른 machine으로 전달되지 않습니다.
+
+## 빠른 시작
+
+Prerequisite:
+
+- Node.js 22.22 이상;
+- pnpm 11.16 이상.
+
+Workspace를 build하고 검증합니다.
+
+```sh
+pnpm install
+pnpm build
+```
+
+Local runtime을 초기화합니다.
+
+```sh
+node apps/carpeos-cli/dist/index.js init
+```
+
+현재 project identity를 확인합니다.
+
+```sh
+node apps/carpeos-cli/dist/index.js project identify
+```
+
+Synthetic Codex hook payload 하나를 capture합니다.
+
+```sh
+node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
+  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
+```
+
+Local outbox를 확인합니다.
+
+```sh
+node apps/carpeos-cli/dist/index.js outbox status
+```
+
+`adapters/`의 provider template은 `PATH`에 `carpeos` binary가 있다고 가정합니다.
+이 저장소에서는 compiled CLI entrypoint인 `apps/carpeos-cli/dist/index.js`를 통해
+command behavior를 테스트합니다. Package installation과 binary distribution은
+별도의 packaging work입니다.
+
+전체 command surface와 hook template note는
+[Local Capture Guide](docs/guides/local-capture.md)를 참고하십시오.
 
 ## Architecture Model
 
@@ -66,6 +125,9 @@ AI lifecycle hooks
 Local append-only outbox
         |
         v
+Private sync service           <- planned G005+
+        |
+        v
 Canonical event store
         |
         +--> query-time accepted fact view
@@ -76,16 +138,17 @@ Canonical event store
 ```
 
 Append-only `CanonicalEvent` stream은 private knowledge의 source of truth입니다.
-Accepted fact는 immutable claim, acceptance decision, supersession에서 query time에
-도출됩니다. CarpeOS는 claim record를 mutate해서 accepted 상태로 만들지 않습니다.
+Accepted fact는 immutable claim, acceptance decision, supersession에서 query
+time에 도출됩니다. CarpeOS는 claim record를 mutate해서 accepted 상태로 만들지
+않습니다.
 
 Obsidian note, vector index, graph index, dashboard, context pack,
 accepted-fact view는 rebuildable projection입니다. 이들은 유용한 interface이지만,
 그 자체로 authoritative하지 않습니다.
 
-Runtime data는 physical `TrustZone` boundary로 분리됩니다. Public, local-private,
-remote-private, shared, exported data는 하나의 storage 또는 authority model로
-합쳐지면 안 됩니다.
+Runtime data는 physical `TrustZone` boundary로 분리됩니다. Public,
+local-private, remote-private, shared, exported data는 하나의 storage 또는
+authority model로 합쳐지면 안 됩니다.
 
 ## Knowledge Model
 
@@ -93,7 +156,7 @@ Core ontology는 의도적으로 범용적이어야 합니다. 특정 사용자�
 포함하지 않고도 software development, research, writing, operations, 기타
 AI-assisted workflow에서 사용할 수 있어야 합니다.
 
-계획 중인 canonical record type은 다음과 같습니다.
+Canonical record type은 다음과 같습니다.
 
 | Type | Purpose |
 | --- | --- |
@@ -156,18 +219,17 @@ CarpeOS는 hybrid retrieval을 지향합니다.
 
 ## Agent Integrations
 
-CarpeOS는 provider-neutral하게 설계됩니다. 의도된 integration model은 공통
-capture protocol과 agent lifecycle hook adapter입니다.
+CarpeOS는 provider-neutral하게 설계됩니다. 현재 template은 selected Codex,
+Claude Code, Grok Build lifecycle event를 common capture envelope로 normalize합니다.
 
-계획 중인 adapter는 다음과 같습니다.
+References:
 
-- Codex CLI hook;
-- Grok 기반 coding workflow;
-- Claude Code hook;
-- 기타 tool을 위한 generic shell hook.
+- Codex hooks: <https://learn.chatgpt.com/docs/hooks>
+- Claude Code hooks: <https://code.claude.com/docs/en/hooks>
+- Grok Build hooks: <https://docs.x.ai/build/features/hooks>
 
 Agent들은 canonical store를 하나의 provider에 묶지 않고, MCP를 통해 같은
-knowledge plane을 읽을 수 있어야 합니다.
+knowledge plane을 읽을 수 있어야 합니다. 이 read path는 아직 구현되지 않았습니다.
 
 ## Local-First Sync
 
@@ -179,8 +241,8 @@ CarpeOS는 local-first로 동작하도록 설계됩니다.
 - conflict는 generated note를 직접 수정하는 대신 event, decision, supersession,
   erasure-ledger 계층에서 해결합니다.
 
-목표는 public repository를 사용자의 private memory store로 만들지 않으면서도,
-여러 기기 사이의 연속성을 제공하는 것입니다.
+G004는 첫 번째 항목만 구현합니다. G005+ remote sync service가 생기기 전까지
+cross-Mac sharing은 active하지 않습니다.
 
 ## Cloudflare Path
 
@@ -201,9 +263,6 @@ decision, claim, selected evidence chunk 같은 의미 있는 knowledge unit만
 embedding한다면 free-tier path가 유용할 것으로 예상합니다.
 
 ## MVP Roadmap
-
-이 저장소는 현재 bootstrapping 중입니다. 아래 roadmap은 의도된 작업을 설명하며,
-완료된 기능을 의미하지 않습니다.
 
 1. Public project contract 정의.
    - README files
@@ -227,7 +286,8 @@ embedding한다면 free-tier path가 유용할 것으로 예상합니다.
 
 4. Agent capture adapter 추가.
    - Codex CLI lifecycle hooks
-   - generic hook protocol
+   - Claude Code lifecycle hooks
+   - Grok Build lifecycle hooks
    - provider-neutral capture envelope
 
 5. Retrieval 추가.
@@ -296,8 +356,8 @@ CarpeOS는 다른 architecture model을 가진 독립적인 구현입니다.
 
 ## Project Status
 
-CarpeOS는 pre-MVP 단계입니다. 첫 usable runtime release 전에 repository를
-정리하는 중입니다.
+CarpeOS는 pre-MVP 단계입니다. G004 local capture runtime은 구현 및 테스트되어
+있지만, packaged end-user release로 사용할 준비는 아직 되지 않았습니다.
 
-계획된 command, API, adapter, deployment path는 이 저장소에서 구현, 테스트,
-문서화되기 전까지 stable한 것으로 간주하지 마십시오.
+계획된 sync, retrieval, MCP, adapter installation, projection, deployment path는
+이 저장소에서 구현, 테스트, 문서화되기 전까지 stable한 것으로 간주하지 마십시오.

@@ -1,0 +1,25 @@
+{
+  "name": "@carpeos/local-store",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local encrypted SQLite capture store and durable metadata outbox.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@carpeos/capture": "workspace:*",
+    "@carpeos/schema": "workspace:*"
+  }
+}

@@ -1,0 +1,1 @@
+notify = ["carpeos", "capture-hook", "--provider", "codex", "--input", "argv", "--fail-open", "--quiet"]

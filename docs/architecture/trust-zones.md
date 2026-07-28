@@ -34,8 +34,9 @@ CanonicalEvent
   -> KeyProvider
 ```
 
-The canonical event stores enough metadata to verify and locate content. It does
-not store plaintext.
+The canonical event stores a stable `protected_value_id` plus enough metadata to
+verify and locate content. That same ID addresses the encrypted store row and a
+protected-value erasure target. The event does not store plaintext.
 
 ## Erasure
 

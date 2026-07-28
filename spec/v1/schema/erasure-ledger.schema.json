@@ -152,6 +152,23 @@
           "if": {
             "properties": {
               "target_kind": {
+                "const": "protected_value"
+              }
+            },
+            "required": ["target_kind"]
+          },
+          "then": {
+            "properties": {
+              "target_id": {
+                "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/protectedValueId"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target_kind": {
                 "const": "event"
               }
             },
