@@ -47,7 +47,10 @@ stdout. Protocol diagnostics are sanitized and written to stderr.
 
 ## Tools
 
-The server exposes exactly eight tools:
+The server exposes exactly eight tools. **Authoritative contract (G7):**
+
+- [MCP Tools Contract v1 (markdown)](../contracts/mcp-tools-v1.md)
+- [MCP Tools Contract v1 (JSON)](../contracts/mcp-tools-v1.json)
 
 | Tool | Purpose |
 | --- | --- |
@@ -60,7 +63,10 @@ The server exposes exactly eight tools:
 | `memory_capture` | Capture local evidence through the existing outbox. |
 | `memory_propose_claim` | Write a draft `Claim` with visible support references. |
 
-`memory_open_loops` is not implemented in G007.
+`memory_open_loops` is not implemented and must not appear in `listTools`.
+
+Drift protection: `apps/carpeos-mcp-server/test/tool-inventory.test.ts` asserts the
+JSON inventory matches `CARPEOS_MCP_TOOLS`.
 
 ## Visibility
 
