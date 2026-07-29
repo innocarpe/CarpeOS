@@ -14,6 +14,11 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+### Fixed
+
+- npm `carpeos setup` wrappers now point at package `bin/carpeos.js` so
+  `carpeos setup` keeps working when `~/.local/bin` shadows the global npm bin
+
 ## [0.1.0] - 2026-07-29
 
 Initial public distribution of the CarpeOS CLI and local MCP server.

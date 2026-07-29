@@ -50,10 +50,22 @@ export function defaultBinDir(env = process.env) {
 export function resolveInstallEntries(repoRoot) {
   const monorepoCli = join(repoRoot, "apps/carpeos-cli/dist/index.js");
   const monorepoMcp = join(repoRoot, "apps/carpeos-mcp-server/dist/index.js");
-  const npmCli = join(repoRoot, "dist/cli.js");
-  const npmMcp = join(repoRoot, "dist/mcp-server.js");
-  if (existsSync(npmCli) && existsSync(npmMcp)) {
-    return { cli_entry: npmCli, mcp_entry: npmMcp, distribution: "npm" };
+  const npmBinCli = join(repoRoot, "bin/carpeos.js");
+  const npmBinMcp = join(repoRoot, "bin/carpeos-mcp-server.js");
+  const npmDistCli = join(repoRoot, "dist/cli.js");
+  const npmDistMcp = join(repoRoot, "dist/mcp-server.js");
+  // Prefer package bin entrypoints so wrappers keep `carpeos setup` routing.
+  // dist/cli.js is the monorepo CLI bundle and does not handle setup/doctor.
+  if (
+    existsSync(npmBinCli) &&
+    existsSync(npmBinMcp) &&
+    existsSync(npmDistCli) &&
+    existsSync(npmDistMcp)
+  ) {
+    return { cli_entry: npmBinCli, mcp_entry: npmBinMcp, distribution: "npm" };
+  }
+  if (existsSync(npmDistCli) && existsSync(npmDistMcp)) {
+    return { cli_entry: npmDistCli, mcp_entry: npmDistMcp, distribution: "npm" };
   }
   return { cli_entry: monorepoCli, mcp_entry: monorepoMcp, distribution: "git" };
 }
