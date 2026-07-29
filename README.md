@@ -249,10 +249,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), and
 pnpm check   # format, lint, build, typecheck, test, public-boundary
 ```
 
-PR labels are light: one kind (`feat` / `fix` / `docs` / `spec` / `chore`) and
-an optional area. See
-[docs/maintainers/github-labels.md](docs/maintainers/github-labels.md).
-
 ---
 
 ## License

@@ -243,10 +243,6 @@ claim/수락/supersession·trust zone·protected value·벤더 중립 MCP를 전
 pnpm check   # format, lint, build, typecheck, test, public-boundary
 ```
 
-PR 레이블은 가볍게: kind 하나
-(`feat` / `fix` / `docs` / `spec` / `chore`) + 필요하면 area.
-[docs/maintainers/github-labels.md](docs/maintainers/github-labels.md)
-
 ---
 
 ## 라이선스
