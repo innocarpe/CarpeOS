@@ -1,4 +1,4 @@
-import { validateConformance } from "@carpeos/schema";
+import type { LeasedOutboxItem, LocalCaptureStore } from "@carpeos/local-store";
 import type {
   CanonicalEvent,
   ProtectedValueMetadata,
@@ -9,7 +9,7 @@ import type {
   SyncPushRequest,
   SyncPushResult,
 } from "@carpeos/schema";
-import type { LeasedOutboxItem, LocalCaptureStore } from "@carpeos/local-store";
+import { validateConformance } from "@carpeos/schema";
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -196,7 +196,13 @@ export class SyncHttpTransport {
     if (response.ok) {
       return;
     }
-    throw new SyncHttpError(response.status, fallback, isRetryableStatus(response.status));
+    // Include HTTP status for operator diagnosis; never attach response bodies
+    // (may contain private identifiers or protected metadata).
+    throw new SyncHttpError(
+      response.status,
+      `${fallback} (HTTP ${response.status})`,
+      isRetryableStatus(response.status),
+    );
   }
 }
 
