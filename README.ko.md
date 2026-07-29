@@ -190,15 +190,27 @@ draft보다 앞에 두는 cache-friendly 순서를 씁니다.
 ```sh
 # npm (권장)
 npm install -g @innocarpe/carpeos
-carpeos setup --yes
+carpeos setup plan              # 경로·액션만 확인 (변경 없음)
+carpeos setup run --apply       # 기본값으로 적용
 
-# 또는 curl (동일 패키지 설치 후 setup)
+# 또는 curl (동일 패키지 설치 후 setup run --apply)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
 ```
 
-`carpeos setup`은 `~/.carpeos` 에 private 런타임을 만들고, PATH에 있으면
+`carpeos setup` 은 플래그 나열이 아니라 **명령 + 옵션** 인터페이스입니다.
+기본 런타임은 `~/.carpeos`, wrapper는 `~/.local/bin` 이며, PATH에 있으면
 **Claude Code / Codex CLI / Grok Build** 에 로컬 MCP를 등록합니다.
-확인: `carpeos setup --doctor`.
+
+```sh
+carpeos setup --help            # 전체 파라미터
+carpeos setup plan              # 해석된 plan만
+carpeos setup run --apply       # 적용
+carpeos setup doctor            # 설치 검증
+carpeos setup show              # config.json 출력
+```
+
+주요 옵션: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
+`--register-mcp auto|none|claude,codex,grok`. `--apply` 없이는 기계를 바꾸지 않습니다.
 
 재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@0.1.0`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
@@ -207,9 +219,10 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 ```sh
 git clone https://github.com/innocarpe/carpeos.git && cd carpeos
-node scripts/install-local.mjs --yes    # 빌드, wrapper, MCP 등록
+node scripts/install-local.mjs plan
+node scripts/install-local.mjs run --apply   # 빌드, wrapper, MCP 등록
 export PATH="$HOME/.local/bin:$PATH"
-node scripts/install-local.mjs --doctor
+node scripts/install-local.mjs doctor
 ```
 
 글로벌 설치 없이 monorepo만 쓸 때: `pnpm install && pnpm build` 후
@@ -236,8 +249,9 @@ carpeos memory context-pack \
 
 설치는 **idempotent** 하게, private 데이터는 **git 밖**에 둡니다.
 
-1. 우선 `npm i -g @innocarpe/carpeos` + `carpeos setup --yes` (또는 `install.sh`).
-2. 소스 작업이면 checkout에서 `node scripts/install-local.mjs --yes`.
+1. 우선 `npm i -g @innocarpe/carpeos` + `carpeos setup plan` 후
+   `carpeos setup run --apply` (또는 `install.sh`).
+2. 소스 작업이면 checkout에서 `node scripts/install-local.mjs run --apply`.
 3. `~/.carpeos`, credential, 실제 세션 데이터를 커밋하지 말 것.
 4. 설치 경로를 새로 만들지 말 것. setup이 Claude/Codex/Grok MCP를 등록함.
 5. 릴리스는 SemVer + `vX.Y.Z` 태그만 —

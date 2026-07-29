@@ -10,9 +10,13 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- (none yet — fold entries here before the next release)
+- `carpeos setup` / `install-local.mjs` now expose an explicit CLI surface:
+  commands `plan | run | doctor | show | help`, apply gate `--apply`, and
+  documented options (`--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
+  `--register-mcp`). Bare `setup` prints help; machine changes require `--apply`.
+  Legacy `--yes` / `-y` still work as a deprecated alias for `--apply`.
 
 ## [0.1.0] - 2026-07-29
 

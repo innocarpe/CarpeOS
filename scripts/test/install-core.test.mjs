@@ -6,10 +6,14 @@ import { describe, it } from "node:test";
 import {
   buildConfig,
   doctorInstall,
+  formatSetupHelp,
+  formatSetupPlanHuman,
   installLocal,
   isTrustZoneId,
+  parseSetupArgs,
   renderMcpEnv,
   renderWrapper,
+  resolveSetupPlan,
   shellQuote,
   trustZoneFromHostname,
 } from "../lib/install-core.mjs";
@@ -89,5 +93,77 @@ describe("install-core", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("parseSetupArgs defaults empty argv to help", () => {
+    const args = parseSetupArgs([]);
+    assert.equal(args.help, true);
+    assert.equal(args.command, "run");
+    assert.equal(args.apply, false);
+  });
+
+  it("parseSetupArgs accepts commands and --apply", () => {
+    const plan = parseSetupArgs(["plan"]);
+    assert.equal(plan.command, "plan");
+    assert.equal(plan.apply, false);
+
+    const apply = parseSetupArgs(["run", "--apply", "--home", "/tmp/carpeos-home"]);
+    assert.equal(apply.command, "run");
+    assert.equal(apply.apply, true);
+    assert.equal(apply.home, "/tmp/carpeos-home");
+    assert.equal(apply.deprecatedYes, false);
+
+    const legacy = parseSetupArgs(["--yes", "--register-mcp", "claude"]);
+    assert.equal(legacy.apply, true);
+    assert.equal(legacy.deprecatedYes, true);
+    assert.equal(legacy.registerMcp, "claude");
+
+    const dry = parseSetupArgs(["run", "--dry-run"]);
+    assert.equal(dry.command, "plan");
+  });
+
+  it("parseSetupArgs rejects unknown options and commands", () => {
+    assert.throws(() => parseSetupArgs(["--nope"]), /unknown option/);
+    assert.throws(() => parseSetupArgs(["explode"]), /unknown setup command/);
+  });
+
+  it("resolveSetupPlan is plan-only without --apply", () => {
+    const args = parseSetupArgs([
+      "run",
+      "--home",
+      "/tmp/carpeos-plan-home",
+      "--bin-dir",
+      "/tmp/carpeos-plan-bin",
+      "--workspace-root",
+      "/tmp/ws",
+      "--trust-zone",
+      "tz_local_default",
+      "--register-mcp",
+      "none",
+    ]);
+    const plan = resolveSetupPlan(args, {
+      env: { HOME: "/tmp" },
+      distribution: "npm",
+      defaultRepoRoot: "/tmp/repo",
+    });
+    assert.equal(plan.apply, false);
+    assert.equal(plan.home, "/tmp/carpeos-plan-home");
+    assert.equal(plan.binDir, "/tmp/carpeos-plan-bin");
+    assert.equal(plan.skipMcp, true);
+    const human = formatSetupPlanHuman(plan);
+    assert.match(human, /apply changes:\s+no/);
+    assert.match(human, /--apply/);
+    assert.match(formatSetupHelp(), /COMMANDS/);
+  });
+
+  it("resolveSetupPlan applies only for run --apply", () => {
+    const args = parseSetupArgs(["run", "--apply", "--register-mcp", "codex,grok"]);
+    const plan = resolveSetupPlan(args, {
+      env: { HOME: "/tmp", CARPEOS_HOME: "/tmp/.carpeos-x" },
+      defaultRepoRoot: "/tmp/repo",
+    });
+    assert.equal(plan.apply, true);
+    assert.deepEqual(plan.hostList, ["codex", "grok"]);
+    assert.equal(plan.home, "/tmp/.carpeos-x");
   });
 });

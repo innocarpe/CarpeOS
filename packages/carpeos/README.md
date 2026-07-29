@@ -26,10 +26,16 @@ Global install puts `carpeos` and `carpeos-mcp-server` on your PATH. Then
 configure the private runtime and register MCP with agent hosts:
 
 ```sh
-carpeos setup --yes
-# optional checks
-carpeos setup --doctor
+carpeos setup --help            # full parameter interface
+carpeos setup plan              # see resolved paths + actions (no changes)
+carpeos setup run --apply       # apply defaults
+carpeos setup doctor            # verify
+carpeos setup show              # print saved config
 ```
+
+Options include `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`, and
+`--register-mcp auto|none|claude,codex,grok`. Setup never mutates the machine
+without `--apply`.
 
 This creates `~/.carpeos`, installs convenience wrappers under `~/.local/bin`
 (if needed), and registers the CarpeOS MCP server with Claude Code, Codex CLI,
