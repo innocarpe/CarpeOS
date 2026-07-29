@@ -351,9 +351,10 @@ Final program gate after M10:
 | 2026-07-29 | M6 | PR #22 + #23 | diversity ranking + test fix |
 | 2026-07-29 | M4+M7 | PR #24 merged | compaction + latent ladder |
 | 2026-07-29 | M8 | PR #25 merged | run ledger helpers |
-| 2026-07-29 | M9+M10 | product projection + kimi adapter | this branch |
+| 2026-07-29 | M9+M10 | PR #26 merged | product-projection + adapters/kimi |
+| 2026-07-29 | program | Ultragoal 9/9 complete | plan-id k3-memory-capacity |
 
-_Updates append below as PRs land._
+_Program complete on main through PR #19–#26._
 
 ## 11. Definition of done (program)
 
