@@ -380,4 +380,25 @@ describe("cloudflare operator private config validation", () => {
       assert.doesNotMatch(command, /(?:^|\s)wrangler(?:\s|$)/);
     }
   });
+
+  it("documents operator package scripts with explicit run commands", () => {
+    const documentedScripts = new Map([
+      [
+        new URL("../../docs/guides/cloudflare-sync.md", import.meta.url),
+        ["d1:migrations:local", "d1:migrations:remote"],
+      ],
+      [
+        new URL("../../docs/guides/private-cloudflare-operator-config.md", import.meta.url),
+        ["cloudflare:validate", "d1:migrations:remote", "deploy"],
+      ],
+    ]);
+
+    for (const [guide, scripts] of documentedScripts) {
+      const contents = readFileSync(guide, "utf8");
+      for (const script of scripts) {
+        assert.match(contents, new RegExp(`pnpm --filter @carpeos/sync-worker run ${script}`));
+        assert.doesNotMatch(contents, new RegExp(`pnpm --filter @carpeos/sync-worker ${script}`));
+      }
+    }
+  });
 });
