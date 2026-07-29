@@ -119,6 +119,13 @@ with `payload.kind = "procedure_trace"` and media type
 memory (ADR 0009 L3). They MUST remain protected-value referenced by default and
 MUST NOT auto-create `AcceptanceDecision` or populate `accepted_facts`.
 
+## Long-horizon run ledger
+
+Multi-hour agent work MAY record non-authoritative `run_ledger_entry` projection
+metadata linking `run_id`, rounds, and related event/artifact ids. Run ledger
+entries MUST set `canonical_effect: "none"` and MUST NOT become a sixth core
+`event_type` in v1.
+
 ## Accepted Facts
 
 MCP context packs SHOULD return:

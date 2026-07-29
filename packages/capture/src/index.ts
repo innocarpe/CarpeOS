@@ -8,6 +8,15 @@ import type {
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
 
+export {
+  buildRunLedgerEntry,
+  completeRunLedgerEntry,
+  linkEventsToRun,
+  type BuildRunLedgerEntryInput,
+  type RunLedgerEntry,
+  type RunLedgerStatus,
+} from "./run-ledger.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 
