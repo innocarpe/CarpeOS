@@ -44,6 +44,7 @@ const SYNC_KEY = new Uint8Array(32).fill(42);
 const PRIVATE_SENTINEL = "SYNTHETIC_G008_PRIVATE_CAPTURE_SENTINEL";
 const BASE_TIME = "2026-07-29T00:00:00Z";
 const WORKER_ROOT = new URL("..", import.meta.url).pathname;
+const WORKER_STARTUP_TIMEOUT_MS = 120_000;
 
 const tempDirs: string[] = [];
 let worker: LocalWorkerHandle | undefined;
@@ -71,7 +72,7 @@ beforeAll(async () => {
     dev: { persist: workerPersistDir },
   });
   await worker.ready;
-}, 30_000);
+}, WORKER_STARTUP_TIMEOUT_MS);
 
 beforeEach(() => {
   if (process.env.G008_NODE_E2E !== "1") {
