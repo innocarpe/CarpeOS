@@ -272,6 +272,7 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | Capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| MCP smoke (G5) | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | v1.0 contract readiness | [docs/maintainers/v1-readiness.md](docs/maintainers/v1-readiness.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |

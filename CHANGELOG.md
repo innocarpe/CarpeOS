@@ -12,7 +12,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Named G5 MCP smoke gate: `pnpm smoke:mcp` (`scripts/smoke-mcp.mjs`) covering
+  MCP tool list, `memory search`, and `memory context-pack`, wired into CI
+
+### Changed
+
+- v1 readiness G5 marked **done**
 
 ## [0.1.3] - 2026-07-29
 
