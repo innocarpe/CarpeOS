@@ -71,9 +71,7 @@ function runDoctor(home, asJson) {
     printJson({ ok: doctor.ok, doctor });
   } else {
     process.stdout.write(
-      doctor.ok
-        ? "CarpeOS install doctor: PASS\n"
-        : "CarpeOS install doctor: FAIL\n",
+      doctor.ok ? "CarpeOS install doctor: PASS\n" : "CarpeOS install doctor: FAIL\n",
     );
     printJson({ ok: doctor.ok, doctor });
   }

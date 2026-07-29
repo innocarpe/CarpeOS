@@ -631,9 +631,7 @@ export function parseSetupArgs(argv) {
   if (args[0] && !args[0].startsWith("-")) {
     const cmd = args[0];
     if (!SETUP_COMMANDS.includes(cmd)) {
-      throw new Error(
-        `unknown setup command: ${cmd}\nRun with --help for usage.`,
-      );
+      throw new Error(`unknown setup command: ${cmd}\nRun with --help for usage.`);
     }
     out.command = cmd;
     args.shift();
@@ -787,9 +785,7 @@ export function resolveSetupPlan(args, ctx = {}) {
   const env = ctx.env ?? process.env;
   const home = args.home ? resolve(args.home) : defaultHome(env);
   const binDir = args.binDir ? resolve(args.binDir) : defaultBinDir(env);
-  const workspaceRoot = args.workspaceRoot
-    ? resolve(args.workspaceRoot)
-    : env.HOME || homedir();
+  const workspaceRoot = args.workspaceRoot ? resolve(args.workspaceRoot) : env.HOME || homedir();
   let trustZone = args.trustZone || DEFAULT_TRUST_ZONE;
   if (trustZone === "auto") {
     trustZone = trustZoneFromHostname();

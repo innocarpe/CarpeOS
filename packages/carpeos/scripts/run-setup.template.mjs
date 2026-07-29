@@ -57,9 +57,7 @@ function printPlan(plan) {
 function runDoctor(home, asJson) {
   const configPath = join(home, "config.json");
   if (!existsSync(configPath)) {
-    process.stderr.write(
-      `no install config at ${configPath}; run: carpeos setup run --apply\n`,
-    );
+    process.stderr.write(`no install config at ${configPath}; run: carpeos setup run --apply\n`);
     return 1;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
@@ -68,9 +66,7 @@ function runDoctor(home, asJson) {
     printJson({ ok: doctor.ok, doctor });
   } else {
     process.stdout.write(
-      doctor.ok
-        ? "CarpeOS setup doctor: PASS\n"
-        : "CarpeOS setup doctor: FAIL\n",
+      doctor.ok ? "CarpeOS setup doctor: PASS\n" : "CarpeOS setup doctor: FAIL\n",
     );
     printJson({ ok: doctor.ok, doctor });
   }
@@ -84,9 +80,7 @@ function runDoctor(home, asJson) {
 function runShow(home, asJson) {
   const configPath = join(home, "config.json");
   if (!existsSync(configPath)) {
-    process.stderr.write(
-      `no install config at ${configPath}; run: carpeos setup run --apply\n`,
-    );
+    process.stderr.write(`no install config at ${configPath}; run: carpeos setup run --apply\n`);
     return 1;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
@@ -181,11 +175,7 @@ export async function runSetup(argv = process.argv.slice(2)) {
       hosts: result.hostResults,
       doctor: result.doctor,
       path_hint: result.state.path_hint,
-      next: [
-        "Open a new shell (or run: hash -r)",
-        "carpeos setup doctor",
-        "carpeos --help",
-      ],
+      next: ["Open a new shell (or run: hash -r)", "carpeos setup doctor", "carpeos --help"],
     };
 
     if (plan.json) {
@@ -194,9 +184,7 @@ export async function runSetup(argv = process.argv.slice(2)) {
       process.stdout.write("Setup complete.\n");
       printJson(payload);
       if (plan.deprecatedYes) {
-        process.stderr.write(
-          "note: --yes is deprecated; prefer: carpeos setup run --apply\n",
-        );
+        process.stderr.write("note: --yes is deprecated; prefer: carpeos setup run --apply\n");
       }
     }
     return result.doctor.ok ? 0 : 1;
@@ -208,8 +196,7 @@ export async function runSetup(argv = process.argv.slice(2)) {
   }
 }
 
-const isMain =
-  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   runSetup().then((code) => {
     process.exitCode = code;
