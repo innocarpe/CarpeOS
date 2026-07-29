@@ -45,6 +45,27 @@ Use fictional, generic, synthetic examples only.
 - Do not rewrite history, force-push, publish packages, or deploy services
   without explicit authorization.
 
+## Release and versioning (all harnesses)
+
+When releasing, publishing to npm, creating git tags, or cutting GitHub
+Releases for `@innocarpe/carpeos`, **load and follow** the shared skill:
+
+- `skills/carpeos-release/SKILL.md`
+
+Policy SSOT:
+
+- `docs/maintainers/versioning-and-releases.md`
+- `CHANGELOG.md`
+- `scripts/release.mjs`
+- `.github/workflows/release.yml`
+
+Do not invent alternate version schemes. Same process for Claude Code, Codex
+CLI, and Grok Build. Install user-global skill links:
+
+```sh
+./scripts/install-release-skill.sh
+```
+
 ## GitHub Label Rules
 
 - Use only labels defined in `.github/labels.json`.
