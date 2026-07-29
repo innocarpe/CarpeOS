@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "planId": "k3-memory-capacity",
+  "createdAt": "2026-07-29T05:00:28.496Z",
+  "updatedAt": "2026-07-29T05:01:41.567Z",
+  "briefPath": ".omc/ultragoal/plans/k3-memory-capacity/brief.md",
+  "goalsPath": ".omc/ultragoal/plans/k3-memory-capacity/goals.json",
+  "ledgerPath": ".omc/ultragoal/plans/k3-memory-capacity/ledger.jsonl",
+  "claudeGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-m1",
+      "title": "M1",
+      "objective": "Land memory capacity ADR, architecture note, master plan, and capacity language in specs",
+      "status": "complete",
+      "attempt": 1,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:01:41.567Z",
+      "startedAt": "2026-07-29T05:01:16.857Z",
+      "completedAt": "2026-07-29T05:01:41.567Z",
+      "evidence": "PR #19 merged to main (09ca89f): ADR 0009, architecture note, master plan, spec cross-links"
+    },
+    {
+      "id": "G002-m3",
+      "title": "M3",
+      "objective": "Add ProcedureTrace capture path on EvidenceArtifact without sixth event_type",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G003-m2m5",
+      "title": "M2M5",
+      "objective": "Implement expert-slot context pack allocator and cache-friendly pack serialization order",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G004-m6",
+      "title": "M6",
+      "objective": "Add hybrid retrieval diversity and quantile balancing without authority changes",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G005-m4",
+      "title": "M4",
+      "objective": "Add compaction projection library and rebuild-safe ledger behavior",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G006-m7",
+      "title": "M7",
+      "objective": "Add multi-resolution latent ladder metadata to retrieval units",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G007-m8",
+      "title": "M8",
+      "objective": "Add long-horizon run ledger projection linked to capture metadata",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G008-m9",
+      "title": "M9",
+      "objective": "Add OpenLoop and dashboard projection package with tests",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    },
+    {
+      "id": "G009-m10",
+      "title": "M10",
+      "objective": "Add Kimi/frontier MCP consumer adapter templates and docs",
+      "status": "pending",
+      "attempt": 0,
+      "createdAt": "2026-07-29T05:00:28.496Z",
+      "updatedAt": "2026-07-29T05:00:28.496Z"
+    }
+  ],
+  "claudeObjective": "Complete all ultragoal stories in .omc/ultragoal/plans/k3-memory-capacity/goals.json: G001-m1 M1; G002-m3 M3; G003-m2m5 M2M5; G004-m6 M6; G005-m4 M4; G006-m7 M7; G007-m8 M8; G008-m9 M9; G009-m10 M10"
+}

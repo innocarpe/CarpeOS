@@ -86,9 +86,18 @@ export type ExternalContentRef = {
   reachability: "online" | "offline_snapshot" | "unreachable";
 };
 
+export type EvidenceKind =
+  | "document"
+  | "image"
+  | "audio"
+  | "dataset"
+  | "message"
+  | "procedure_trace"
+  | "other";
+
 export type EvidenceArtifact = {
   artifact_id: string;
-  kind: "document" | "image" | "audio" | "dataset" | "message" | "other";
+  kind: EvidenceKind;
   media_type: string;
   content_ref: ProtectedValueRef | ExternalContentRef;
   lineage?: ProvenanceRef[];

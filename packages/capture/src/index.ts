@@ -8,6 +8,20 @@ import type {
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
 
+/** Media type for agent thinking/tool histories captured as protected evidence. */
+export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
+
+export type ProcedureTraceCompleteness = "full" | "partial" | "redacted";
+
+export type ProcedureTraceMetadata = {
+  provider: string;
+  session_id: string;
+  turn_id?: string;
+  completeness: ProcedureTraceCompleteness;
+  has_reasoning?: boolean;
+  has_tool_calls?: boolean;
+};
+
 export type CaptureEnvelope = {
   provider: string;
   hook_event_name: string;
@@ -20,6 +34,8 @@ export type CaptureEnvelope = {
   subject_ref?: string;
   trust_zone_id?: string;
   idempotency_key?: string;
+  /** Optional procedure-memory metadata. Does not grant epistemic acceptance. */
+  procedure_trace?: ProcedureTraceMetadata;
 };
 
 export type ProtectedContentDescriptor = {
@@ -104,8 +120,8 @@ export function buildEvidenceArtifactEvent(
     request_fingerprint: requestFingerprint,
     payload: {
       artifact_id: `art_${eventDigest.slice(32, 64)}`,
-      kind: "message",
-      media_type: input.envelope.media_type ?? "application/json",
+      kind: resolveEvidenceKind(input.envelope),
+      media_type: resolveMediaType(input.envelope),
       content_ref: protectedValueRef,
       lineage: provenance,
     },
@@ -160,6 +176,8 @@ export function deriveIdempotencyKey(envelope: CaptureEnvelope, trustZoneId: str
       subject_ref: envelope.subject_ref,
       trust_zone_id: trustZoneId,
       envelope_trust_zone_id: envelope.trust_zone_id,
+      media_type: resolveMediaType(envelope),
+      procedure_trace: envelope.procedure_trace ?? null,
       payload: envelope.payload,
     }),
   ).slice(0, 32)}`;
@@ -177,12 +195,77 @@ export function fingerprintEnvelope(envelope: CaptureEnvelope, trustZoneId: stri
     captured_at: normalizeTimestamp(envelope.captured_at),
     session_id: envelope.session_id,
     source_event_id: envelope.source_event_id,
-    media_type: envelope.media_type,
+    media_type: resolveMediaType(envelope),
     subject_ref: envelope.subject_ref,
     trust_zone_id: trustZoneId,
     envelope_trust_zone_id: envelope.trust_zone_id,
+    procedure_trace: envelope.procedure_trace ?? null,
     payload: envelope.payload,
   });
+}
+
+export function isProcedureTraceMediaType(mediaType: string | undefined): boolean {
+  return mediaType === PROCEDURE_TRACE_MEDIA_TYPE;
+}
+
+export function isProcedureTraceEnvelope(envelope: CaptureEnvelope): boolean {
+  return envelope.procedure_trace !== undefined || isProcedureTraceMediaType(envelope.media_type);
+}
+
+export function resolveMediaType(envelope: CaptureEnvelope): string {
+  if (envelope.media_type !== undefined && envelope.media_type.trim() !== "") {
+    return envelope.media_type;
+  }
+  if (envelope.procedure_trace !== undefined) {
+    return PROCEDURE_TRACE_MEDIA_TYPE;
+  }
+  return "application/json";
+}
+
+export function resolveEvidenceKind(envelope: CaptureEnvelope): "message" | "procedure_trace" {
+  return isProcedureTraceEnvelope(envelope) ? "procedure_trace" : "message";
+}
+
+/**
+ * Build a capture envelope for synthetic or adapter-supplied procedure traces.
+ * Payload remains opaque JSON; callers encrypt it via the local store path.
+ */
+export function buildProcedureTraceEnvelope(input: {
+  provider: string;
+  hook_event_name: string;
+  captured_at: string;
+  session_id: string;
+  payload: unknown;
+  completeness?: ProcedureTraceCompleteness;
+  turn_id?: string;
+  has_reasoning?: boolean;
+  has_tool_calls?: boolean;
+  subject_ref?: string;
+  workspace_root?: string;
+  source_event_id?: string;
+  idempotency_key?: string;
+}): CaptureEnvelope {
+  const completeness = input.completeness ?? "partial";
+  return {
+    provider: input.provider,
+    hook_event_name: input.hook_event_name,
+    captured_at: input.captured_at,
+    session_id: input.session_id,
+    media_type: PROCEDURE_TRACE_MEDIA_TYPE,
+    payload: input.payload,
+    procedure_trace: {
+      provider: input.provider,
+      session_id: input.session_id,
+      completeness,
+      ...(input.turn_id === undefined ? {} : { turn_id: input.turn_id }),
+      ...(input.has_reasoning === undefined ? {} : { has_reasoning: input.has_reasoning }),
+      ...(input.has_tool_calls === undefined ? {} : { has_tool_calls: input.has_tool_calls }),
+    },
+    ...(input.subject_ref === undefined ? {} : { subject_ref: input.subject_ref }),
+    ...(input.workspace_root === undefined ? {} : { workspace_root: input.workspace_root }),
+    ...(input.source_event_id === undefined ? {} : { source_event_id: input.source_event_id }),
+    ...(input.idempotency_key === undefined ? {} : { idempotency_key: input.idempotency_key }),
+  };
 }
 
 export function fingerprintObject(value: unknown): string {
