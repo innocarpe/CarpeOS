@@ -1,4 +1,4 @@
-import { isIdempotencyKey, stableJson } from "@carpeos/capture";
+import { isIdempotencyKey } from "@carpeos/capture";
 import {
   IdempotencyConflictError,
   isTrustZoneId,
@@ -37,6 +37,11 @@ import type {
   MemoryTraceInput,
   RetrievalQuery,
 } from "@carpeos/schema";
+import {
+  budgetContextPackWithExpertSlots,
+  type ClassifiedPackSections,
+  stableLength,
+} from "./expert-slots.js";
 
 export const CARPEOS_MCP_TOOLS = [
   "memory_search",
@@ -239,11 +244,21 @@ export class CarpeosMcpApplication {
       ...(input.recorded_time === undefined ? {} : { recordedTime: input.recorded_time }),
     });
     const classified = classifyContext(snapshot, visibility);
-    const budgeted = budgetContextPack(classified, input.context_budget);
+    const budgeted = budgetContextPackWithExpertSlots(classified, input.context_budget);
+    // Cache-friendly key insertion order: durable accepted knowledge first.
     return {
       schema_version: "v1",
       tool: "memory_context_pack",
-      ...budgeted.output,
+      accepted_facts: budgeted.output.accepted_facts as AcceptedFact[],
+      conflicts: budgeted.output.conflicts as McpRecordRef[],
+      supersessions: budgeted.output.supersessions as McpRecordRef[],
+      observations: budgeted.output.observations as McpRecordRef[],
+      evidence_summaries: budgeted.output.evidence_summaries as McpRecordRef[],
+      draft_claims: budgeted.output.draft_claims as DraftClaim[],
+      rejected_claims: budgeted.output.rejected_claims as DraftClaim[],
+      erasures: budgeted.output.erasures as McpRecordRef[],
+      verification_gaps: budgeted.output.verification_gaps,
+      redactions: budgeted.output.redactions,
       budget: budgeted.budget,
     };
   }
@@ -576,7 +591,10 @@ function erasureToRecordRef(snapshot: LocalErasureSnapshot): McpRecordRef {
   };
 }
 
-function classifyContext(snapshot: LocalRetrievalInputSnapshot, visibility: McpVisibility) {
+function classifyContext(
+  snapshot: LocalRetrievalInputSnapshot,
+  visibility: McpVisibility,
+): ClassifiedPackSections {
   const events = snapshot.events.map((item) => item.event);
   const context = buildEligibilityContext(snapshot, visibility);
   const eventsByClaimId = new Map(
@@ -585,10 +603,10 @@ function classifyContext(snapshot: LocalRetrievalInputSnapshot, visibility: McpV
       .map((event) => [event.payload.claim_id, event]),
   );
 
-  const accepted_facts: AcceptedFact[] = [];
-  const draft_claims: DraftClaim[] = [];
-  const rejected_claims: DraftClaim[] = [];
-  const conflicts: McpRecordRef[] = [];
+  const accepted_facts: ClassifiedPackSections["accepted_facts"] = [];
+  const draft_claims: ClassifiedPackSections["draft_claims"] = [];
+  const rejected_claims: ClassifiedPackSections["rejected_claims"] = [];
+  const conflicts: ClassifiedPackSections["conflicts"] = [];
   const redactions: string[] = [];
 
   for (const claim of [...eventsByClaimId.values()].sort(compareEvents)) {
@@ -603,30 +621,52 @@ function classifyContext(snapshot: LocalRetrievalInputSnapshot, visibility: McpV
     if ((accepted !== undefined && rejected !== undefined) || hasContradictingSupport(claim)) {
       const claimSnapshot = snapshot.events.find((item) => item.event_id === claim.event_id);
       if (claimSnapshot !== undefined) {
-        conflicts.push(snapshotToRecordRef(claimSnapshot, visibility.protected_value_policy));
+        const value = snapshotToRecordRef(claimSnapshot, visibility.protected_value_policy);
+        conflicts.push({ diversity_key: claim.subject_ref, value });
       }
     }
     if (accepted !== undefined && acceptedFactEligible(claim, context)) {
-      accepted_facts.push({
+      const value: AcceptedFact = {
         claim_event_id: claim.event_id,
         acceptance_decision_event_id: accepted.event_id,
         statement: claim.payload.statement,
         source_event_ids: uniqueSorted([claim.event_id, accepted.event_id, ...supportEventIds]),
-      });
+      };
+      accepted_facts.push({ diversity_key: claim.subject_ref, value });
     } else if (rejected !== undefined) {
-      rejected_claims.push({
+      const value: DraftClaim = {
         claim_event_id: claim.event_id,
         statement: claim.payload.statement,
         support_event_ids: supportEventIds,
         status: "draft",
-      });
+      };
+      rejected_claims.push({ diversity_key: claim.subject_ref, value });
     } else if (claim.lifecycle_status === "draft") {
-      draft_claims.push({
+      const value: DraftClaim = {
         claim_event_id: claim.event_id,
         statement: claim.payload.statement,
         support_event_ids: supportEventIds,
         status: "draft",
-      });
+      };
+      draft_claims.push({ diversity_key: claim.subject_ref, value });
+    }
+  }
+
+  const procedure_summaries: ClassifiedPackSections["procedure_summaries"] = [];
+  const evidence_summaries: ClassifiedPackSections["evidence_summaries"] = [];
+  for (const item of snapshot.events.filter((event) => event.event_type === "EvidenceArtifact")) {
+    const value = snapshotToRecordRef(item, visibility.protected_value_policy);
+    const slot = {
+      diversity_key: item.event.subject_ref,
+      value,
+    };
+    if (
+      item.event.event_type === "EvidenceArtifact" &&
+      item.event.payload.kind === "procedure_trace"
+    ) {
+      procedure_summaries.push(slot);
+    } else {
+      evidence_summaries.push(slot);
     }
   }
 
@@ -636,73 +676,25 @@ function classifyContext(snapshot: LocalRetrievalInputSnapshot, visibility: McpV
     rejected_claims,
     observations: snapshot.events
       .filter((item) => item.event_type === "Observation")
-      .map((item) => snapshotToRecordRef(item, visibility.protected_value_policy)),
-    evidence_summaries: snapshot.events
-      .filter((item) => item.event_type === "EvidenceArtifact")
-      .map((item) => snapshotToRecordRef(item, visibility.protected_value_policy)),
+      .map((item) => ({
+        diversity_key: item.event.subject_ref,
+        value: snapshotToRecordRef(item, visibility.protected_value_policy),
+      })),
+    evidence_summaries,
+    procedure_summaries,
     conflicts,
     supersessions: snapshot.events
       .filter((item) => item.event_type === "Supersession")
-      .map((item) => snapshotToRecordRef(item, visibility.protected_value_policy)),
-    erasures: snapshot.erasures.map(erasureToRecordRef),
+      .map((item) => ({
+        diversity_key: item.event.subject_ref,
+        value: snapshotToRecordRef(item, visibility.protected_value_policy),
+      })),
+    erasures: snapshot.erasures.map((item) => ({
+      diversity_key: item.trust_zone_id,
+      value: erasureToRecordRef(item),
+    })),
     verification_gaps: [],
     redactions: uniqueSorted(redactions),
-  };
-}
-
-function budgetContextPack(
-  output: Omit<ContextPackOutput, "schema_version" | "tool" | "budget">,
-  budget: ContextBudget,
-): {
-  output: Omit<ContextPackOutput, "schema_version" | "tool" | "budget">;
-  budget: ContextBudgetUsage;
-} {
-  const sections = [
-    "accepted_facts",
-    "draft_claims",
-    "rejected_claims",
-    "observations",
-    "evidence_summaries",
-    "conflicts",
-    "supersessions",
-    "erasures",
-  ] as const;
-  let usedItems = 0;
-  let usedCharacters = 0;
-  let omittedItems = 0;
-  let omittedCharacters = 0;
-  const next: typeof output = {
-    accepted_facts: [],
-    draft_claims: [],
-    rejected_claims: [],
-    observations: [],
-    evidence_summaries: [],
-    conflicts: [],
-    supersessions: [],
-    erasures: [],
-    verification_gaps: [...output.verification_gaps],
-    redactions: [...output.redactions],
-  };
-  for (const section of sections) {
-    for (const item of output[section]) {
-      const chars = stableLength(item);
-      if (usedItems + 1 > budget.max_items || usedCharacters + chars > budget.max_characters) {
-        omittedItems += 1;
-        omittedCharacters += chars;
-        continue;
-      }
-      (next[section] as unknown[]).push(item);
-      usedItems += 1;
-      usedCharacters += chars;
-    }
-  }
-  return {
-    output: next,
-    budget: {
-      used: { items: usedItems, characters: usedCharacters },
-      truncated: omittedItems > 0 || omittedCharacters > 0,
-      omitted: { items: omittedItems, characters: omittedCharacters },
-    },
   };
 }
 
@@ -1069,10 +1061,6 @@ function compareRecordRefsByTime(snapshot: LocalRetrievalInputSnapshot) {
   return (left: McpRecordRef, right: McpRecordRef) =>
     (times.get(left.record_id) ?? "").localeCompare(times.get(right.record_id) ?? "") ||
     compareRecordRefs(left, right);
-}
-
-function stableLength(value: unknown): number {
-  return stableJson(value).length;
 }
 
 function uniqueSorted(values: readonly string[]): string[] {
