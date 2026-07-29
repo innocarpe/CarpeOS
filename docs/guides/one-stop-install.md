@@ -1,10 +1,37 @@
 # One-Stop Local Install
 
-Status: implemented installer for a **git checkout**. Not a published npm global
-package. Synthetic docs only — real private paths stay on the operator machine.
+Status: **two supported install paths** — npm global and git checkout. Synthetic
+docs only for private paths; real runtime data stays on the operator machine.
 
 This is the supported path to set up CarpeOS on a MacBook, Mac mini, or a new
 Mac so CLI wrappers and agent MCP registrations land the same way every time.
+
+## Path A — npm global (end users)
+
+```sh
+npm install -g @innocarpe/carpeos
+carpeos setup --yes
+carpeos setup --doctor
+```
+
+Or the Codex-style one-liner:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
+```
+
+Package source: `packages/carpeos` → npm name `@innocarpe/carpeos`.
+
+Publishing (maintainers, requires npm login + `@innocarpe` org access):
+
+```sh
+pnpm --filter @innocarpe/carpeos build
+pnpm --filter @innocarpe/carpeos exec npm publish --access public
+```
+
+## Path B — git checkout (contributors / pre-publish)
+
+Use this when developing from source or before the package is published.
 
 ## What it installs
 

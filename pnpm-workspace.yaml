@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "adapters/*"
+  # packages/carpeos is the public npm package (@innocarpe/carpeos)
 allowBuilds:
   esbuild: true
   workerd: true

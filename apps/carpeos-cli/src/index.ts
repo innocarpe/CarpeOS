@@ -63,6 +63,11 @@ export async function runCli(
         return runRetrieval(rest, env);
       case "memory":
         return await runMemory(rest, env);
+      case "setup":
+      case "doctor":
+        throw new CliUsageError(
+          "setup/doctor are provided by the @innocarpe/carpeos package entrypoint (carpeos setup). If you are in a git checkout, use: node scripts/install-local.mjs",
+        );
       default:
         throw new CliUsageError(`unknown command: ${command}`);
     }
