@@ -2,14 +2,14 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { CaptureEnvelope } from "@carpeos/capture";
+import { hashHex } from "@carpeos/capture";
 import type {
   CanonicalEvent,
   ErasureLedgerRecord,
   ProtectedValueMetadata,
   ProtectedValueUploadIntent,
 } from "@carpeos/schema";
-import type { CaptureEnvelope } from "@carpeos/capture";
-import { hashHex } from "@carpeos/capture";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertPrivateKeyFileModes,
@@ -751,6 +751,66 @@ describe("LocalCaptureStore", () => {
     expect(() =>
       target.importPulledEvent({ ...event, subject_ref: "subject_changed" }, now),
     ).toThrow(/replay diverges/);
+  });
+
+  it("treats same-origin pull as replay when only remote zone_sequence was assigned", () => {
+    const trustZoneId = "tz_same_origin_pull";
+    const runtimeDir = tempDir();
+    const store = new LocalCaptureStore({
+      runtimeDir,
+      workspaceRoot: runtimeDir,
+      trustZoneId,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+      clock: { now: () => now },
+    });
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { transcript: "same origin pull secret" } }),
+    );
+    expect(captured.event.zone_sequence).toBeUndefined();
+
+    const transfer = store.exportProtectedValueForSync({
+      protectedValueId: captured.protected_value_id,
+      trustZoneSyncKey,
+    });
+    const remoteEvent = { ...captured.event, zone_sequence: 4 };
+    const metadata = metadataFromIntent(transfer.intent, captured.event.event_id);
+
+    const result = store.importPulledProtectedValue({
+      event: remoteEvent,
+      metadata,
+      ciphertext: transfer.ciphertext,
+      trustZoneSyncKey,
+    });
+    expect(result).toEqual({
+      status: "replay",
+      event_id: captured.event.event_id,
+      protected_value_id: captured.protected_value_id,
+    });
+    // Local origin event stays without zone_sequence; content is unchanged.
+    expect(store.getEvent(captured.event.event_id)).toEqual(captured.event);
+    expect(store.countRows("protected_value_imports")).toBe(1);
+
+    // Real content divergence still fails closed.
+    expect(() =>
+      store.importPulledProtectedValue({
+        event: { ...remoteEvent, subject_ref: "subject_tampered" },
+        metadata,
+        ciphertext: transfer.ciphertext,
+        trustZoneSyncKey,
+      }),
+    ).toThrow(/replay diverges/);
+
+    // Non-protected same-origin path.
+    const general = makeExternalEvent("evt_same_origin_general01", trustZoneId);
+    // Simulate local origin by storing without zone_sequence first via capture-shaped insert:
+    // import without sequence, then re-pull with sequence only.
+    const withoutSequence = { ...general };
+    delete (withoutSequence as { zone_sequence?: number }).zone_sequence;
+    expect(store.importPulledEvent(withoutSequence as typeof general, now).status).toBe("imported");
+    expect(
+      store.importPulledEvent({ ...withoutSequence, zone_sequence: 9 } as typeof general, now)
+        .status,
+    ).toBe("replay");
   });
 
   it("rejects pulled events and erasures outside the local trust zone", () => {
