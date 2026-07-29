@@ -61,8 +61,10 @@ Summary:
 1. Public install path (`npm i -g` + `carpeos setup`) is green on a clean machine
 2. CLI + setup expose complete `--help`; README matches reality
 3. MCP smoke (search / context-pack) documented and CI-covered
-4. CHANGELOG lists a deliberate “v1 contract” section; no open “will rename soon” known breaks
-5. Maintainer decision recorded (PR or release notes) — not an automatic version bump
+4. CHANGELOG lists a deliberate “v1 contract” section; no open “will rename soon”
+   known breaks — see [Compatibility and Deprecations](compatibility-and-deprecations.md)
+5. Maintainer decision recorded via [v1 freeze decision](v1-freeze-decision.md)
+   (or equivalent release notes) — not an automatic version bump
 
 ### After `1.0.0`
 

@@ -30,17 +30,17 @@ sync polish, production embeddings, or full session-capture UX.
 Update the **Status** column as work lands. Status values: `done` · `partial` ·
 `todo` · `n/a`.
 
-| # | Gate | Status (as of G6 migration PR) | Evidence / notes |
+| # | Gate | Status (as of G8 inventory PR) | Evidence / notes |
 | --- | --- | --- | --- |
-| G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **partial** | Verified on maintainer Mac for 0.1.1/0.1.2; keep re-checking each release |
-| G2 | CLI + setup expose complete `--help`; README matches reality | **partial** | Help shipped in 0.1.2; keep README/setup docs in sync on every surface change |
-| G3 | `carpeos version` reports published package version | **done** (this PR) | `carpeos version` / `-V`; npm build embeds package version |
-| G4 | Exit codes documented (help + this doc) | **done** (this PR) | Root `--help` + table below |
+| G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **done** | Recheck procedure below; verified on maintainer Mac through 0.1.3 |
+| G2 | CLI + setup expose complete `--help`; README matches reality | **done** | Root/command help (0.1.2+), setup help, README install paths aligned |
+| G3 | `carpeos version` reports published package version | **done** | `carpeos version` / `-V`; npm build embeds package version |
+| G4 | Exit codes documented (help + this doc) | **done** | Root `--help` + table below |
 | G5 | MCP smoke (list / search / context-pack) documented + CI or scripted gate | **done** | `pnpm smoke:mcp` (`scripts/smoke-mcp.mjs`) + CI step “Run MCP smoke (G5)” |
 | G6 | Local store migration story written; no silent wipe of existing homes | **done** | [`docs/architecture/local-store-migrations.md`](../architecture/local-store-migrations.md) + preserve-events test |
 | G7 | MCP tool contract inventory (names + schema versions) frozen in docs | **done** | [`docs/contracts/mcp-tools-v1.md`](../contracts/mcp-tools-v1.md) + JSON + `tool-inventory.test.ts` |
-| G8 | No open “will rename soon” breaks in CHANGELOG / known issues | **partial** | Pre-1.0: breaking still allowed as MINOR; clear list before 1.0 |
-| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **todo** | Deliberate; never automatic from release.mjs alone |
+| G8 | No open “will rename soon” breaks in CHANGELOG / known issues | **done** | [`compatibility-and-deprecations.md`](compatibility-and-deprecations.md) — planned breaks empty |
+| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **todo** | Use [v1 freeze decision template](v1-freeze-decision.md) when ready |
 
 ## Explicit non-goals for 1.0
 
@@ -74,6 +74,30 @@ capture fails, so the host agent can continue.
    in the same PR (or the release PR).
 3. Tag `v1.0.0` only when **G1–G9** are `done` (or consciously `n/a` with
    written rationale) **and** a maintainer records the freeze decision.
+
+## G1 recheck procedure (each public release)
+
+On a machine with Node ≥ 22.22 (or a clean temp profile):
+
+```sh
+npm install -g @innocarpe/carpeos@<version>
+carpeos version
+carpeos setup plan
+carpeos setup run --apply
+carpeos setup doctor
+pnpm smoke:mcp   # from a git checkout of the same tag (monorepo gate)
+```
+
+Record version, OS, and pass/fail in the release PR or freeze decision.
+
+## G2 doc sync checklist
+
+When changing CLI/setup/MCP surfaces:
+
+- [ ] `carpeos --help` / `carpeos setup --help` match behavior
+- [ ] Root README EN/KO install snippets
+- [ ] `packages/carpeos/README.md`
+- [ ] Relevant `docs/guides/*` and contracts if MCP-shaped
 
 ## Suggested 1.0 CHANGELOG shape
 
