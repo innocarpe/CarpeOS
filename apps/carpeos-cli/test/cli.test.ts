@@ -134,6 +134,62 @@ describe("carpeos CLI", () => {
     });
   });
 
+  it("defaults capture trust zone from config.json then env, with --trust-zone winning", () => {
+    const context = makeContext();
+    writeFileSync(
+      join(context.home, "config.json"),
+      `${JSON.stringify({ trust_zone_id: "tz_local_default", schema_version: "v1" }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    const fromConfig = runJson(
+      ["capture-hook", "--provider", "codex"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_config_tz",
+        message: "config default zone",
+      }),
+    );
+    expect(fromConfig.status).toBe(0);
+    expect(fromConfig.stdout.trust_zone_id).toBe("tz_local_default");
+
+    const fromEnv = spawnSync(process.execPath, [cliPath, "capture-hook", "--provider", "codex"], {
+      cwd: context.cwd,
+      env: {
+        ...process.env,
+        CARPEOS_HOME: context.home,
+        CARPEOS_MCP_TRUST_ZONE: "tz_from_env_zone",
+      },
+      input: JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_env_tz",
+        message: "env zone",
+      }),
+      encoding: "utf8",
+    });
+    expect(fromEnv.status).toBe(0);
+    const envStdout = JSON.parse(fromEnv.stdout.trim()) as { trust_zone_id?: string };
+    expect(envStdout.trust_zone_id).toBe("tz_from_env_zone");
+
+    const fromFlag = runJson(
+      ["capture-hook", "--provider", "codex", "--trust-zone", "tz_from_flag_zone"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_flag_tz",
+        message: "flag zone",
+      }),
+    );
+    expect(fromFlag.status).toBe(0);
+    expect(fromFlag.stdout.trust_zone_id).toBe("tz_from_flag_zone");
+
+    // Without flags/env, identify/status use config.json trust zone.
+    const identified = runJson(["project", "identify"], context);
+    expect(identified.status).toBe(0);
+    expect(identified.stdout.trust_zone_id).toBe("tz_local_default");
+  });
+
   it("leases and acknowledges outbox items with the matching lease id", () => {
     const context = makeContext();
     const raw = JSON.stringify({

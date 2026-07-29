@@ -760,15 +760,55 @@ function compactCommonOptions(
 
 function openStore(options: CommonOptions, env: NodeJS.ProcessEnv): LocalCaptureStore {
   const runtimeDir = options.home ?? runtimeDirFromEnv(env);
-  if (options.trustZone !== undefined && !isTrustZoneId(options.trustZone)) {
-    throw new CliUsageError("--trust-zone must match tz_[a-z0-9][a-z0-9_-]{2,63}");
+  const trustZoneId = resolveTrustZoneId(options.trustZone, env, runtimeDir);
+  if (trustZoneId !== undefined && !isTrustZoneId(trustZoneId)) {
+    throw new CliUsageError(
+      "trust zone must match tz_[a-z0-9][a-z0-9_-]{2,63} (--trust-zone, CARPEOS_TRUST_ZONE / CARPEOS_MCP_TRUST_ZONE, or config.json trust_zone_id)",
+    );
   }
   return new LocalCaptureStore({
     runtimeDir,
     workspaceRoot: process.cwd(),
     ...(options.projectId === undefined ? {} : { explicitProjectId: options.projectId }),
-    ...(options.trustZone === undefined ? {} : { trustZoneId: options.trustZone }),
+    ...(trustZoneId === undefined ? {} : { trustZoneId }),
   });
+}
+
+/**
+ * Resolve the active trust zone for a CLI command.
+ *
+ * Precedence:
+ * 1. explicit `--trust-zone`
+ * 2. `CARPEOS_TRUST_ZONE` or `CARPEOS_MCP_TRUST_ZONE` (installer writes the latter)
+ * 3. `~/.carpeos/config.json` `trust_zone_id` (installer default `tz_local_default`)
+ * 4. omit → LocalCaptureStore device-derived `tz_local_<client_suffix>`
+ */
+function resolveTrustZoneId(
+  explicit: string | undefined,
+  env: NodeJS.ProcessEnv,
+  runtimeDir: string,
+): string | undefined {
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  const fromEnv = firstConfigured(env.CARPEOS_TRUST_ZONE, env.CARPEOS_MCP_TRUST_ZONE);
+  if (fromEnv !== undefined) {
+    return fromEnv;
+  }
+  return readTrustZoneFromHomeConfig(runtimeDir);
+}
+
+function readTrustZoneFromHomeConfig(runtimeDir: string): string | undefined {
+  try {
+    const raw = readFileSync(join(runtimeDir, "config.json"), "utf8");
+    const parsed = JSON.parse(raw) as { trust_zone_id?: unknown };
+    if (typeof parsed.trust_zone_id === "string" && parsed.trust_zone_id.trim().length > 0) {
+      return parsed.trust_zone_id.trim();
+    }
+  } catch {
+    // Missing or unreadable config is fine; fall through to device default.
+  }
+  return undefined;
 }
 
 function isHelpToken(value: string | undefined): boolean {
@@ -846,7 +886,8 @@ COMMANDS
 COMMON OPTIONS (most store commands)
   --home <path>        Runtime home (default: $CARPEOS_HOME or ~/.carpeos)
   --project-id <id>    Override project id
-  --trust-zone <id>    Trust zone id (tz_…); required for memory/retrieval
+  --trust-zone <id>    Trust zone (tz_…). Default: flag → CARPEOS_TRUST_ZONE /
+                       CARPEOS_MCP_TRUST_ZONE → config.json → device-local tz
 
 GLOBAL FLAGS
   -h, --help           Show help
