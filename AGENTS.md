@@ -47,18 +47,12 @@ Use fictional, generic, synthetic examples only.
 
 ## GitHub Label Rules
 
-- Apply pull request labels from all five required groups: type, area, size,
-  status, and milestone.
-- Every pull request must have exactly one type label, at least one area label,
-  exactly one size label, exactly one status label, and exactly one milestone
-  label.
-- Compute the size label from GitHub additions plus deletions.
-- Set a new ready pull request to `status:needs-review`; after all gates are
-  ready, transition it to `status:ready`; use `status:blocked` or
-  `status:changes-requested` when those states apply; after merge, transition
-  the status label to `status:merged`.
-- Use only labels defined in `.github/labels.json`; never invent labels outside
-  the catalog.
+- Use only labels defined in `.github/labels.json`.
+- Keep tagging light: one kind label (`feat`, `fix`, `docs`, `spec`, or
+  `chore`) plus an optional area label when it helps discovery.
+- Do not invent size, status, or milestone labels. Review state lives in the PR
+  conversation; milestones use GitHub Milestones when needed.
+- See `docs/maintainers/github-labels.md` for the full catalog guidance.
 
 ## Verification Rules
 
