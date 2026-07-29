@@ -27,9 +27,9 @@ stable through `@innocarpe/carpeos@0.2.1`. Freeze is still deferred because:
    prefers `config.json` / installer env over device-derived `tz_local_<client>`.
    That is the right fix, but it deserves a short **soak** on real maintainer
    homes before locking the surface as 1.0.
-2. **G1 recheck on 0.2.1** has not been re-run end-to-end on a *clean* profile
-   (only ongoing maintainer Mac dogfood). Readiness requires the recheck
-   procedure before a freeze claim.
+2. **G1 recheck on 0.2.1 is now recorded** (see below) on a clean temp profile.
+   Remaining freeze blockers are soak judgment and explicit Approve, not missing
+   G1 evidence.
 3. **Private hosted sync dogfood** closed a single-Mac push→pull loop after 0.2.1
    Worker redeploy, but hosted Cloudflare remains an explicit **1.0 non-goal** and
    must not be mistaken for a freeze requirement *or* proof that the public npm
@@ -38,15 +38,39 @@ stable through `@innocarpe/carpeos@0.2.1`. Freeze is still deferred because:
    green checklists. Prefer one more patch/minor cycle (or explicit soak notes)
    over rushing `1.0.0` for momentum.
 
+### G1 recheck evidence (`@innocarpe/carpeos@0.2.1`)
+
+Recorded **2026-07-30** (UTC date of run; local maintainer machine). Clean
+temporary home + bin-dir (not the day-to-day `~/.carpeos`). Public-safe summary:
+
+| Step | Result |
+| --- | --- |
+| `npm i -g @innocarpe/carpeos@0.2.1` + `carpeos version` | **pass** — `version: 0.2.1` |
+| `carpeos setup plan --home <tmp> --bin-dir <tmpbin> --trust-zone tz_local_default --register-mcp false` | **pass** (exit 0) |
+| `carpeos setup run --apply` (same flags) | **pass** (exit 0); wrote `config.json`, `mcp.env`, store, wrappers |
+| `carpeos setup doctor` | **pass** — `CarpeOS setup doctor: PASS`, `failures: []` |
+| `carpeos project identify --home <tmp>` | **pass** — `trust_zone_id: tz_local_default`, `trust_zone_source: config` |
+| `carpeos sync status --home <tmp>` | **pass** — same zone/source; empty outbox |
+| `pnpm smoke:mcp` from monorepo at `origin/main` (after `pnpm build`) | **pass** — unit smokes + CLI process smoke |
+
+Notes:
+
+- `--register-mcp false` kept agent host configs out of the clean-profile run so
+  the recheck isolates runtime home creation, wrapper install, and store init
+  (G1 core). MCP host registration remains covered by normal maintainer setup
+  and G5 CI smoke.
+- Ephemeral temp directories used for the recheck are discarded and are not
+  durable evidence locations.
+
 ### Criteria to flip to Approve
 
 All of the following should be true (or consciously waived in writing):
 
-| # | Criterion | Status at this decision |
+| # | Criterion | Status |
 | --- | --- | --- |
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
-| 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **open** |
+| 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section) |
 | 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | open (watch trust-zone defaulting feedback) |
 | 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | not yet |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
@@ -57,7 +81,7 @@ Copied from [v1-readiness.md](v1-readiness.md) and release history through `0.2.
 
 | Gate | Status | Notes / evidence |
 | --- | --- | --- |
-| G1 install | **done** (recheck open on 0.2.1) | Setup plan/run/doctor through 0.1.x–0.2.x; **re-run clean-profile procedure on 0.2.1 before Approve** |
+| G1 install | **done** | Clean-profile recheck on **0.2.1** recorded above (plan/run/doctor/identify + monorepo `pnpm smoke:mcp`) |
 | G2 help/docs | **done** | Root/command help, setup help, README install paths |
 | G3 version | **done** | `carpeos version` / `-V`; npm embeds package version (`0.2.1` verified post-publish) |
 | G4 exit codes | **done** | Root help + readiness table `0|1|2|3|4` |
