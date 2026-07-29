@@ -10,9 +10,40 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
+Post-`0.2.0` local/sync completeness from private dogfood (hosted Cloudflare remains
+operator-private; not required for `1.0.0` per v1 readiness non-goals).
+
 ### Added
 
-- (none yet — fold entries here before the next release)
+- `carpeos project identify` / `carpeos sync status`: `trust_zone_source`
+  (`flag` | `env` | `config` | `device_default`) so operators can see how the
+  active zone was resolved
+- `carpeos outbox status` → `errors[]` and `carpeos sync status` →
+  `local.outbox_errors[]` for pending/leased rows with `last_error`
+- Shared PR authoring skill `skills/carpeos-pr` + `./scripts/install-pr-skill.sh`
+  (Claude Code / Codex / Grok); expanded `.github/PULL_REQUEST_TEMPLATE.md`
+- Cloudflare sync guide: trust-zone resolution order, status diagnosis fields,
+  same-device push→pull as sequence-only replay
+
+### Fixed
+
+- Sync Worker: rebind `protected_value_uploads` on conflict when re-uploading
+  under a different trust zone (stale wrong-zone row no longer blocks push)
+- Sync client: fail closed **before network** when outbox trust zone ≠ store
+  zone; release blocked leases (delay 0) instead of leaving rows stuck `leased`
+- Sync client: transport failures include `HTTP {status}` in the message (no
+  response bodies)
+- Local store: same-origin pull treats remote-only `zone_sequence` as idempotent
+  **replay** (content divergence still fails closed)
+- CLI: default trust zone prefers `--trust-zone` → `CARPEOS_TRUST_ZONE` /
+  `CARPEOS_MCP_TRUST_ZONE` → `config.json` `trust_zone_id` before device-derived
+  `tz_local_<client>` (aligns with installer `tz_local_default`)
+
+### Changed
+
+- `carpeos sync status` reports `outbox_trust_zone_ids`,
+  `outbox_trust_zone_mismatch`, and structured `warnings` when outbox zones
+  disagree with the active store zone
 
 ## [0.2.0] - 2026-07-30
 
