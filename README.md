@@ -8,79 +8,78 @@
 
 **Capture context. Compound knowledge.**
 
-CarpeOS is a **personal knowledge operating system for AI-assisted work**.
+CarpeOS is a personal knowledge system for people who work with AI agents.
 
-It captures what your agents do, turns that work into provenance-aware knowledge,
-and gives both **humans and LLMs** a reliable way to retrieve it later — across
-sessions, tools, and machines.
+It records what happened in those sessions, keeps the trail of where each piece
+came from, and makes that history searchable later — by you or by another
+agent — without dumping everything into one chat log.
 
 <p align="center">
-  <img src="docs/assets/readme-hero.jpg" alt="Abstract network of knowledge nodes converging into a core" width="920" />
+  <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/architecture-flow.svg" alt="Capture, canonicalize, sync and retrieve, then use from MCP, CLI, and Obsidian" width="920" />
+  <img src="docs/assets/architecture-flow.svg" alt="Capture, store, sync, then use from MCP, CLI, and Obsidian" width="920" />
 </p>
 
 ---
 
-## Why CarpeOS exists
+## Why this exists
 
-Modern AI work leaves valuable residue — decisions, failed paths, accepted
-facts, open questions — then scatters it across chat transcripts, terminals,
-and notes. Next session, the next agent starts cold.
+You finish a long agent session with a real decision, a half-finished plan, or
+a bug path you do not want to rediscover. A week later that context is split
+across chat history, terminal scrollback, and a few notes — and the next agent
+has none of it.
 
-CarpeOS treats that residue as a **durable knowledge plane**:
+CarpeOS is an attempt to keep that context in one place you control, with
+enough structure that “we decided X” is not treated the same as “the model
+once suggested X.”
 
-| Pain today | What CarpeOS aims for |
+| Common problem | Approach here |
 | --- | --- |
-| Chat history is ephemeral and hard to trust | Append-only events with provenance |
-| “Memory” is a bag of embeddings | Claims, acceptance, and supersession stay separate |
-| Each agent has its own silo | Provider-neutral capture + shared MCP retrieval |
-| Notes and indexes become the source of truth | Rebuildable projections over a private canonical store |
-| Cross-device continuity is messy | Local-first capture with private sync |
+| Chat history disappears or is hard to trust | Append-only events with provenance |
+| “Memory” is mostly embeddings | Claims, acceptance, and supersession stay separate records |
+| Each tool keeps its own silo | Shared capture + MCP retrieval, provider-agnostic |
+| Generated notes become the only source of truth | Notes and indexes are rebuildable projections |
+| Two machines, messy continuity | Local-first store, optional private sync |
 
-> **Public implementation. Private knowledge.**  
-> This repository ships design, specs, and code. It never stores your real
-> sessions, projects, or credentials.
-
----
-
-## When you should use it
-
-CarpeOS is a good fit when you:
-
-- **Live in multiple AI agents** (Codex, Claude Code, Grok Build, …) and want
-  one memory plane instead of five chat histories.
-- **Need decisions to survive** the next session — not just “the model once said so.”
-- **Care about authority** — draft claims, rejected claims, and accepted facts
-  should not look the same in retrieval.
-- **Want local-first privacy** with an optional private cloud sync path you
-  operate yourself.
-- **Prefer contracts over vibes** — schemas, trust zones, erasure, and tests as
-  first-class artifacts.
-
-It is **not** (yet) a packaged end-user product, a hosted SaaS memory service,
-or a replacement for your editor. It is infrastructure for people who build
-with agents every day and want knowledge that compounds.
+> **Public code. Private knowledge.**  
+> This repo has design, specs, and implementation. Your real sessions,
+> projects, and credentials stay on your side.
 
 ---
 
-## What you get
+## Who it’s for
 
-### Capture from the agents you already use
+Useful if you:
 
-Hook templates normalize selected lifecycle events from Codex, Claude Code, and
-Grok Build into a provider-neutral capture envelope. Raw payloads can stay in
-encrypted protected-value storage; the canonical layer keeps metadata and
-references.
+- Switch between agents (Codex, Claude Code, Grok Build, …) and do not want a
+  separate memory story for each one
+- Need last week’s decisions still available, not buried in an old transcript
+- Care whether something is a draft, rejected, or actually accepted when you
+  search for it
+- Want data local by default, with sync you run yourself if you need it
+- Prefer explicit schemas and tests over a black-box “memory product”
 
-### A knowledge model that preserves authority
+Not a polished consumer app yet. Not hosted SaaS. Not a replacement for your
+editor. Closer to plumbing for people who already live in agent workflows.
 
-Evidence is not a claim. A claim is not an accepted fact. Acceptance and
-supersession are separate immutable records. Retrieval can therefore surface
-**what is known, what is proposed, and what was overturned** without flattening
-everything into one blob of text.
+---
+
+## What’s in the box
+
+### Capture from tools you already use
+
+Hook templates map selected lifecycle events from Codex, Claude Code, and Grok
+Build into a common capture shape. Raw payloads can sit in encrypted storage;
+the event log keeps metadata and references.
+
+### A model that does not flatten status
+
+Evidence is not a claim. A claim is not “true” just because it exists.
+Acceptance and supersession are their own records. Search can show what is
+settled, what is only proposed, and what was replaced — without stuffing it all
+into one paragraph of vector text.
 
 ```mermaid
 flowchart LR
@@ -88,42 +87,42 @@ flowchart LR
   O --> C[Claim]
   C --> A[AcceptanceDecision]
   C --> S[Supersession]
-  A --> F[Accepted fact<br/>query-time derivation]
+  A --> F[Accepted fact<br/>derived at query time]
   S --> F
 ```
 
-### Retrieval humans and agents can share
+### Interfaces for people and agents
 
-- **CLI** — rebuild projections, embed (dev), `memory search` / `memory get`
-- **MCP (stdio)** — eight local tools including `memory_context_pack`,
-  `memory_trace`, `memory_capture`, and `memory_propose_claim`
-- **Obsidian projection** — manifest-bounded Markdown generated from the local
-  store (projection only; not canonical authority)
+- **CLI** — rebuild, embed (dev), `memory search` / `memory get`
+- **MCP (stdio)** — eight local tools (`memory_context_pack`, `memory_trace`,
+  `memory_capture`, `memory_propose_claim`, …)
+- **Obsidian projection** — Markdown files generated from the local store
+  (projection only; not the source of truth)
 
-### Local-first, privately syncable
+### Local first, sync optional
 
-Each device writes an append-only outbox. A Cloudflare Worker/D1/R2 path exists
-as deployable code for private operators. Projections can always be rebuilt from
-canonical events.
+Each machine writes to a local outbox. There is deployable Cloudflare
+Worker/D1/R2 code if you want private multi-device sync. Projections can always
+be rebuilt from the event log.
 
 ```mermaid
 flowchart TB
-  subgraph devices [Your devices]
+  subgraph devices [Your machines]
     H1[Agent hooks]
     CLI[carpeos CLI]
     MCP[MCP stdio server]
     OBS[Obsidian projection]
   end
 
-  subgraph local [Local private runtime]
+  subgraph local [Local runtime]
     OUT[Encrypted outbox + local store]
-    RET[Hybrid retrieval + recheck]
+    RET[Search + recheck]
   end
 
   subgraph private [Optional private sync]
     W[Cloudflare Worker]
     D1[(D1 metadata)]
-    R2[(R2 protected blobs)]
+    R2[(R2 encrypted blobs)]
   end
 
   H1 --> OUT
@@ -138,117 +137,106 @@ flowchart TB
 
 ---
 
-## How it works
-
-At a high level:
+## How it fits together
 
 ```mermaid
 flowchart LR
-  A[AI lifecycle hooks] --> B[Local capture]
-  B --> C[Canonical event store]
-  C --> D[Query-time accepted facts]
-  C --> E[Rebuildable projections]
+  A[Agent hooks] --> B[Local capture]
+  B --> C[Event store]
+  C --> D[Accepted facts at query time]
+  C --> E[Projections]
   E --> F[MCP / CLI / Obsidian]
   D --> F
 ```
 
-**Invariants that matter to users:**
+Rules worth knowing up front:
 
-1. Canonical events are append-only after acceptance.
-2. Accepted facts are **derived at query time** — claims are never mutated into
-   “accepted.”
-3. Protected plaintext stays outside the canonical event body.
-4. Trust zones are physical isolation boundaries, not cosmetic tags.
-5. Notes, vectors, and context packs are projections: rebuildable and
-   non-authoritative.
+1. After acceptance, the event log is append-only.
+2. “Accepted” is computed at query time — we do not rewrite a claim in place.
+3. Sensitive plaintext is not stored inside the event body.
+4. Trust zones are real isolation boundaries, not labels for show.
+5. Notes, vectors, and context packs can be deleted and rebuilt; they are not
+   the canonical store.
 
-Deeper design lives in
+More detail:
 [Architecture overview](docs/architecture/overview.md),
-[ADRs](docs/adr/), and
+[ADRs](docs/adr/),
 [spec/v1](spec/v1/).
 
 ---
 
 ## Quick start
 
-**Prerequisites:** Node.js ≥ 22.22, pnpm ≥ 11.16.
+Needs Node.js ≥ 22.22 and pnpm ≥ 11.16.
 
 ```sh
 pnpm install
 pnpm build
 
-# initialize local runtime
 node apps/carpeos-cli/dist/index.js init
 node apps/carpeos-cli/dist/index.js project identify
 
-# capture one synthetic hook payload
+# one synthetic capture
 node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
   '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
 
 node apps/carpeos-cli/dist/index.js outbox status
 ```
 
-Guides:
-
-| Path | Guide |
+| Topic | Guide |
 | --- | --- |
 | Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
-| Retrieval & memory CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
-| MCP server setup | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
+| MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
 
-Adapter templates for Codex, Claude Code, and Grok Build live under
-[`adapters/`](adapters/).
+Hook templates: [`adapters/`](adapters/).
 
 ---
 
-## What is implemented today
+## What works today
 
-CarpeOS is **pre-MVP**. The local path through capture → outbox → sync client →
-retrieval → MCP → Obsidian projection is implemented with **synthetic test
-coverage** in this monorepo.
+Pre-MVP. The local path — capture → outbox → sync client → retrieval → MCP →
+Obsidian projection — is implemented and covered with synthetic tests in this
+repo.
 
 | Area | Status |
 | --- | --- |
-| Specs, ontology, ADRs | Present |
-| Local capture + durable outbox | Implemented (tested with synthetic data) |
-| Sync Worker/client (Cloudflare path) | Deployable code + local tests — no live deploy claimed |
-| Hybrid local retrieval | Implemented with deterministic dev embeddings |
-| MCP stdio server (8 tools) | Implemented locally |
-| Obsidian projection package | Implemented locally |
-| Hosted embeddings / GraphRAG / dashboard | Planned, not active features |
-| Packaged end-user distribution | Not ready |
+| Specs, ontology, ADRs | In tree |
+| Local capture + outbox | Implemented (synthetic tests) |
+| Sync Worker/client | Code + local tests; no production deploy claimed |
+| Local hybrid retrieval | Implemented (deterministic dev embeddings) |
+| MCP stdio server (8 tools) | Local only |
+| Obsidian projection package | Local only |
+| Hosted embeddings / GraphRAG / dashboard | Not built |
+| Packaged end-user install | Not ready |
 
-Do not treat adapter install, production Cloudflare provisioning, hosted MCP,
-or production semantic quality as finished until they are tested and documented
-as such here.
+Do not treat adapter install, a live Cloudflare setup, hosted MCP, or
+production search quality as done until this repo says so with tests and docs.
 
 ---
 
-## Repository boundary
+## Repo boundary
 
-This repo is the public implementation. Runtime knowledge stays private.
+Public implementation only. Runtime knowledge stays private.
 
-| OK in this repo | Never in this repo |
+| OK here | Not OK here |
 | --- | --- |
 | Synthetic fixtures (`Example Alpha`, …) | Real project names or private URLs |
 | Protocol examples | Real session transcripts |
 | Tests and schemas | Credentials, tokens, production logs |
-| Contributor docs | Exported runtime databases / local user paths |
+| Contributor docs | Runtime DB dumps, personal paths |
 
 ---
 
 ## Design influences
 
-CarpeOS was inspired in part by
-[obsidian-mind](https://github.com/breferrari/obsidian-mind) — durable agent
-memory, lifecycle hooks, and semantic retrieval through an agent-facing
-interface.
-
-CarpeOS is an independent design: append-only canonical events (not a Markdown
-vault as authority), explicit claim/acceptance/supersession semantics, trust
-zones, protected values, and provider-neutral MCP access.
+Some ideas overlap with
+[obsidian-mind](https://github.com/breferrari/obsidian-mind) (agent memory,
+hooks, retrieval for agents). CarpeOS is a separate design: append-only events
+instead of a Markdown vault as authority, explicit claim/acceptance/supersession,
+trust zones, protected values, and MCP that is not locked to one vendor.
 
 ---
 
@@ -261,8 +249,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), and
 pnpm check   # format, lint, build, typecheck, test, public-boundary
 ```
 
-Label guidance for PRs is intentionally light: one kind label
-(`feat` / `fix` / `docs` / `spec` / `chore`) plus an optional area. Details in
+PR labels are light: one kind (`feat` / `fix` / `docs` / `spec` / `chore`) and
+an optional area. See
 [docs/maintainers/github-labels.md](docs/maintainers/github-labels.md).
 
 ---
