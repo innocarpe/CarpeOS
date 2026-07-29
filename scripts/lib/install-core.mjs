@@ -571,50 +571,327 @@ export function doctorInstall(input) {
 }
 
 /**
- * Parse argv for install-local.mjs
+ * Shared setup / install-local CLI surface.
+ *
+ *   carpeos setup [<command>] [options]
+ *   node scripts/install-local.mjs [<command>] [options]
+ *
+ * Commands:
+ *   run (default)  Apply machine setup (requires --apply)
+ *   plan           Print resolved plan only
+ *   doctor         Verify existing install
+ *   show           Show installed config
+ *   help           Show help
+ */
+
+export const SETUP_COMMANDS = ["run", "plan", "doctor", "show", "help"];
+
+/**
  * @param {string[]} argv
  */
-export function parseInstallArgs(argv) {
-  /** @type {Record<string, string | boolean | string[]>} */
+export function parseSetupArgs(argv) {
+  /** @type {{
+   *  command: string,
+   *  home: string,
+   *  binDir: string,
+   *  workspaceRoot: string,
+   *  trustZone: string,
+   *  registerMcp: string,
+   *  repoRoot: string,
+   *  skipBuild: boolean,
+   *  apply: boolean,
+   *  dryRun: boolean,
+   *  json: boolean,
+   *  help: boolean,
+   *  deprecatedYes: boolean,
+   * }} */
   const out = {
+    command: "run",
     home: "",
     binDir: "",
     workspaceRoot: "",
     trustZone: "",
-    hosts: "auto",
+    registerMcp: "auto",
+    repoRoot: "",
     skipBuild: false,
-    skipMcp: false,
+    apply: false,
     dryRun: false,
-    yes: false,
+    json: false,
     help: false,
+    deprecatedYes: false,
   };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
+
+  const args = [...argv];
+  if (args.length === 0) {
+    out.help = true;
+    return out;
+  }
+
+  // Positional command
+  if (args[0] && !args[0].startsWith("-")) {
+    const cmd = args[0];
+    if (!SETUP_COMMANDS.includes(cmd)) {
+      throw new Error(
+        `unknown setup command: ${cmd}\nRun with --help for usage.`,
+      );
+    }
+    out.command = cmd;
+    args.shift();
+  }
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    const need = (name) => {
+      const value = args[++i];
+      if (value === undefined || value.startsWith("-")) {
+        throw new Error(`missing value for ${name}`);
+      }
+      return value;
+    };
+
     if (arg === "--help" || arg === "-h") {
       out.help = true;
+    } else if (arg === "--apply") {
+      out.apply = true;
+    } else if (arg === "--yes" || arg === "-y") {
+      // Backward-compatible alias; prefer --apply in docs and help.
+      out.apply = true;
+      out.deprecatedYes = true;
+    } else if (arg === "--dry-run") {
+      out.dryRun = true;
+      // dry-run is plan-only; do not require --apply
+      if (out.command === "run") {
+        out.command = "plan";
+      }
+    } else if (arg === "--json") {
+      out.json = true;
     } else if (arg === "--skip-build") {
       out.skipBuild = true;
     } else if (arg === "--skip-mcp") {
-      out.skipMcp = true;
-    } else if (arg === "--dry-run") {
-      out.dryRun = true;
-    } else if (arg === "--yes" || arg === "-y") {
-      out.yes = true;
+      out.registerMcp = "none";
     } else if (arg === "--home") {
-      out.home = argv[++i] ?? "";
+      out.home = need("--home");
     } else if (arg === "--bin-dir") {
-      out.binDir = argv[++i] ?? "";
+      out.binDir = need("--bin-dir");
     } else if (arg === "--workspace-root") {
-      out.workspaceRoot = argv[++i] ?? "";
+      out.workspaceRoot = need("--workspace-root");
     } else if (arg === "--trust-zone") {
-      out.trustZone = argv[++i] ?? "";
+      out.trustZone = need("--trust-zone");
+    } else if (arg === "--register-mcp") {
+      out.registerMcp = need("--register-mcp");
     } else if (arg === "--hosts") {
-      out.hosts = argv[++i] ?? "auto";
+      // Alias for --register-mcp (older docs)
+      out.registerMcp = need("--hosts");
     } else if (arg === "--repo-root") {
-      out.repoRoot = argv[++i] ?? "";
+      out.repoRoot = need("--repo-root");
+    } else if (arg === "--doctor") {
+      out.command = "doctor";
+    } else if (arg === "--plan") {
+      out.command = "plan";
     } else {
-      throw new Error(`unknown argument: ${arg}`);
+      throw new Error(`unknown option: ${arg}\nRun with --help for usage.`);
     }
   }
+
+  if (out.command === "help") {
+    out.help = true;
+  }
   return out;
+}
+
+/** @deprecated use parseSetupArgs */
+export function parseInstallArgs(argv) {
+  return parseSetupArgs(argv);
+}
+
+/**
+ * @param {{ programName?: string, includeRepoRoot?: boolean }} [opts]
+ */
+export function formatSetupHelp(opts = {}) {
+  const program = opts.programName ?? "carpeos setup";
+  const repoLine = opts.includeRepoRoot
+    ? "  --repo-root <path>          Git checkout root (default: auto-detect)\n  --skip-build                Skip pnpm install/build (checkout installer)\n"
+    : "";
+  return `${program} — configure local CarpeOS runtime and agent MCP hosts
+
+USAGE
+  ${program} <command> [options]
+  ${program} [options]                 # same as: run
+
+COMMANDS
+  run       Apply setup to this machine (requires --apply)
+  plan      Show resolved paths and actions without changing anything
+  doctor    Verify an existing install
+  show      Print installed config.json (if present)
+  help      Show this help
+
+OPTIONS
+  --home <path>               Private runtime home
+                              (default: $CARPEOS_HOME or ~/.carpeos)
+  --bin-dir <path>            Where to install carpeos wrappers
+                              (default: $CARPEOS_BIN_DIR or ~/.local/bin)
+  --workspace-root <path>     Default workspace root exposed to MCP
+                              (default: $HOME)
+  --trust-zone <id|auto>      Trust zone id (default: tz_local_default)
+                              Use "auto" for a stable host-derived id
+  --register-mcp <spec>       Who gets MCP registration:
+                              auto | none | claude,codex,grok
+                              (default: auto = every host CLI found on PATH)
+${repoLine}  --apply                     Apply changes (required for "run")
+  --dry-run                   Alias for "plan" (no changes)
+  --json                      Machine-readable JSON on stdout
+  -h, --help                  Show help
+
+SAFETY
+  Setup never mutates the machine unless you pass --apply.
+  Without --apply, it prints the plan (or help) and exits.
+
+EXAMPLES
+  # See what would happen with defaults
+  ${program} plan
+
+  # Apply default setup (home, wrappers, MCP for detected hosts)
+  ${program} run --apply
+
+  # Custom home + only Claude MCP
+  ${program} run --apply \\
+    --home "$HOME/.carpeos" \\
+    --trust-zone tz_local_default \\
+    --register-mcp claude
+
+  # Check health after install
+  ${program} doctor
+
+  # Inspect saved config
+  ${program} show
+
+NOTES
+  --yes / -y still work as an alias for --apply (deprecated).
+  Session capture hooks (adapters/) are separate from MCP registration.
+`;
+}
+
+/**
+ * Resolve concrete plan values from parsed args + environment.
+ * @param {ReturnType<typeof parseSetupArgs>} args
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   nodePath?: string,
+ *   defaultRepoRoot?: string,
+ *   distribution?: string,
+ *   cliEntry?: string,
+ *   mcpEntry?: string,
+ * }} [ctx]
+ */
+export function resolveSetupPlan(args, ctx = {}) {
+  const env = ctx.env ?? process.env;
+  const home = args.home ? resolve(args.home) : defaultHome(env);
+  const binDir = args.binDir ? resolve(args.binDir) : defaultBinDir(env);
+  const workspaceRoot = args.workspaceRoot
+    ? resolve(args.workspaceRoot)
+    : env.HOME || homedir();
+  let trustZone = args.trustZone || DEFAULT_TRUST_ZONE;
+  if (trustZone === "auto") {
+    trustZone = trustZoneFromHostname();
+  }
+  if (!isTrustZoneId(trustZone)) {
+    throw new Error(
+      `invalid --trust-zone "${args.trustZone || trustZone}" (expected tz_[a-z0-9]… or auto)`,
+    );
+  }
+
+  const registerMcp = String(args.registerMcp || "auto").trim();
+  let hostList;
+  let skipMcp = false;
+  if (registerMcp === "none" || registerMcp === "off" || registerMcp === "false") {
+    skipMcp = true;
+    hostList = [];
+  } else if (registerMcp === "auto") {
+    skipMcp = false;
+    hostList = undefined; // detect at apply time
+  } else {
+    skipMcp = false;
+    hostList = registerMcp
+      .split(",")
+      .map((h) => h.trim())
+      .filter(Boolean);
+    for (const h of hostList) {
+      if (!["claude", "codex", "grok"].includes(h)) {
+        throw new Error(
+          `invalid --register-mcp host "${h}" (allowed: auto, none, claude, codex, grok)`,
+        );
+      }
+    }
+  }
+
+  const repoRoot = args.repoRoot
+    ? resolve(args.repoRoot)
+    : (ctx.defaultRepoRoot ?? defaultRepoRoot());
+
+  return {
+    command: args.command,
+    apply: Boolean(args.apply) && args.command === "run" && !args.dryRun,
+    dryRun: Boolean(args.dryRun) || args.command === "plan",
+    json: Boolean(args.json),
+    skipBuild: Boolean(args.skipBuild),
+    skipMcp,
+    home,
+    binDir,
+    workspaceRoot,
+    trustZoneId: trustZone,
+    registerMcp,
+    hostList,
+    repoRoot,
+    nodePath: ctx.nodePath ?? process.execPath,
+    distribution: ctx.distribution,
+    cliEntry: ctx.cliEntry,
+    mcpEntry: ctx.mcpEntry,
+    deprecatedYes: Boolean(args.deprecatedYes),
+    actions: [
+      "Ensure runtime home directory exists",
+      "Write config.json and mcp.env (mode 0600)",
+      "Install carpeos + carpeos-mcp-server wrappers into bin-dir",
+      skipMcp
+        ? "Skip agent MCP registration (--register-mcp none)"
+        : registerMcp === "auto"
+          ? "Register MCP with every host CLI found on PATH (claude/codex/grok)"
+          : `Register MCP with: ${hostList?.join(", ")}`,
+      "Initialize local store (carpeos init)",
+      "Run doctor checks",
+    ],
+  };
+}
+
+/**
+ * @param {ReturnType<typeof resolveSetupPlan>} plan
+ */
+export function formatSetupPlanHuman(plan) {
+  const lines = [
+    "CarpeOS setup plan",
+    "──────────────────",
+    `  command:          ${plan.command}`,
+    `  apply changes:    ${plan.apply ? "yes (--apply)" : "no (plan only)"}`,
+    `  home:             ${plan.home}`,
+    `  bin-dir:          ${plan.binDir}`,
+    `  workspace-root:   ${plan.workspaceRoot}`,
+    `  trust-zone:       ${plan.trustZoneId}`,
+    `  register-mcp:     ${plan.registerMcp}`,
+    `  distribution:     ${plan.distribution ?? "git-or-auto"}`,
+    `  skip-build:       ${plan.skipBuild}`,
+    "",
+    "Actions:",
+    ...plan.actions.map((a) => `  • ${a}`),
+    "",
+  ];
+  if (!plan.apply && plan.command === "run") {
+    lines.push(
+      "Nothing will be changed yet.",
+      "Re-run with the same options plus --apply to execute.",
+      "",
+    );
+  }
+  if (plan.deprecatedYes) {
+    lines.push("Note: --yes is deprecated; use --apply instead.", "");
+  }
+  return lines.join("\n");
 }

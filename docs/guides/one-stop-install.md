@@ -10,8 +10,9 @@ Mac so CLI wrappers and agent MCP registrations land the same way every time.
 
 ```sh
 npm install -g @innocarpe/carpeos
-carpeos setup --yes
-carpeos setup --doctor
+carpeos setup plan
+carpeos setup run --apply
+carpeos setup doctor
 ```
 
 Or the Codex-style one-liner:
@@ -71,28 +72,29 @@ writes under the chosen home/bin directories.
 git clone git@github.com:innocarpe/carpeos.git
 cd carpeos
 
-# plan only
-node scripts/install-local.mjs --dry-run
+# plan only (no machine changes)
+node scripts/install-local.mjs plan
 
-# real install (idempotent)
-node scripts/install-local.mjs --yes
+# real install (idempotent; requires explicit --apply)
+node scripts/install-local.mjs run --apply
 ```
 
 Optional flags:
 
 ```sh
-node scripts/install-local.mjs --yes \
+node scripts/install-local.mjs run --apply \
   --home "$HOME/.carpeos" \
   --bin-dir "$HOME/.local/bin" \
   --workspace-root "$HOME" \
   --trust-zone tz_local_default \
-  --hosts auto
+  --register-mcp auto
 ```
 
 - `--trust-zone auto` derives a stable local zone id from the hostname.
 - `--skip-build` if you already ran `pnpm build`.
-- `--skip-mcp` to install wrappers/store only.
-- `--hosts claude,codex,grok` to limit MCP registration.
+- `--register-mcp none` (or `--skip-mcp`) to install wrappers/store only.
+- `--register-mcp claude,codex,grok` to limit MCP registration.
+- `--dry-run` is an alias for `plan`.
 
 ## PATH
 
@@ -114,9 +116,10 @@ which carpeos carpeos-mcp-server
 ## Doctor
 
 ```sh
-node scripts/install-local.mjs --doctor
-# or, after wrappers are on PATH and config exists:
-# carpeos doctor   # when CLI doctor lands; installer --doctor works now
+node scripts/install-local.mjs doctor
+# or, after npm global install:
+carpeos setup doctor
+carpeos setup show
 ```
 
 Doctor checks:
@@ -143,7 +146,7 @@ hooks). Treat hooks as a second step after MCP is healthy.
 
 | Concern | Approach |
 | --- | --- |
-| Same tools on Mac mini / new MacBook | Re-run `install-local.mjs --yes` on that machine’s checkout |
+| Same tools on Mac mini / new MacBook | Re-run `install-local.mjs run --apply` on that machine’s checkout |
 | Same knowledge | Private sync + trust-zone key (see cross-mac bootstrap guide) |
 | Same trust zone id | Pass the same `--trust-zone` explicitly on every machine |
 
@@ -155,17 +158,32 @@ opt-in and out-of-band.
 ```sh
 cd /path/to/carpeos
 git pull
-node scripts/install-local.mjs --yes
+node scripts/install-local.mjs run --apply
 ```
 
 Rebuilds dist, refreshes wrappers to the current checkout path, and re-registers
 MCP. Safe and expected after moves/checkouts.
 
+## Setup CLI surface
+
+Both `carpeos setup` and `node scripts/install-local.mjs` share one interface:
+
+| Command | Effect |
+| --- | --- |
+| `plan` | Print resolved paths and actions only |
+| `run --apply` | Apply setup |
+| `doctor` | Verify existing install |
+| `show` | Print `config.json` |
+| `help` / `--help` | Full parameter docs |
+
+Without `--apply`, nothing is written. Legacy `--yes` / `-y` still map to
+`--apply` but are deprecated.
+
 ## Security notes
 
 - Do not commit `~/.carpeos` or wrapper paths with real home directories into git.
 - `mcp.env` is mode `0600`.
-- Installer refuses a real run without `--yes`.
+- Installer refuses a real run without `--apply`.
 
 ## Related
 

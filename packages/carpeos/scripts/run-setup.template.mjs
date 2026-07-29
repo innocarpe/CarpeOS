@@ -3,154 +3,214 @@
  * Copied into dist/setup/run-setup.mjs at package build time.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  DEFAULT_TRUST_ZONE,
-  defaultBinDir,
-  defaultHome,
   doctorInstall,
+  formatSetupHelp,
+  formatSetupPlanHuman,
   installLocal,
-  isTrustZoneId,
-  trustZoneFromHostname,
+  parseSetupArgs,
+  resolveSetupPlan,
 } from "./install-core.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // dist/setup -> dist -> package root
 const packageRoot = resolve(here, "../..");
 
-function parseArgs(argv) {
-  const out = {
-    yes: false,
-    dryRun: false,
-    doctor: false,
-    skipMcp: false,
-    help: false,
-    home: "",
-    binDir: "",
-    workspaceRoot: "",
-    trustZone: "",
-    hosts: "auto",
-  };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--yes" || arg === "-y") out.yes = true;
-    else if (arg === "--dry-run") out.dryRun = true;
-    else if (arg === "--doctor") out.doctor = true;
-    else if (arg === "--skip-mcp") out.skipMcp = true;
-    else if (arg === "--help" || arg === "-h") out.help = true;
-    else if (arg === "--home") out.home = argv[++i] ?? "";
-    else if (arg === "--bin-dir") out.binDir = argv[++i] ?? "";
-    else if (arg === "--workspace-root") out.workspaceRoot = argv[++i] ?? "";
-    else if (arg === "--trust-zone") out.trustZone = argv[++i] ?? "";
-    else if (arg === "--hosts") out.hosts = argv[++i] ?? "auto";
-    else throw new Error(`unknown argument: ${arg}`);
-  }
-  return out;
+/**
+ * @param {unknown} value
+ */
+function printJson(value) {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-function printHelp() {
-  process.stdout.write(`carpeos setup — configure local runtime and agent MCP hosts
+/**
+ * @param {ReturnType<typeof resolveSetupPlan>} plan
+ */
+function printPlan(plan) {
+  if (plan.json) {
+    printJson({
+      ok: true,
+      mode: "plan",
+      plan: {
+        command: plan.command,
+        apply: plan.apply,
+        home: plan.home,
+        bin_dir: plan.binDir,
+        workspace_root: plan.workspaceRoot,
+        trust_zone_id: plan.trustZoneId,
+        register_mcp: plan.registerMcp,
+        distribution: plan.distribution,
+        actions: plan.actions,
+      },
+    });
+    return;
+  }
+  process.stdout.write(formatSetupPlanHuman(plan));
+}
 
-Usage:
-  carpeos setup --yes
-  carpeos setup --doctor
-  carpeos setup --dry-run
+/**
+ * @param {string} home
+ * @param {boolean} asJson
+ */
+function runDoctor(home, asJson) {
+  const configPath = join(home, "config.json");
+  if (!existsSync(configPath)) {
+    process.stderr.write(
+      `no install config at ${configPath}; run: carpeos setup run --apply\n`,
+    );
+    return 1;
+  }
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  const doctor = doctorInstall({ config });
+  if (asJson) {
+    printJson({ ok: doctor.ok, doctor });
+  } else {
+    process.stdout.write(
+      doctor.ok
+        ? "CarpeOS setup doctor: PASS\n"
+        : "CarpeOS setup doctor: FAIL\n",
+    );
+    printJson({ ok: doctor.ok, doctor });
+  }
+  return doctor.ok ? 0 : 1;
+}
 
-After npm install -g @innocarpe/carpeos, run setup once per machine.
-`);
+/**
+ * @param {string} home
+ * @param {boolean} asJson
+ */
+function runShow(home, asJson) {
+  const configPath = join(home, "config.json");
+  if (!existsSync(configPath)) {
+    process.stderr.write(
+      `no install config at ${configPath}; run: carpeos setup run --apply\n`,
+    );
+    return 1;
+  }
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  if (asJson) {
+    printJson({ ok: true, config });
+  } else {
+    process.stdout.write(`CarpeOS install config (${configPath})\n`);
+    printJson(config);
+  }
+  return 0;
 }
 
 export async function runSetup(argv = process.argv.slice(2)) {
-  const args = parseArgs(argv);
-  if (args.help) {
-    printHelp();
-    return 0;
-  }
-
-  const home = args.home ? resolve(args.home) : defaultHome();
-  const binDir = args.binDir ? resolve(args.binDir) : defaultBinDir();
-  const workspaceRoot = args.workspaceRoot
-    ? resolve(args.workspaceRoot)
-    : process.env.HOME || homedir();
-  let trustZone = args.trustZone || DEFAULT_TRUST_ZONE;
-  if (trustZone === "auto") trustZone = trustZoneFromHostname();
-  if (!isTrustZoneId(trustZone)) {
-    throw new Error(`invalid trust zone: ${trustZone}`);
-  }
-
-  // For npm installs, install_root is the package itself (has dist/cli.js).
-  const installRoot = packageRoot;
-  const cliEntry = join(packageRoot, "dist/cli.js");
-  const mcpEntry = join(packageRoot, "dist/mcp-server.js");
-
-  if (args.doctor) {
-    const configPath = join(home, "config.json");
-    if (!existsSync(configPath)) {
-      process.stderr.write(`no install config at ${configPath}; run: carpeos setup --yes\n`);
-      return 1;
-    }
-    const config = JSON.parse(readFileSync(configPath, "utf8"));
-    const doctor = doctorInstall({ config });
-    process.stdout.write(`${JSON.stringify({ ok: doctor.ok, doctor }, null, 2)}\n`);
-    return doctor.ok ? 0 : 1;
-  }
-
-  if (!args.dryRun && !args.yes) {
-    process.stderr.write("Refusing to modify the machine without --yes (or use --dry-run).\n");
+  let args;
+  try {
+    args = parseSetupArgs(argv);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return 2;
   }
 
-  if (!existsSync(cliEntry) || !existsSync(mcpEntry)) {
-    throw new Error("package dist missing; reinstall @innocarpe/carpeos");
+  if (args.help) {
+    process.stdout.write(formatSetupHelp({ programName: "carpeos setup" }));
+    return 0;
   }
 
-  const hosts =
-    args.hosts === "auto"
-      ? undefined
-      : args.hosts
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean);
+  const cliEntry = join(packageRoot, "dist/cli.js");
+  const mcpEntry = join(packageRoot, "dist/mcp-server.js");
 
-  // Adapt installLocal: skip monorepo build; point entries at package dist.
-  const result = installLocal({
-    repoRoot: installRoot,
-    home,
-    binDir,
-    workspaceRoot,
-    trustZoneId: trustZone,
-    nodePath: process.execPath,
-    skipBuild: true,
-    skipMcp: args.skipMcp,
-    hosts,
-    dryRun: args.dryRun,
-    cliEntry,
-    mcpEntry,
-    distribution: "npm",
-  });
+  let plan;
+  try {
+    plan = resolveSetupPlan(args, {
+      distribution: "npm",
+      cliEntry,
+      mcpEntry,
+      defaultRepoRoot: packageRoot,
+    });
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 2;
+  }
 
-  process.stdout.write(
-    `${JSON.stringify(
-      {
-        ok: result.doctor.ok || args.dryRun,
-        distribution: "npm",
-        home,
-        bin_dir: binDir,
-        package_root: installRoot,
-        hosts: result.hostResults,
-        path_hint: result.state.path_hint,
-        next: "Open a new shell (or hash -r), then: carpeos --help",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  return result.doctor.ok || args.dryRun ? 0 : 1;
+  if (args.command === "doctor") {
+    return runDoctor(plan.home, plan.json);
+  }
+
+  if (args.command === "show") {
+    return runShow(plan.home, plan.json);
+  }
+
+  if (args.command === "plan" || !plan.apply) {
+    printPlan(plan);
+    return 0;
+  }
+
+  if (!existsSync(cliEntry) || !existsSync(mcpEntry)) {
+    process.stderr.write("package dist missing; reinstall @innocarpe/carpeos\n");
+    return 1;
+  }
+
+  if (!plan.json) {
+    process.stdout.write(formatSetupPlanHuman(plan));
+    process.stdout.write("Applying setup…\n\n");
+  }
+
+  try {
+    const result = installLocal({
+      repoRoot: packageRoot,
+      home: plan.home,
+      binDir: plan.binDir,
+      workspaceRoot: plan.workspaceRoot,
+      trustZoneId: plan.trustZoneId,
+      nodePath: plan.nodePath,
+      skipBuild: true,
+      skipMcp: plan.skipMcp,
+      hosts: plan.hostList,
+      dryRun: false,
+      cliEntry,
+      mcpEntry,
+      distribution: "npm",
+    });
+
+    const payload = {
+      ok: result.doctor.ok,
+      distribution: "npm",
+      home: plan.home,
+      bin_dir: plan.binDir,
+      workspace_root: plan.workspaceRoot,
+      trust_zone_id: plan.trustZoneId,
+      register_mcp: plan.registerMcp,
+      package_root: packageRoot,
+      hosts: result.hostResults,
+      doctor: result.doctor,
+      path_hint: result.state.path_hint,
+      next: [
+        "Open a new shell (or run: hash -r)",
+        "carpeos setup doctor",
+        "carpeos --help",
+      ],
+    };
+
+    if (plan.json) {
+      printJson(payload);
+    } else {
+      process.stdout.write("Setup complete.\n");
+      printJson(payload);
+      if (plan.deprecatedYes) {
+        process.stderr.write(
+          "note: --yes is deprecated; prefer: carpeos setup run --apply\n",
+        );
+      }
+    }
+    return result.doctor.ok ? 0 : 1;
+  } catch (error) {
+    process.stderr.write(
+      `setup failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return 1;
+  }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isMain =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
   runSetup().then((code) => {
     process.exitCode = code;
   });

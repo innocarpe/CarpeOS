@@ -196,15 +196,28 @@ Requires **Node.js ≥ 22.22**.
 ```sh
 # npm (preferred)
 npm install -g @innocarpe/carpeos
-carpeos setup --yes
+carpeos setup plan              # see paths + actions (no changes)
+carpeos setup run --apply       # apply defaults
 
-# or curl (installs the same package, then setup)
+# or curl (installs the same package, then setup run --apply)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
 ```
 
-`carpeos setup` creates a private runtime under `~/.carpeos` and registers the
-local MCP server with **Claude Code / Codex CLI / Grok Build** when those tools
-are on `PATH`. Verify with `carpeos setup --doctor`.
+`carpeos setup` is a real CLI surface — not a flag dump. Default paths land under
+`~/.carpeos` and `~/.local/bin`; MCP registers with **Claude Code / Codex CLI /
+Grok Build** when those tools are on `PATH`.
+
+```sh
+carpeos setup --help            # full parameter interface
+carpeos setup plan              # resolved plan only
+carpeos setup run --apply       # apply the plan
+carpeos setup doctor            # verify install
+carpeos setup show              # print config.json
+```
+
+Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
+`--register-mcp auto|none|claude,codex,grok`. Setup never mutates the machine
+without `--apply`.
 
 Pin a version when you care about reproducibility: `npm i -g @innocarpe/carpeos@0.1.0`.
 Changelog: [CHANGELOG.md](CHANGELOG.md).
@@ -213,9 +226,10 @@ Changelog: [CHANGELOG.md](CHANGELOG.md).
 
 ```sh
 git clone https://github.com/innocarpe/carpeos.git && cd carpeos
-node scripts/install-local.mjs --yes    # build, wrappers, MCP registration
+node scripts/install-local.mjs plan
+node scripts/install-local.mjs run --apply   # build, wrappers, MCP registration
 export PATH="$HOME/.local/bin:$PATH"
-node scripts/install-local.mjs --doctor
+node scripts/install-local.mjs doctor
 ```
 
 For monorepo work without global install: `pnpm install && pnpm build`, then use
@@ -241,8 +255,9 @@ Optional session **capture** still uses host hooks under [`adapters/`](adapters/
 
 Keep install **idempotent** and **out of the git tree** for private data.
 
-1. Prefer `npm i -g @innocarpe/carpeos` + `carpeos setup --yes` (or `install.sh`).
-2. If working from source: `node scripts/install-local.mjs --yes` from the checkout.
+1. Prefer `npm i -g @innocarpe/carpeos` + `carpeos setup plan` then
+   `carpeos setup run --apply` (or `install.sh`).
+2. If working from source: `node scripts/install-local.mjs run --apply` from the checkout.
 3. Never commit `~/.carpeos`, credentials, or real session data.
 4. Do not invent alternate install paths; setup registers MCP for Claude/Codex/Grok.
 5. Releases use SemVer + `vX.Y.Z` tags only — see

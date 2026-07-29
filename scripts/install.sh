@@ -43,11 +43,12 @@ run_setup() {
     exit 1
   fi
   if [ "${CARPEOS_SKIP_SETUP:-}" = "1" ]; then
-    log "Skipping setup (CARPEOS_SKIP_SETUP=1). Run later: carpeos setup --yes"
+    log "Skipping setup (CARPEOS_SKIP_SETUP=1). Run later: carpeos setup plan"
+    log "  then: carpeos setup run --apply"
     return 0
   fi
-  log "Running carpeos setup --yes..."
-  carpeos setup --yes
+  log "Running carpeos setup run --apply..."
+  carpeos setup run --apply
 }
 
 main() {
@@ -57,7 +58,8 @@ main() {
   run_setup
   log ""
   log "Done. Try:"
-  log "  carpeos setup --doctor"
+  log "  carpeos setup doctor"
+  log "  carpeos setup show"
   log "  carpeos memory context-pack --help"
 }
 
