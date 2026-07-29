@@ -345,6 +345,13 @@ Final program gate after M10:
 | --- | --- | --- | --- |
 | 2026-07-29 | bootstrap | Created worktree from `origin/main` @ `74ea77d` | path `carpeos-k3-memory-capacity` |
 | 2026-07-29 | M1 | Master plan authored | this file |
+| 2026-07-29 | M1 | PR #19 merged | ADR 0009 + architecture + plan |
+| 2026-07-29 | M3 | PR #20 merged | procedure_trace capture |
+| 2026-07-29 | M2+M5 | PR #21 merged | expert-slot packs |
+| 2026-07-29 | M6 | PR #22 + #23 | diversity ranking + test fix |
+| 2026-07-29 | M4+M7 | PR #24 merged | compaction + latent ladder |
+| 2026-07-29 | M8 | PR #25 merged | run ledger helpers |
+| 2026-07-29 | M9+M10 | product projection + kimi adapter | this branch |
 
 _Updates append below as PRs land._
 
