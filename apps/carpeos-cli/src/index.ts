@@ -485,6 +485,7 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
           ok: true,
           command: "outbox status",
           status: store.outboxStatus(),
+          errors: store.listOutboxErrors(),
         });
         return 0;
       case "lease": {
@@ -608,6 +609,7 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
             outbox: store.outboxStatus(),
             outbox_trust_zone_ids: outboxTrustZoneIds,
             outbox_trust_zone_mismatch: outboxTrustZoneMismatch,
+            outbox_errors: store.listOutboxErrors(),
             cursor,
             trust_zone_id: storeTrustZoneId,
             client_id: store.clientId,
