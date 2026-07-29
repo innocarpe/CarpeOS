@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "carpeos": {
+      "command": "node",
+      "args": ["REPLACE_WITH_REPO_ROOT/apps/carpeos-mcp-server/dist/index.js"],
+      "env": {
+        "CARPEOS_HOME": "REPLACE_WITH_PRIVATE_CARPEOS_HOME",
+        "CARPEOS_VISIBLE_TRUST_ZONES": "tz_local_default"
+      }
+    }
+  }
+}

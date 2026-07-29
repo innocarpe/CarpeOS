@@ -124,6 +124,12 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/product-projection:
+    dependencies:
+      '@carpeos/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/retrieval:
     dependencies:
       '@carpeos/schema':

@@ -39,6 +39,13 @@ the documented small numeric timeout shape rather than a millisecond value.
 
 Official reference: <https://docs.x.ai/build/features/hooks>
 
+## Kimi / frontier consumers
+
+`kimi/` documents how frontier agents (including Kimi K3-class models) consume
+CarpeOS through the local MCP server. CarpeOS remains the private knowledge
+store; the model is not the memory backend. See `kimi/README.md` and
+`kimi/mcp.example.json`.
+
 ## Boundary
 
 The templates contain no user path, project name, transcript, credential, or
