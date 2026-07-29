@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish npm + GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run checks
+        run: pnpm check
+
+      - name: Read package version
+        id: pkg
+        run: |
+          VERSION="$(node -p "require('./packages/carpeos/package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          echo "Package version: $VERSION"
+          echo "Tag version: $TAG_VERSION"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: tag $GITHUB_REF_NAME does not match packages/carpeos version $VERSION"
+            exit 1
+          fi
+
+      - name: Build npm package
+        run: pnpm --filter @innocarpe/carpeos build
+
+      - name: Publish to npm
+        working-directory: packages/carpeos
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Extract changelog section
+        id: notes
+        run: |
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require("node:fs");
+          const version = process.env.VERSION;
+          const changelog = readFileSync("CHANGELOG.md", "utf8");
+          const header = `## [${version}]`;
+          const start = changelog.indexOf(header);
+          if (start === -1) {
+            writeFileSync("release-notes.md", `Release v${version}\n`);
+            process.exit(0);
+          }
+          const after = changelog.slice(start);
+          const next = after.search(/\n## \[/);
+          const section = (next === -1 ? after : after.slice(0, next)).trim() + "\n";
+          writeFileSync("release-notes.md", section);
+          NODE
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.tag }}
+          name: @innocarpe/carpeos v${{ steps.pkg.outputs.version }}
+          body_path: release-notes.md
+          generate_release_notes: false

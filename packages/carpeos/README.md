@@ -6,14 +6,19 @@ knowledge, and retrieve it for humans and agents.
 ## Install
 
 ```sh
-# npm (recommended)
+# npm (recommended) — pin a version in production
 npm install -g @innocarpe/carpeos
+npm install -g @innocarpe/carpeos@0.1.0
 
 # one-liner (curl)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
 ```
 
 Requires **Node.js ≥ 22.22**.
+
+Versions follow [SemVer](https://semver.org/). Tags look like `v0.1.0`. See the
+repo [CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md)
+and [versioning policy](https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/versioning-and-releases.md).
 
 ## First-time machine setup
 

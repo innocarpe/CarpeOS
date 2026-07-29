@@ -6,6 +6,9 @@ This checklist is for maintainers preparing a CarpeOS release or milestone PR.
 It prevents local proofs, CI proofs, and hosted deployment proofs from being
 collapsed into one claim.
 
+For **npm + Git tag SemVer**, see
+[Versioning and Releases](versioning-and-releases.md).
+
 ## G008 Verified Evidence
 
 The G008 documentation slice may cite only this already-proven local evidence:
