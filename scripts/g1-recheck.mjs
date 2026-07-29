@@ -13,9 +13,9 @@
  * isolates install/home/wrappers/init.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -119,15 +119,12 @@ function main() {
     "false",
   ];
 
+  record("setup plan", run("carpeos", ["setup", "plan", ...setupFlags], { env }));
+  record("setup run --apply", run("carpeos", ["setup", "run", "--apply", ...setupFlags], { env }));
   record(
-    "setup plan",
-    run("carpeos", ["setup", "plan", ...setupFlags], { env }),
+    "setup doctor",
+    run("carpeos", ["setup", "doctor", "--home", cleanHome, "--bin-dir", cleanBin], { env }),
   );
-  record(
-    "setup run --apply",
-    run("carpeos", ["setup", "run", "--apply", ...setupFlags], { env }),
-  );
-  record("setup doctor", run("carpeos", ["setup", "doctor", "--home", cleanHome, "--bin-dir", cleanBin], { env }));
 
   const identify = run("carpeos", ["project", "identify", "--home", cleanHome], { env });
   const identifyJson = parseJsonLoose(identify.stdout + identify.stderr);
@@ -174,7 +171,9 @@ function main() {
   if (args.json) {
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
   } else {
-    process.stdout.write(`G1 recheck: ${ok ? "PASS" : "FAIL"} (@innocarpe/carpeos@${args.version})\n`);
+    process.stdout.write(
+      `G1 recheck: ${ok ? "PASS" : "FAIL"} (@innocarpe/carpeos@${args.version})\n`,
+    );
     for (const s of steps) {
       const mark = s.ok ? "✓" : "✗";
       const skip = s.skipped ? " (skipped)" : "";
