@@ -14,6 +14,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [0.1.1] - 2026-07-29
+
+### Added
+
+- (none yet — fold entries here before the next release)
+
 ### Fixed
 
 - npm `carpeos setup` wrappers now point at package `bin/carpeos.js` so
@@ -40,5 +46,6 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v0.1.1...HEAD
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
+[0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
