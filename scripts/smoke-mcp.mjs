@@ -92,7 +92,14 @@ function runUnitSmokes() {
     },
     {
       name: "mcp-server expert-slots",
-      args: ["--filter", "@carpeos/mcp-server", "exec", "vitest", "run", "test/expert-slots.test.ts"],
+      args: [
+        "--filter",
+        "@carpeos/mcp-server",
+        "exec",
+        "vitest",
+        "run",
+        "test/expert-slots.test.ts",
+      ],
     },
     {
       name: "cli retrieval + context-pack",
@@ -124,7 +131,8 @@ function runCliSmoke() {
       {
         name: "init",
         argv: ["init", ...base],
-        check: (body) => body.ok === true && body.command === "init" && body.trust_zone_id === trustZone,
+        check: (body) =>
+          body.ok === true && body.command === "init" && body.trust_zone_id === trustZone,
       },
       {
         name: "capture-hook",
@@ -142,7 +150,8 @@ function runCliSmoke() {
             message: "synthetic g5 smoke alpha",
           }),
         ],
-        check: (body) => body.ok === true && body.command === "capture-hook" && body.status === "captured",
+        check: (body) =>
+          body.ok === true && body.command === "capture-hook" && body.status === "captured",
       },
       {
         name: "retrieval rebuild",
@@ -160,7 +169,8 @@ function runCliSmoke() {
           "--query",
           "synthetic",
         ],
-        check: (body) => body.ok === true && body.command === "memory search" && body.result !== undefined,
+        check: (body) =>
+          body.ok === true && body.command === "memory search" && body.result !== undefined,
       },
       {
         name: "memory context-pack",
