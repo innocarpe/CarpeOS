@@ -97,6 +97,14 @@ redacted without changing canonical knowledge.
 | Projection | Projection is stale | Rebuild from canonical events and sequences. |
 | Erasure | Plaintext remains in projection | Delete or rebuild projection output from erasure ledger. |
 
+## Memory Capacity
+
+Store capacity, working-memory activation, procedural memory, and product
+projections are separate axes. See
+[Memory Capacity Architecture](memory-capacity.md) and
+[ADR 0009](../adr/0009-memory-capacity-model.md). Context packs and retrieval
+results express active capacity only; they do not redefine canonical authority.
+
 ## Synthetic Flow
 
 1. Example Alpha hook captures a synthetic work message.
