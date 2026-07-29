@@ -1,10 +1,10 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
-import { pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
+import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 import { isIdempotencyKey } from "@carpeos/capture";
 import {
   IdempotencyConflictError,
@@ -25,8 +25,7 @@ import {
   searchLocalRetrievalIndex,
   storeLocalVector,
 } from "@carpeos/retrieval";
-import type { RetrievalQuery } from "@carpeos/schema";
-import type { RetrievalChunk } from "@carpeos/schema";
+import type { RetrievalChunk, RetrievalQuery } from "@carpeos/schema";
 import { OutboxSyncCoordinator, SyncHttpError, SyncHttpTransport } from "@carpeos/sync-client";
 import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
 import { packageName, packageVersion } from "./package-version.js";
@@ -577,6 +576,26 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
       case "status": {
         const config = resolveSyncConfig(parsed.values, env, store.runtimeDir, false);
         const cursor = store.getSyncCursor();
+        const storeTrustZoneId = store.trustZone.trust_zone_id;
+        const outboxTrustZoneIds = store.listOutboxTrustZones();
+        const outboxTrustZoneMismatch = outboxTrustZoneIds.some(
+          (zoneId: string) => zoneId !== storeTrustZoneId,
+        );
+        const warnings: Array<{
+          code: string;
+          message: string;
+          active_trust_zone_id?: string;
+          outbox_trust_zone_ids?: string[];
+        }> = [];
+        if (outboxTrustZoneMismatch) {
+          warnings.push({
+            code: "outbox_trust_zone_mismatch",
+            message:
+              "Pending or leased outbox items target a different trust_zone_id than the active store zone. Re-run sync with --trust-zone matching the outbox zone(s).",
+            active_trust_zone_id: storeTrustZoneId,
+            outbox_trust_zone_ids: outboxTrustZoneIds,
+          });
+        }
         writeJson(process.stdout, {
           ok: true,
           command: "sync status",
@@ -587,10 +606,13 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
           },
           local: {
             outbox: store.outboxStatus(),
+            outbox_trust_zone_ids: outboxTrustZoneIds,
+            outbox_trust_zone_mismatch: outboxTrustZoneMismatch,
             cursor,
-            trust_zone_id: store.trustZone.trust_zone_id,
+            trust_zone_id: storeTrustZoneId,
             client_id: store.clientId,
           },
+          ...(warnings.length === 0 ? {} : { warnings }),
         });
         return 0;
       }

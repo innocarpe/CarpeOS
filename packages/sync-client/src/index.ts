@@ -1,4 +1,4 @@
-import { validateConformance } from "@carpeos/schema";
+import type { LeasedOutboxItem, LocalCaptureStore } from "@carpeos/local-store";
 import type {
   CanonicalEvent,
   ProtectedValueMetadata,
@@ -9,7 +9,7 @@ import type {
   SyncPushRequest,
   SyncPushResult,
 } from "@carpeos/schema";
-import type { LeasedOutboxItem, LocalCaptureStore } from "@carpeos/local-store";
+import { validateConformance } from "@carpeos/schema";
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -231,6 +231,17 @@ export class OutboxSyncCoordinator {
       return undefined;
     }
 
+    const outboxTrustZoneId = item.push_request.trust_zone_id;
+    const storeTrustZoneId = this.store.trustZone.trust_zone_id;
+    if (outboxTrustZoneId !== storeTrustZoneId) {
+      return this.block(
+        item,
+        lease.lease_id,
+        `outbox trust zone mismatches store; re-run with --trust-zone ${outboxTrustZoneId}`,
+        now,
+      );
+    }
+
     try {
       const transfer = this.store.exportProtectedValueForSync({
         protectedValueId: item.protected_value_id,
@@ -254,19 +265,10 @@ export class OutboxSyncCoordinator {
       if (result.status === "partial_error") {
         return this.retry(item, lease.lease_id, "remote partial_error", now);
       }
-      return {
-        status: "blocked",
-        outbox_id: item.outbox_id,
-        reason: "remote idempotency_conflict",
-        result,
-      };
+      return this.block(item, lease.lease_id, "remote idempotency_conflict", now, result);
     } catch (error) {
       if (error instanceof SyncHttpError && !error.retryable) {
-        return {
-          status: "blocked",
-          outbox_id: item.outbox_id,
-          reason: sanitizeError(error),
-        };
+        return this.block(item, lease.lease_id, sanitizeError(error), now);
       }
       return this.retry(item, lease.lease_id, sanitizeError(error), now);
     }
@@ -369,6 +371,24 @@ export class OutboxSyncCoordinator {
       status: "retried",
       outbox_id: item.outbox_id,
       error,
+    };
+  }
+
+  private block(
+    item: LeasedOutboxItem,
+    leaseId: string,
+    reason: string,
+    now: Date,
+    result?: SyncPushResult,
+  ): PushOneOutboxResult {
+    // Return the lease so the item is not stuck leased after a non-retryable block.
+    // available_at = now (delay 0) so a corrected --trust-zone can pick it up immediately.
+    this.store.retryOutbox(item.outbox_id, leaseId, 0, reason, now);
+    return {
+      status: "blocked",
+      outbox_id: item.outbox_id,
+      reason,
+      ...(result === undefined ? {} : { result }),
     };
   }
 }

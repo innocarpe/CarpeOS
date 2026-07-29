@@ -15,11 +15,11 @@ import {
 import type {
   CanonicalEvent,
   Claim,
-  ProvenanceRef,
+  ErasureLedgerRecord,
   ProtectedValueMetadata,
   ProtectedValueRef,
   ProtectedValueUploadIntent,
-  ErasureLedgerRecord,
+  ProvenanceRef,
   SyncPushRequest,
   TrustZone,
   WrappedDeviceKeyEnvelope,
@@ -770,6 +770,42 @@ export class LocalCaptureStore {
       status[row.state] = Number(row.count);
     }
     return status;
+  }
+
+  /**
+   * Distinct trust_zone_id values on pending/leased outbox push requests.
+   * Used by the CLI to warn when the active store zone does not match outbox work.
+   */
+  listOutboxTrustZones(
+    states: readonly ("pending" | "leased")[] = ["pending", "leased"],
+  ): string[] {
+    if (states.length === 0) {
+      return [];
+    }
+    const placeholders = states.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `
+          SELECT push_request_json
+          FROM outbox
+          WHERE state IN (${placeholders})
+          ORDER BY outbox_id
+        `,
+      )
+      .all(...states) as Array<{ push_request_json: string }>;
+
+    const zones = new Set<string>();
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.push_request_json) as { trust_zone_id?: unknown };
+        if (typeof parsed.trust_zone_id === "string" && parsed.trust_zone_id.length > 0) {
+          zones.add(parsed.trust_zone_id);
+        }
+      } catch {
+        // Corrupt outbox rows are surfaced by push failure; status stays best-effort.
+      }
+    }
+    return [...zones].sort((left, right) => left.localeCompare(right));
   }
 
   leaseOutbox(limit: number, leaseMs: number, now = this.clock.now()): LeaseResult {

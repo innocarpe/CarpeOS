@@ -14,8 +14,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   decodeHeaderJson,
   encodeHeaderJson,
-  OutboxSyncCoordinator,
   type FetchLike,
+  OutboxSyncCoordinator,
   SyncHttpTransport,
 } from "../src/index.js";
 
@@ -190,6 +190,55 @@ describe("OutboxSyncCoordinator", () => {
     await expectPushOutcome("partial_error", 200, "retried");
     await expectPushOutcome("accepted", 401, "blocked");
     await expectPushOutcome("idempotency_conflict", 409, "blocked");
+  });
+
+  it("blocks push when outbox trust zone mismatches the store zone and releases the lease", async () => {
+    const runtimeDir = tempDir();
+    const captureStore = new LocalCaptureStore({
+      runtimeDir,
+      workspaceRoot: runtimeDir,
+      trustZoneId: "tz_outbox_zone",
+      keyProvider: new StaticKeyProvider(sourceKey),
+      clock: { now: () => now },
+    });
+    captureStore.captureHook({
+      provider: "codex",
+      hook_event_name: "SessionEnd",
+      captured_at: "2026-01-01T00:00:00Z",
+      workspace_root: "/synthetic/workspace",
+      session_id: "session_zone_mismatch",
+      source_event_id: "source_zone_mismatch",
+      media_type: "application/json",
+      subject_ref: "subject_synthetic",
+      payload: { transcript: "zone mismatch" },
+    });
+    expect(captureStore.listOutboxTrustZones()).toEqual(["tz_outbox_zone"]);
+
+    // Re-open the same home with a different active store zone (operator forgot --trust-zone).
+    const mismatchedStore = new LocalCaptureStore({
+      runtimeDir,
+      workspaceRoot: runtimeDir,
+      trustZoneId: "tz_store_zone",
+      keyProvider: new StaticKeyProvider(sourceKey),
+      clock: { now: () => now },
+    });
+    const transport = makeTransport(async () => {
+      throw new Error("network should not be used for trust-zone mismatch");
+    });
+    const coordinator = new OutboxSyncCoordinator({
+      store: mismatchedStore,
+      transport,
+      trustZoneSyncKey: syncKey,
+    });
+
+    const result = await coordinator.pushOne(now);
+
+    expect(result).toMatchObject({
+      status: "blocked",
+      reason: "outbox trust zone mismatches store; re-run with --trust-zone tz_outbox_zone",
+    });
+    expect(mismatchedStore.outboxStatus()).toEqual({ pending: 1, leased: 0, delivered: 0 });
+    expect(mismatchedStore.listOutboxTrustZones()).toEqual(["tz_outbox_zone"]);
   });
 
   it("pulls a page, imports protected values idempotently, and advances cursor after apply", async () => {

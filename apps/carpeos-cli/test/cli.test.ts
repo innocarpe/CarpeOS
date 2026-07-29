@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -337,10 +337,64 @@ describe("carpeos CLI", () => {
       },
       local: {
         outbox: { pending: 0, leased: 0, delivered: 0 },
+        outbox_trust_zone_ids: [],
+        outbox_trust_zone_mismatch: false,
       },
     });
+    expect(result.stdout.warnings).toBeUndefined();
     expect(result.rawStdout).not.toContain(syncCredential);
     expect(result.rawStdout).not.toContain(Buffer.from(syncKey).toString("hex"));
+  });
+
+  it("warns on sync status when pending outbox trust zones differ from the active store zone", () => {
+    const context = makeContext();
+    const secrets = writeSyncSecrets(context.home);
+
+    const captured = runJson(
+      ["capture-hook", "--provider", "codex", "--trust-zone", "tz_outbox_zone"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_tz_status",
+        message: "outbox under tz_outbox_zone",
+      }),
+    );
+    expect(captured.status).toBe(0);
+
+    const result = runJson(
+      [
+        "sync",
+        "status",
+        "--trust-zone",
+        "tz_store_zone",
+        "--url",
+        "https://sync.example.test",
+        "--credential-file",
+        secrets.credentialFile,
+        "--sync-key-file",
+        secrets.syncKeyFile,
+      ],
+      context,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatchObject({
+      ok: true,
+      command: "sync status",
+      local: {
+        trust_zone_id: "tz_store_zone",
+        outbox: { pending: 1, leased: 0, delivered: 0 },
+        outbox_trust_zone_ids: ["tz_outbox_zone"],
+        outbox_trust_zone_mismatch: true,
+      },
+      warnings: [
+        {
+          code: "outbox_trust_zone_mismatch",
+          active_trust_zone_id: "tz_store_zone",
+          outbox_trust_zone_ids: ["tz_outbox_zone"],
+        },
+      ],
+    });
   });
 
   it("rejects missing and unsafe sync secret files", () => {
