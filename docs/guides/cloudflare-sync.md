@@ -26,26 +26,37 @@ key stored only on enrolled Macs.
 
 ## Cloudflare Setup
 
-One private operator provisions the Cloudflare resources outside Git:
+`apps/carpeos-sync-worker/wrangler.toml` contains placeholder identifiers only.
+Do not replace tracked placeholders with real values. Use an ignored complete
+standalone private Wrangler config for private operator work; see
+[Private Cloudflare Operator Config](private-cloudflare-operator-config.md).
+This repository does not claim that a live Worker, D1 database, or R2 bucket
+exists. The package scripts target the placeholder `carpeos_sync` database name
+from the example config and are not private remote-operation proof unless a
+later story explicitly passes an ignored private config path.
+
+One private operator provisions the Cloudflare resources outside Git in a later
+rollout step. These are examples of that later rollout resource creation shape,
+not deployment proof:
 
 ```sh
 pnpm --filter @carpeos/sync-worker exec wrangler d1 create carpeos-sync-example
 pnpm --filter @carpeos/sync-worker exec wrangler r2 bucket create carpeos-protected-values-example
 ```
 
-Then run local and remote D1 migrations from the Worker package:
+Decline any Wrangler prompt that would write real binding data into the tracked
+`apps/carpeos-sync-worker/wrangler.toml`. Real bindings belong only in the
+ignored standalone private config.
+
+Run only local D1 migrations from the Worker package script:
 
 ```sh
 pnpm --filter @carpeos/sync-worker d1:migrations:local
-pnpm --filter @carpeos/sync-worker d1:migrations:remote
 ```
 
-`apps/carpeos-sync-worker/wrangler.toml` contains placeholder identifiers only.
-Replace them in private operator configuration before any real deployment. This
-repository does not claim that a live Worker, D1 database, or R2 bucket exists.
-The package scripts target the placeholder `carpeos_sync` database name from the
-example config; private operators must bind that name to a real D1 database ID
-outside the public repo before remote use.
+Do not run `pnpm --filter @carpeos/sync-worker d1:migrations:remote`; that
+package script uses the tracked placeholder config. Remote D1 migration belongs
+to the standalone private-config guide and later rollout operator evidence.
 
 For the broader local-first operator boundary, see
 [Local-First Operator Runbook](local-first-operator-runbook.md). For the
