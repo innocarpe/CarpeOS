@@ -10,6 +10,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
+### Added
+
+- (none yet — fold entries here before the next release)
+
+## [0.2.1] - 2026-07-29
+
 Post-`0.2.0` local/sync completeness from private dogfood (hosted Cloudflare remains
 operator-private; not required for `1.0.0` per v1 readiness non-goals).
 
@@ -119,9 +125,10 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v0.2.1...HEAD
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
 [0.1.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.2
 [0.1.3]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.3
 [0.2.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.0
+[0.2.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.1
