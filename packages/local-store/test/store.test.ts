@@ -15,6 +15,7 @@ import {
   assertPrivateKeyFileModes,
   FileKeyProvider,
   IdempotencyConflictError,
+  LOCAL_STORE_MIGRATION_IDS,
   LocalCaptureStore,
   StaticKeyProvider,
 } from "../src/index.js";
@@ -375,8 +376,46 @@ describe("LocalCaptureStore", () => {
     const row = db.prepare("SELECT count(*) AS count FROM schema_migrations").get() as {
       count: number;
     };
-    expect(Number(row.count)).toBe(2);
+    expect(Number(row.count)).toBe(LOCAL_STORE_MIGRATION_IDS.length);
+    const applied = db
+      .prepare("SELECT migration_id FROM schema_migrations ORDER BY migration_id")
+      .all() as Array<{ migration_id: string }>;
+    expect(applied.map((item) => item.migration_id)).toEqual([...LOCAL_STORE_MIGRATION_IDS]);
     db.close();
+    second.close();
+  });
+
+  it("preserves events across reopen after migrations (no silent wipe)", () => {
+    const runtimeDir = tempDir();
+    const dbPath = join(runtimeDir, "carpeos.sqlite");
+    const first = new LocalCaptureStore({
+      runtimeDir,
+      dbPath,
+      workspaceRoot: runtimeDir,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+    });
+    const captured = first.captureHook(makeEnvelope());
+    expect(first.countRows("canonical_events")).toBe(1);
+    first.close();
+
+    const second = new LocalCaptureStore({
+      runtimeDir,
+      dbPath,
+      workspaceRoot: runtimeDir,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+    });
+    expect(second.countRows("canonical_events")).toBe(1);
+    const db = new DatabaseSync(second.dbPath);
+    const event = db
+      .prepare("SELECT event_id FROM canonical_events WHERE event_id = ?")
+      .get(captured.event.event_id) as { event_id: string } | undefined;
+    expect(event?.event_id).toBe(captured.event.event_id);
+    const migrationCount = db.prepare("SELECT count(*) AS count FROM schema_migrations").get() as {
+      count: number;
+    };
+    expect(Number(migrationCount.count)).toBe(LOCAL_STORE_MIGRATION_IDS.length);
+    db.close();
+    second.close();
   });
 
   it("leases due outbox rows, rejects wrong lease ids, retries with delay, and reclaims expired leases after restart", () => {

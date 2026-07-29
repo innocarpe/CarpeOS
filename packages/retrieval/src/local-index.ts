@@ -69,6 +69,9 @@ export function assertSupportedLocalIndexRuntime(): void {
   }
 }
 
+/** Retrieval-projection migration applied into the same local SQLite home DB. */
+export const RETRIEVAL_LOCAL_INDEX_MIGRATION_ID = "003_retrieval_local_index" as const;
+
 export function migrateLocalRetrievalIndex(db: SqlDatabase, appliedAt = new Date()): void {
   assertSupportedLocalIndexRuntime();
   db.exec(`
@@ -118,7 +121,7 @@ export function migrateLocalRetrievalIndex(db: SqlDatabase, appliedAt = new Date
 
   db.prepare(
     "INSERT OR IGNORE INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)",
-  ).run("003_retrieval_local_index", appliedAt.toISOString());
+  ).run(RETRIEVAL_LOCAL_INDEX_MIGRATION_ID, appliedAt.toISOString());
 }
 
 export function rebuildLocalRetrievalIndex(
