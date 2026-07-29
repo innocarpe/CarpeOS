@@ -89,6 +89,12 @@ Budgeted responses MUST include:
 - `truncated`;
 - `omitted.items` and `omitted.characters`.
 
+Context budgets define **active working-memory capacity**. They do not measure
+or limit total store capacity in the canonical event stream. See ADR 0009 and
+`docs/architecture/memory-capacity.md` for the total-vs-active capacity model.
+Procedure traces captured as evidence MUST NOT be treated as accepted facts
+solely because they appear in a budgeted response.
+
 ## Tool Semantics
 
 | Tool | Implemented behavior |

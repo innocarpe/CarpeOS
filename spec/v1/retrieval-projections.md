@@ -143,6 +143,13 @@ Each context-pack request MUST declare `ContextBudget` with `max_items` and
 `omitted` metadata. These are item and character limits only; they are not
 token-exact budgets.
 
+Context packs are **active capacity** projections over a larger **total
+capacity** store. Implementations MAY apply expert-slot allocation, diversity
+caps, multi-resolution text selection, and compaction projections as described
+in ADR 0009 and `docs/architecture/memory-capacity.md`. Those mechanisms MUST
+NOT change acceptance semantics: only visible accepted
+`AcceptanceDecision` lineage may populate `accepted_facts`.
+
 ## Obsidian Projection
 
 G007 implements a deterministic, manifest-bounded Obsidian projection. Obsidian
