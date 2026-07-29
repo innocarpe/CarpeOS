@@ -181,69 +181,78 @@ draft보다 앞에 두는 cache-friendly 순서를 씁니다.
 
 ---
 
-## Quick start
+## 설치
 
-Node.js ≥ 22.22, pnpm ≥ 11.16.
+**Node.js ≥ 22.22** 필요.
 
-### 오픈소스 CLI처럼 설치
+### 사용자
 
 ```sh
-# npm global (게시 후 권장)
+# npm (권장)
 npm install -g @innocarpe/carpeos
 carpeos setup --yes
 
-# curl one-liner
+# 또는 curl (동일 패키지 설치 후 setup)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
 ```
 
-Node.js ≥ 22.22 필요. `carpeos setup`이 `~/.carpeos`를 만들고 Claude / Codex /
-Grok에 로컬 MCP를 등록합니다.
+`carpeos setup`은 `~/.carpeos` 에 private 런타임을 만들고, PATH에 있으면
+**Claude Code / Codex CLI / Grok Build** 에 로컬 MCP를 등록합니다.
+확인: `carpeos setup --doctor`.
 
-### git checkout (개발용)
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@0.1.0`.
+변경 기록: [CHANGELOG.md](CHANGELOG.md).
+
+### 개발자 (git checkout)
 
 ```sh
-node scripts/install-local.mjs --dry-run
-node scripts/install-local.mjs --yes
+git clone https://github.com/innocarpe/carpeos.git && cd carpeos
+node scripts/install-local.mjs --yes    # 빌드, wrapper, MCP 등록
 export PATH="$HOME/.local/bin:$PATH"
 node scripts/install-local.mjs --doctor
 ```
 
-자세한 내용: [One-stop install guide](docs/guides/one-stop-install.md) ·
-[npm package](packages/carpeos/README.md).
+글로벌 설치 없이 monorepo만 쓸 때: `pnpm install && pnpm build` 후
+`node apps/carpeos-cli/dist/index.js …`
+([local capture](docs/guides/local-capture.md)).
 
-### 수동 / synthetic 경로
+### 설치 후 스모크
 
 ```sh
-pnpm install
-pnpm build
-
-node apps/carpeos-cli/dist/index.js init
-node apps/carpeos-cli/dist/index.js project identify
-
-# synthetic capture 한 번
-node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
-  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
-
-node apps/carpeos-cli/dist/index.js outbox status
+carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+carpeos memory context-pack \
+  --task "Smoke: list what I know" \
+  --trust-zone tz_local_default \
+  --visible-trust-zone tz_local_default
 ```
 
-| 주제 | 가이드 |
-| --- | --- |
-| One-stop install | [docs/guides/one-stop-install.md](docs/guides/one-stop-install.md) |
-| Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
-| Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
-| Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
-| MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
-| MCP context-pack smoke | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) |
-| Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
-| Memory capacity | [docs/architecture/memory-capacity.md](docs/architecture/memory-capacity.md) |
-| GraphRAG 로드맵 (planned) | [docs/plans/graphrag-roadmap.md](docs/plans/graphrag-roadmap.md) |
-| Threat model | [docs/architecture/threat-model.md](docs/architecture/threat-model.md) |
-| Local-first operator runbook | [docs/guides/local-first-operator-runbook.md](docs/guides/local-first-operator-runbook.md) |
-| Cross-Mac bootstrap & recovery | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
-| Release readiness | [docs/maintainers/release-readiness.md](docs/maintainers/release-readiness.md) |
+세션 **자동 capture** 는 MCP와 별개로 [`adapters/`](adapters/) hook 이 필요합니다.
+자세한 문서:
+[one-stop install](docs/guides/one-stop-install.md) ·
+[MCP](docs/guides/mcp-server.md) ·
+[context-pack smoke](docs/guides/mcp-context-pack-smoke.md).
 
-Hook 템플릿: [`adapters/`](adapters/).
+### 에이전트가 이 저장소를 설치할 때
+
+설치는 **idempotent** 하게, private 데이터는 **git 밖**에 둡니다.
+
+1. 우선 `npm i -g @innocarpe/carpeos` + `carpeos setup --yes` (또는 `install.sh`).
+2. 소스 작업이면 checkout에서 `node scripts/install-local.mjs --yes`.
+3. `~/.carpeos`, credential, 실제 세션 데이터를 커밋하지 말 것.
+4. 설치 경로를 새로 만들지 말 것. setup이 Claude/Codex/Grok MCP를 등록함.
+5. 릴리스는 SemVer + `vX.Y.Z` 태그만 —
+   [versioning](docs/maintainers/versioning-and-releases.md),
+   스킬 `skills/carpeos-release/SKILL.md`
+   (`./scripts/install-release-skill.sh`).
+
+| 가이드 | 링크 |
+| --- | --- |
+| 설치 (전체 경로) | [docs/guides/one-stop-install.md](docs/guides/one-stop-install.md) |
+| Capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
+| Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
+| MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| 버전·릴리스 | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
+| Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 
 ---
 
@@ -265,17 +274,18 @@ Worker+D1+R2 gate가 통과했습니다. 이 증거는 로컬 증거일 뿐입�
 | Sync Worker/client | 코드 + 로컬 테스트. production 배포 주장 없음 |
 | Local hybrid retrieval | 구현 (개발용 deterministic embedding) |
 | MCP stdio server (도구 8개) | 로컬만 |
-| Expert-slot context pack | 로컬만 (MCP smoke 가이드 참고) |
+| Expert-slot context pack | CLI + MCP (로컬) |
+| `carpeos setup` / one-stop install | 있음. npm 패키지 `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection package | 로컬만 |
 | Synthetic G008 local e2e | 로컬만. opt-in Worker+D1+R2 proof |
 | Hosted embeddings | 아직 없음 |
 | GraphRAG traversal | 계획 — [로드맵](docs/plans/graphrag-roadmap.md) |
-| 패키지형 사용자 설치 | 아직 아님 |
+| Hosted multi-tenant SaaS | 이 저장소 목표 아님 |
 
-**NOT DEPLOYED:** 이 저장소는 hosted Worker, D1/R2 production resource, package
-publish, private vault adoption, hosted MCP, cross-Mac live deployment를 증명하지
-않습니다.
+**NOT DEPLOYED:** hosted Worker, D1/R2 production, private vault, hosted MCP 는
+이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI 게이트를 따릅니다
+([versioning](docs/maintainers/versioning-and-releases.md)).
 
 어댑터 설치, 실제 Cloudflare 운영, hosted MCP, production 검색 품질을 “됐다”고
 보지 마세요. 이 저장소에 테스트와 문서가 생기기 전엔 미완입니다.
@@ -312,6 +322,13 @@ claim/수락/supersession·trust zone·protected value·벤더 중립 MCP를 전
 
 ```sh
 pnpm check   # format, lint, build, typecheck, test, public-boundary
+```
+
+공개 패키지 릴리스는 하네스 공통 스킬을 따릅니다:
+
+```sh
+./scripts/install-release-skill.sh   # Claude / Codex / Grok 스킬 링크
+# 이후 release / tag / npm — skills/carpeos-release/SKILL.md
 ```
 
 ---
