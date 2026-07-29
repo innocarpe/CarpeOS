@@ -191,11 +191,21 @@ Graph-oriented recall remains planned:
 
 Needs Node.js ≥ 22.22 and pnpm ≥ 11.16.
 
-### One-stop install (recommended on a real Mac)
+### Install like other open-source CLIs
 
-From a git checkout, install CLI/MCP wrappers under `~/.local/bin`, create
-`~/.carpeos`, and register MCP with Claude Code / Codex / Grok when those CLIs
-are on `PATH`:
+```sh
+# npm global (recommended once published)
+npm install -g @innocarpe/carpeos
+carpeos setup --yes
+
+# curl one-liner (same as Codex-style installers)
+curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
+```
+
+Requires Node.js ≥ 22.22. `carpeos setup` creates `~/.carpeos` and registers the
+local MCP server with Claude Code / Codex / Grok when those CLIs are available.
+
+### From a git checkout (developers)
 
 ```sh
 node scripts/install-local.mjs --dry-run   # plan
@@ -204,7 +214,8 @@ export PATH="$HOME/.local/bin:$PATH"
 node scripts/install-local.mjs --doctor
 ```
 
-Details: [One-stop install guide](docs/guides/one-stop-install.md).
+Details: [One-stop install guide](docs/guides/one-stop-install.md) ·
+[npm package](packages/carpeos/README.md).
 
 ### Manual / synthetic path
 

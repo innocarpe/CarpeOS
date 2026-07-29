@@ -47,7 +47,26 @@ export function defaultBinDir(env = process.env) {
  * @param {string} nodePath
  * @param {string} binDir
  */
+export function resolveInstallEntries(repoRoot) {
+  const monorepoCli = join(repoRoot, "apps/carpeos-cli/dist/index.js");
+  const monorepoMcp = join(repoRoot, "apps/carpeos-mcp-server/dist/index.js");
+  const npmCli = join(repoRoot, "dist/cli.js");
+  const npmMcp = join(repoRoot, "dist/mcp-server.js");
+  if (existsSync(npmCli) && existsSync(npmMcp)) {
+    return { cli_entry: npmCli, mcp_entry: npmMcp, distribution: "npm" };
+  }
+  return { cli_entry: monorepoCli, mcp_entry: monorepoMcp, distribution: "git" };
+}
+
 export function buildConfig(input) {
+  const entries =
+    input.cliEntry && input.mcpEntry
+      ? {
+          cli_entry: input.cliEntry,
+          mcp_entry: input.mcpEntry,
+          distribution: input.distribution ?? "custom",
+        }
+      : resolveInstallEntries(input.repoRoot);
   return {
     schema_version: "v1",
     record_type: "carpeos_install_config",
@@ -58,8 +77,9 @@ export function buildConfig(input) {
     workspace_root: input.workspaceRoot,
     node_path: input.nodePath,
     store_path: join(input.home, "carpeos.sqlite"),
-    cli_entry: join(input.repoRoot, "apps/carpeos-cli/dist/index.js"),
-    mcp_entry: join(input.repoRoot, "apps/carpeos-mcp-server/dist/index.js"),
+    cli_entry: entries.cli_entry,
+    mcp_entry: entries.mcp_entry,
+    distribution: entries.distribution,
     updated_at: input.updatedAt ?? new Date().toISOString(),
   };
 }
@@ -207,6 +227,9 @@ export function installLocal(options) {
     workspaceRoot: options.workspaceRoot,
     nodePath: options.nodePath,
     updatedAt: now().toISOString(),
+    ...(options.cliEntry === undefined ? {} : { cliEntry: options.cliEntry }),
+    ...(options.mcpEntry === undefined ? {} : { mcpEntry: options.mcpEntry }),
+    ...(options.distribution === undefined ? {} : { distribution: options.distribution }),
   });
 
   const steps = [];

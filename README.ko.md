@@ -185,10 +185,21 @@ draft보다 앞에 두는 cache-friendly 순서를 씁니다.
 
 Node.js ≥ 22.22, pnpm ≥ 11.16.
 
-### One-stop install (실제 Mac 권장)
+### 오픈소스 CLI처럼 설치
 
-git checkout에서 CLI/MCP 래퍼를 `~/.local/bin`에 두고 `~/.carpeos`를 만든 뒤,
-PATH에 있는 Claude Code / Codex / Grok에 MCP를 등록합니다.
+```sh
+# npm global (게시 후 권장)
+npm install -g @innocarpe/carpeos
+carpeos setup --yes
+
+# curl one-liner
+curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
+```
+
+Node.js ≥ 22.22 필요. `carpeos setup`이 `~/.carpeos`를 만들고 Claude / Codex /
+Grok에 로컬 MCP를 등록합니다.
+
+### git checkout (개발용)
 
 ```sh
 node scripts/install-local.mjs --dry-run
@@ -197,7 +208,8 @@ export PATH="$HOME/.local/bin:$PATH"
 node scripts/install-local.mjs --doctor
 ```
 
-자세한 내용: [One-stop install guide](docs/guides/one-stop-install.md).
+자세한 내용: [One-stop install guide](docs/guides/one-stop-install.md) ·
+[npm package](packages/carpeos/README.md).
 
 ### 수동 / synthetic 경로
 
