@@ -1,88 +1,54 @@
 # GitHub Label Policy
 
-This guide defines the human-facing label policy for CarpeOS maintainers.
-`.github/labels.json` is the source of truth for every repository label.
+CarpeOS uses a small label set for lightweight tagging, not multi-axis
+classification. `.github/labels.json` is the source of truth.
 
 ## Source of Truth
 
 - Use only labels defined in `.github/labels.json`.
 - Do not create ad hoc labels from the GitHub UI.
-- Do not rename, remove, or add labels without updating `.github/labels.json`.
-- When the label set must change, update `.github/labels.json` and GitHub
-  together in a dedicated pull request.
-- Keep standard community labels available for issues.
-- Label names are case-sensitive; milestone labels retain the uppercase `G`
-  used in the catalog.
+- When the set must change, update `.github/labels.json` and GitHub together.
+- Keep the catalog near **10–15** labels. Prefer fewer labels over finer
+  taxonomy.
+- Size, review status, and milestone tracking are **not** label concerns:
+  - size is visible on the GitHub diff;
+  - review state lives in the PR conversation and checks;
+  - milestones use GitHub Milestones when needed.
 
-## Pull Request Labels
+## Label Groups
 
-Every pull request must have labels from these five groups:
-
-| Group | Required count | Selection rule |
+| Group | Labels | Typical use |
 | --- | --- | --- |
-| Type | Exactly one | Choose the label that describes the main kind of change. |
-| Area | One or more | Choose every affected area. |
-| Size | Exactly one | Compute from GitHub additions plus deletions. |
-| Status | Exactly one | Reflect the current review lifecycle state. |
-| Milestone | Exactly one | Match the milestone or release target for the PR. |
+| Kind | `feat`, `fix`, `docs`, `spec`, `chore` | What kind of change this is |
+| Area | `capture`, `sync`, `retrieval`, `interfaces`, `infra` | Optional product surface |
+| Community | `good first issue`, `help wanted`, `question`, `duplicate`, `wontfix` | Issue triage |
 
-Do not open a ready-for-review PR without all five groups represented.
+## Pull Request Guidance
 
-## Automated Enforcement
+Keep PRs lightly tagged:
 
-The `Pull request labels` workflow validates the labels on every pull request
-when it is opened, reopened, synchronized, marked ready for review, labeled, or
-unlabeled. It runs the checker and catalog from the current trusted base branch,
-never code from the pull request branch. It fetches the current pull request
-metadata before validation so a label replacement does not fail on the
-intermediate `unlabeled` event snapshot. Concurrent checks for the same pull
-request cancel older in-progress runs. The job checks that:
+- Apply **exactly one kind** label (`feat`, `fix`, `docs`, `spec`, or `chore`).
+- Apply **zero or one primary area** when it helps discovery. Add a second area
+  only when the change is truly cross-cutting.
+- Do not apply community labels to ordinary feature PRs.
 
-- every applied label exists in `.github/labels.json`;
-- type, size, status, and milestone each have exactly one label;
-- at least one area label is present;
-- the size label matches GitHub's additions plus deletions count;
-- an open pull request does not use `status:merged`; and
-- a merged pull request uses `status:merged` when a later label event runs.
+Examples:
 
-Create pull requests with the complete initial label set so the first CI run is
-valid. When a pull request changes size bands after a new commit, replace its
-size label before treating the checks as complete.
-
-## Size Labels
-
-Compute size from the total GitHub diff count:
-
-```text
-total size = additions + deletions
-```
-
-Use these bands:
-
-| Size | Total additions plus deletions |
+| Change | Labels |
 | --- | --- |
-| xs | 0-19 |
-| s | 20-99 |
-| m | 100-499 |
-| l | 500-999 |
-| xl | 1000 or more |
+| Local capture outbox feature | `feat`, `capture` |
+| Hybrid retrieval ranking fix | `fix`, `retrieval` |
+| MCP server docs only | `docs`, `interfaces` |
+| CI / label catalog maintenance | `chore`, `infra` |
+| Spec-only ontology update | `spec` |
 
-Use the exact size label defined in `.github/labels.json` for the matching
-band.
+## Issue Guidance
 
-## Status Lifecycle
+Community labels are mainly for issues. Kind and area labels may be used on
+issues when they make triage clearer.
 
-- A new ready pull request gets the `status:needs-review` status.
-- After all required gates are ready, move the status to `status:ready`.
-- Use `status:blocked` while the PR cannot advance because of an external
-  dependency or unresolved blocker.
-- Use `status:changes-requested` when reviewer feedback requires author action.
-- After merge, update the status label to `status:merged`.
+## Automation
 
-Only one `status:*` label may be present at any time. Remove the previous
-status label when applying the next lifecycle status.
-
-## Issue Labels
-
-Standard community labels remain available for issues. Issue labeling does not
-override the pull request cardinality rules above.
+There is **no required label CI contract**. Labels are maintainer guidance and
+browse/filter tags. Do not reintroduce hard cardinality checks unless the
+project later decides it needs them.

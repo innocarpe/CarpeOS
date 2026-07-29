@@ -81,12 +81,14 @@ include its verification when applicable.
 
 ## Pull Request Labels
 
-Every pull request must use only labels from `.github/labels.json` and include
-exactly one type, one size, one status, one milestone, and at least one area.
-Compute size from GitHub additions plus deletions.
+Use only labels from `.github/labels.json`. Keep tagging light:
 
-See [GitHub Label Policy](docs/maintainers/github-labels.md) for the maintainer
-workflow and lifecycle rules.
+- one kind label (`feat`, `fix`, `docs`, `spec`, or `chore`);
+- optional area label (`capture`, `sync`, `retrieval`, `interfaces`, or `infra`)
+  when it helps discovery.
+
+Do not invent labels for size, review status, or milestones. See
+[GitHub Label Policy](docs/maintainers/github-labels.md).
 
 ## Before Opening a Pull Request
 
