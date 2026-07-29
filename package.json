@@ -17,8 +17,9 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "public-boundary": "node scripts/check-public-boundary.mjs",
-    "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "test": "pnpm -r --if-present test && node --test scripts/test/*.test.mjs",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "install:local": "node scripts/install-local.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
