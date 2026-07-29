@@ -9,6 +9,9 @@ const repoRoot = resolve(packageRoot, "../..");
 const distDir = join(packageRoot, "dist");
 mkdirSync(distDir, { recursive: true });
 
+const packageMeta = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+const embeddedVersion = typeof packageMeta.version === "string" ? packageMeta.version : "0.0.0-dev";
+
 // Prefer TypeScript sources so the npm package can build without a prior monorepo tsc.
 const alias = {
   "@carpeos/capture": join(repoRoot, "packages/capture/src/index.ts"),
@@ -31,6 +34,9 @@ const common = {
   // Keep published runtime deps external.
   external: ["@modelcontextprotocol/*", "ajv", "ajv/*", "node:*"],
   loader: { ".json": "json" },
+  define: {
+    "process.env.CARPEOS_EMBEDDED_VERSION": JSON.stringify(embeddedVersion),
+  },
 };
 
 await esbuild.build({

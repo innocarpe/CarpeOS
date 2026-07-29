@@ -53,8 +53,13 @@ production embedding providers, or full session capture UX. Those can land as
 
 **Practical gate (checklist before tagging `v1.0.0`):**
 
+See the living tracker: **[v1 Readiness](v1-readiness.md)** (gates G1–G9, exit codes,
+non-goals, and how to flip status).
+
+Summary:
+
 1. Public install path (`npm i -g` + `carpeos setup`) is green on a clean machine
-2. CLI + setup expose complete `--help` and README matches reality
+2. CLI + setup expose complete `--help`; README matches reality
 3. MCP smoke (search / context-pack) documented and CI-covered
 4. CHANGELOG lists a deliberate “v1 contract” section; no open “will rename soon” known breaks
 5. Maintainer decision recorded (PR or release notes) — not an automatic version bump
