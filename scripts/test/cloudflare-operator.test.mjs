@@ -395,9 +395,20 @@ describe("cloudflare operator private config validation", () => {
 
     for (const [guide, scripts] of documentedScripts) {
       const contents = readFileSync(guide, "utf8");
+      const shellLines = [...contents.matchAll(/```sh\r?\n([\s\S]*?)\r?\n```/g)].flatMap(
+        ([, block]) =>
+          block
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+      );
+
       for (const script of scripts) {
-        assert.match(contents, new RegExp(`pnpm --filter @carpeos/sync-worker run ${script}`));
-        assert.doesNotMatch(contents, new RegExp(`pnpm --filter @carpeos/sync-worker ${script}`));
+        const explicitCommand = `pnpm --filter @carpeos/sync-worker run ${script}`;
+        const implicitCommand = `pnpm --filter @carpeos/sync-worker ${script}`;
+
+        assert.equal(shellLines.filter((line) => line === explicitCommand).length, 1);
+        assert.equal(shellLines.filter((line) => line === implicitCommand).length, 0);
       }
     }
   });
