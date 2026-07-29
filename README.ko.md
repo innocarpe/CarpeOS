@@ -88,7 +88,8 @@ flowchart LR
 
 ### 사람용 / 에이전트용 인터페이스
 
-- **CLI** — rebuild, embed(개발용), `memory search` / `memory get`
+- **CLI** — rebuild, embed(개발용), `memory search` / `memory get` /
+  `memory context-pack`
 - **MCP (stdio)** — 로컬 도구 8개 (`memory_context_pack`, `memory_trace`,
   `memory_capture`, `memory_propose_claim` 등)
 - **Obsidian projection** — 로컬 스토어에서 Markdown 생성 (원본 아님, projection)

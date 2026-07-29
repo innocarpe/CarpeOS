@@ -35,6 +35,9 @@ generation** and **explanation**, but it must not decide acceptance.
 
 **Goal:** Name graph node/edge kinds as **projections**, not core event types.
 
+**Status: landed (vocabulary only)** — see ADR 0010 and
+`spec/v1/graph-projection.md`.
+
 Candidate node kinds (derived):
 
 - event / claim / observation / artifact / entity / open_loop / run
@@ -46,8 +49,8 @@ Candidate edge kinds (derived from existing fields):
 
 **Exit criteria**
 
-- Spec section under `spec/v1/` or ADR for projection-only graph model
-- Explicit non-goals: no sixth canonical `event_type` for “graph node”
+- [x] Spec section under `spec/v1/` or ADR for projection-only graph model
+- [x] Explicit non-goals: no sixth canonical `event_type` for “graph node”
 
 ### G-R1 — Deterministic lineage graph projection
 

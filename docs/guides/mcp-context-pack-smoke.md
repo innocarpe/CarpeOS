@@ -36,24 +36,37 @@ Node.js ≥ 22.22 and pnpm ≥ 11.16, same as the root README.
 
 ## Automated smoke (recommended)
 
-There is no public `carpeos memory context-pack` CLI yet. The supported smoke is
-the package test suite, which exercises classification, budgets, expert slots,
-and fail-closed visibility with synthetic fixtures only.
+Two supported smokes exist:
+
+1. **CLI** — `carpeos memory context-pack` (same pack builder as MCP)
+2. **Package tests** — classification, budgets, expert slots, fail-closed visibility
 
 ```sh
+# CLI context-pack smoke (requires local store + trust zone from init)
+node apps/carpeos-cli/dist/index.js memory context-pack \
+  --task "Summarize synthetic Alpha work" \
+  --trust-zone tz_synthetic_example \
+  --visible-trust-zone tz_synthetic_example \
+  --max-items 16 \
+  --max-characters 8000
+
 # expert-slot allocator unit tests
 pnpm --filter @carpeos/mcp-server exec vitest run test/expert-slots.test.ts
 
 # full MCP application tests (includes memory_context_pack classification)
 pnpm --filter @carpeos/mcp-server exec vitest run test/mcp-app.test.ts
 
+# CLI retrieval + context-pack tests
+pnpm --filter @carpeos/cli exec vitest run test/retrieval-cli.test.ts
+
 # stdio process smoke
 pnpm --filter @carpeos/mcp-server exec vitest run test/stdio.test.ts
 ```
 
-Expected: all tests pass. The classification test asserts that accepted, draft,
-rejected, conflict, supersession, erasure, and redaction sections stay separate,
-and that non-accepted claims never appear in `accepted_facts`.
+Expected: tests pass; CLI prints JSON with `command: "memory context-pack"` and
+a `pack` object. Classification asserts that accepted, draft, rejected,
+conflict, supersession, erasure, and redaction sections stay separate, and that
+non-accepted claims never appear in `accepted_facts`.
 
 ## Adjacent CLI smoke (store + retrieval)
 

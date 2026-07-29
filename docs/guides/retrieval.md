@@ -27,7 +27,10 @@ The local CLI supports:
 - creating deterministic local development embeddings;
 - searching visible memory with structured, full-text, recency, and vector
   candidate signals;
-- fetching a single visible chunk by `chunk_id`.
+- fetching a single visible chunk by `chunk_id`;
+- building a deterministic agent **context pack** (`memory context-pack`) with
+  expert-slot allocation and acceptance-aware sections (same builder as MCP
+  `memory_context_pack`).
 
 The CLI does not expose a public hosted retrieval route. Workers AI and
 Vectorize adapters are not live in this repository, and no network retrieval
@@ -112,6 +115,30 @@ carpeos memory get \
 
 `memory get` still applies visibility and freshness checks. A stored chunk row
 is not returned just because its ID exists locally.
+
+## Context pack
+
+Build a bounded agent context pack from the local store (active capacity):
+
+```sh
+carpeos memory context-pack \
+  --task "Summarize Alpha decisions for the next agent turn" \
+  --trust-zone tz_synthetic_example \
+  --visible-trust-zone tz_synthetic_example \
+  --max-items 16 \
+  --max-characters 8000 \
+  --protected-value-policy metadata_only
+```
+
+Stdout is JSON:
+
+- `ok`
+- `command`: `memory context-pack`
+- `pack`: MCP-compatible structured content (`accepted_facts`, `draft_claims`,
+  budgets, etc.)
+
+The pack is not a search ranking dump. Only acceptance-lineage facts fill
+`accepted_facts`. See [MCP context-pack smoke](mcp-context-pack-smoke.md).
 
 ## Output Safety
 

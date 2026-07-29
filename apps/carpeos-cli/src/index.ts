@@ -13,6 +13,7 @@ import {
   runtimeDirFromEnv,
   withLocalRetrievalDatabase,
 } from "@carpeos/local-store";
+import { createCarpeosMcpApplication } from "@carpeos/mcp-server";
 import {
   ackEmbeddingJob,
   DETERMINISTIC_LOCAL_DEV_EMBEDDING,
@@ -61,7 +62,7 @@ export async function runCli(
       case "retrieval":
         return runRetrieval(rest, env);
       case "memory":
-        return runMemory(rest, env);
+        return await runMemory(rest, env);
       default:
         throw new CliUsageError(`unknown command: ${command}`);
     }
@@ -189,10 +190,10 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   }
 }
 
-function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
-    throw new CliUsageError("memory requires search or get");
+    throw new CliUsageError("memory requires search, get, or context-pack");
   }
   const parsed = parseArgs({
     args: rest,
@@ -204,7 +205,11 @@ function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       "trust-zone": { type: "string" },
       query: { type: "string" },
       "chunk-id": { type: "string" },
+      task: { type: "string" },
       limit: { type: "string", default: "10" },
+      "max-items": { type: "string", default: "16" },
+      "max-characters": { type: "string", default: "8000" },
+      "protected-value-policy": { type: "string", default: "metadata_only" },
       "visible-trust-zone": { type: "string", multiple: true },
     },
   });
@@ -273,6 +278,36 @@ function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): number {
           filters_applied: result.filters_applied,
         });
         return item === undefined ? 2 : 0;
+      }
+      case "context-pack": {
+        const task = requireString(parsed.values.task, "--task");
+        const protectedValuePolicy = parseProtectedValuePolicy(
+          parsed.values["protected-value-policy"],
+        );
+        const maxItems = parseInteger(parsed.values["max-items"], "--max-items", 1);
+        const maxCharacters = parseInteger(parsed.values["max-characters"], "--max-characters", 1);
+        const app = createCarpeosMcpApplication({
+          store,
+          config: { visibleTrustZoneIds: visibleTrustZones },
+        });
+        const result = await app.dispatch("memory_context_pack", {
+          schema_version: "v1",
+          visibility: {
+            visible_trust_zone_ids: visibleTrustZones,
+            protected_value_policy: protectedValuePolicy,
+          },
+          task,
+          context_budget: {
+            max_items: maxItems,
+            max_characters: maxCharacters,
+          },
+        });
+        writeJson(process.stdout, {
+          ok: !result.isError,
+          command: "memory context-pack",
+          pack: result.structuredContent,
+        });
+        return result.isError ? 2 : 0;
       }
       default:
         throw new CliUsageError(`unknown memory subcommand: ${subcommand}`);
@@ -998,6 +1033,16 @@ function parseInteger(value: string | undefined, name: string, minimum: number):
     throw new CliUsageError(`${name} must be an integer greater than or equal to ${minimum}`);
   }
   return parsed;
+}
+
+function parseProtectedValuePolicy(
+  value: string | undefined,
+): "metadata_only" | "allow_decrypt" | "deny" {
+  const policy = value ?? "metadata_only";
+  if (policy === "metadata_only" || policy === "allow_decrypt" || policy === "deny") {
+    return policy;
+  }
+  throw new CliUsageError("--protected-value-policy must be metadata_only, allow_decrypt, or deny");
 }
 
 function requireString(value: string | undefined, name: string): string {

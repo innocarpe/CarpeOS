@@ -27,6 +27,7 @@
   "dependencies": {
     "@carpeos/capture": "workspace:*",
     "@carpeos/local-store": "workspace:*",
+    "@carpeos/mcp-server": "workspace:*",
     "@carpeos/retrieval": "workspace:*",
     "@carpeos/schema": "workspace:*",
     "@carpeos/sync-client": "workspace:*"
