@@ -75,6 +75,28 @@ CLI, and Grok Build. Install user-global skill links:
   conversation; milestones use GitHub Milestones when needed.
 - See `docs/maintainers/github-labels.md` for the full catalog guidance.
 
+## Pull Request Rules (all harnesses)
+
+When opening or updating a GitHub PR (`gh pr create`, `gh pr edit`, ship branch):
+
+1. **Load and follow** `skills/carpeos-pr/SKILL.md` (shared skill for Claude
+   Code, Codex CLI, and Grok Build).
+2. **Use the full template** in `.github/PULL_REQUEST_TEMPLATE.md`. Fill every
+   section. Minimal “Summary + Why + Test plan” bodies are **not** sufficient.
+3. Prefer `gh pr create --body-file …` / `gh pr edit --body-file …` so the body
+   is not truncated by shell history.
+4. Apply labels when creating or immediately after: one kind + optional area.
+5. Validation table must list **actual** commands and results; skipped checks
+   need an explicit “Not run — reason”.
+6. Keep public/private boundary: no credentials, private paths, real project
+   names, production logs, or runtime dumps in the PR text.
+
+Install the skill into user harness dirs:
+
+```sh
+./scripts/install-pr-skill.sh
+```
+
 ## Verification Rules
 
 Before reporting completion:
