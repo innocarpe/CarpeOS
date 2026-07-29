@@ -19,7 +19,8 @@
     "dev": "wrangler dev",
     "d1:migrations:local": "wrangler d1 migrations apply carpeos_sync --local",
     "d1:migrations:remote": "wrangler d1 migrations apply carpeos_sync --remote",
-    "test": "vitest run",
+    "test": "vitest run --exclude test/g008-local-e2e.test.ts",
+    "test:e2e": "G008_NODE_E2E=1 vitest run test/g008-local-e2e.test.ts --config /dev/null --pool threads --sequence.concurrent false",
     "typecheck": "tsc --noEmit --project tsconfig.typecheck.json"
   },
   "dependencies": {
@@ -28,6 +29,11 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^5.20260728.1",
+    "@carpeos/local-store": "workspace:*",
+    "@carpeos/mcp-server": "workspace:*",
+    "@carpeos/obsidian-projection": "workspace:*",
+    "@carpeos/retrieval": "workspace:*",
+    "@carpeos/sync-client": "workspace:*",
     "wrangler": "^4.114.0"
   }
 }

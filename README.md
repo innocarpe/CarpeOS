@@ -190,6 +190,10 @@ node apps/carpeos-cli/dist/index.js outbox status
 | Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
+| Threat model | [docs/architecture/threat-model.md](docs/architecture/threat-model.md) |
+| Local-first operator runbook | [docs/guides/local-first-operator-runbook.md](docs/guides/local-first-operator-runbook.md) |
+| Cross-Mac bootstrap & recovery | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
+| Release readiness | [docs/maintainers/release-readiness.md](docs/maintainers/release-readiness.md) |
 
 Hook templates: [`adapters/`](adapters/).
 
@@ -201,6 +205,11 @@ Pre-MVP. The local path — capture → outbox → sync client → retrieval →
 Obsidian projection — is implemented and covered with synthetic tests in this
 repo.
 
+G008 adds release-readiness documentation and a synthetic local end-to-end
+proof. On Node 22.22.0, `pnpm check` passes, and the opt-in synthetic local
+Worker+D1+R2 gate passes with
+`pnpm --filter @carpeos/sync-worker test:e2e`. This is local evidence only.
+
 | Area | Status |
 | --- | --- |
 | Specs, ontology, ADRs | In tree |
@@ -209,8 +218,13 @@ repo.
 | Local hybrid retrieval | Implemented (deterministic dev embeddings) |
 | MCP stdio server (8 tools) | Local only |
 | Obsidian projection package | Local only |
+| Synthetic G008 local e2e | Local only; opt-in Worker+D1+R2 proof |
 | Hosted embeddings / GraphRAG / dashboard | Not built |
 | Packaged end-user install | Not ready |
+
+**NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, package publish,
+private vault adoption, hosted MCP, or cross-Mac live deployment is proven by
+this repository.
 
 Do not treat adapter install, a live Cloudflare setup, hosted MCP, or
 production search quality as done until this repo says so with tests and docs.

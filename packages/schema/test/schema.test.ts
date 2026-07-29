@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   type CanonicalEvent,
   type CryptoShredErasureTargetRef,
+  classifyIdempotency,
+  collectBitemporalErrors,
+  compileSchemaValidators,
   type EmbeddingJob,
   type EmbeddingRecord,
   type ErasureLedgerRecord,
@@ -9,11 +13,11 @@ import {
   type MemoryProposeClaimInput,
   type MemoryProposeClaimOutput,
   type ObsidianProjectionManifest,
+  type ProjectionDeleteErasureTargetRef,
   type ProjectionFreshness,
   type ProtectedValueMetadata,
   type ProtectedValueUploadIntent,
   type ProtectedValueUploadReceipt,
-  type ProjectionDeleteErasureTargetRef,
   type ProvenanceRef,
   type RetrievalChunk,
   type RetrievalProjectionMessage,
@@ -23,9 +27,6 @@ import {
   type SyncApiMessage,
   type TombstoneErasureTargetRef,
   type TrustZone,
-  classifyIdempotency,
-  compileSchemaValidators,
-  collectBitemporalErrors,
   validateConformance,
 } from "../src/index.js";
 
@@ -643,6 +644,43 @@ describe("CarpeOS v1 schemas", () => {
       "retrievalProjection",
       "syncApi",
     ]);
+  });
+
+  it("validates with standalone validators when Function construction is denied", () => {
+    const originalFunction = globalThis.Function;
+    try {
+      Object.defineProperty(globalThis, "Function", {
+        configurable: true,
+        value: function deniedFunction(): never {
+          throw new EvalError("Code generation from strings disallowed for this context");
+        },
+      });
+
+      expect(validateConformance("canonicalEvent", eventFixtures[0])).toEqual({
+        valid: true,
+        errors: [],
+      });
+      expect(validateConformance("syncApi", syncFixtures[0])).toEqual({
+        valid: true,
+        errors: [],
+      });
+    } finally {
+      Object.defineProperty(globalThis, "Function", {
+        configurable: true,
+        value: originalFunction,
+      });
+    }
+  });
+
+  it("keeps generated standalone validators free of dynamic code loading", () => {
+    const generatedSource = readFileSync(
+      new URL("../src/generated/standalone-validators.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(generatedSource).not.toMatch(/\brequire\s*\(/);
+    expect(generatedSource).not.toMatch(/\bFunction\s*\(/);
+    expect(generatedSource).not.toMatch(/\beval\s*\(/);
   });
 
   it("accepts complete synthetic examples for every event payload type", () => {

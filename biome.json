@@ -12,7 +12,8 @@
       "!**/node_modules",
       "!**/coverage",
       "!**/dist",
-      "!**/build"
+      "!**/build",
+      "!packages/schema/src/generated/standalone-validators.ts"
     ]
   },
   "formatter": {

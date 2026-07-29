@@ -1,6 +1,7 @@
 # Cloudflare Sync Guide
 
-Status: G005 local implementation and synthetic integration tests. Not deployed.
+Status: G005 local implementation and synthetic integration tests. G008 adds a
+synthetic local Worker+D1+R2 end-to-end proof. Not deployed.
 
 This guide describes how the G005 sync path is intended to be operated for a
 private CarpeOS instance. It uses synthetic placeholders only. Do not copy real
@@ -45,6 +46,11 @@ repository does not claim that a live Worker, D1 database, or R2 bucket exists.
 The package scripts target the placeholder `carpeos_sync` database name from the
 example config; private operators must bind that name to a real D1 database ID
 outside the public repo before remote use.
+
+For the broader local-first operator boundary, see
+[Local-First Operator Runbook](local-first-operator-runbook.md). For the
+maintainer evidence gate before release or deployment claims, see
+[Release Readiness](../maintainers/release-readiness.md).
 
 ## Authorization Seeding
 

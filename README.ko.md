@@ -184,6 +184,10 @@ node apps/carpeos-cli/dist/index.js outbox status
 | Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
+| Threat model | [docs/architecture/threat-model.md](docs/architecture/threat-model.md) |
+| Local-first operator runbook | [docs/guides/local-first-operator-runbook.md](docs/guides/local-first-operator-runbook.md) |
+| Cross-Mac bootstrap & recovery | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
+| Release readiness | [docs/maintainers/release-readiness.md](docs/maintainers/release-readiness.md) |
 
 Hook 템플릿: [`adapters/`](adapters/).
 
@@ -195,6 +199,11 @@ pre-MVP입니다. 로컬 경로(capture → outbox → sync client → retrieval
 Obsidian projection)는 이 monorepo에 구현돼 있고, synthetic 테스트가 붙어
 있습니다.
 
+G008은 release-readiness 문서와 synthetic local end-to-end proof를 추가합니다.
+Node 22.22.0에서 `pnpm check`가 통과했고,
+`pnpm --filter @carpeos/sync-worker test:e2e`로 opt-in synthetic local
+Worker+D1+R2 gate가 통과했습니다. 이 증거는 로컬 증거일 뿐입니다.
+
 | 영역 | 상태 |
 | --- | --- |
 | Specs, ontology, ADRs | 있음 |
@@ -203,8 +212,13 @@ Obsidian projection)는 이 monorepo에 구현돼 있고, synthetic 테스트가
 | Local hybrid retrieval | 구현 (개발용 deterministic embedding) |
 | MCP stdio server (도구 8개) | 로컬만 |
 | Obsidian projection package | 로컬만 |
+| Synthetic G008 local e2e | 로컬만. opt-in Worker+D1+R2 proof |
 | Hosted embeddings / GraphRAG / dashboard | 아직 없음 |
 | 패키지형 사용자 설치 | 아직 아님 |
+
+**NOT DEPLOYED:** 이 저장소는 hosted Worker, D1/R2 production resource, package
+publish, private vault adoption, hosted MCP, cross-Mac live deployment를 증명하지
+않습니다.
 
 어댑터 설치, 실제 Cloudflare 운영, hosted MCP, production 검색 품질을 “됐다”고
 보지 마세요. 이 저장소에 테스트와 문서가 생기기 전엔 미완입니다.

@@ -72,7 +72,22 @@ Maintainers should:
 - require synthetic fixtures in public issues and pull requests;
 - keep README files aligned across English and Korean;
 - require tests or explicit verification notes for behavior changes;
+- keep local proof, CI proof, hosted deployment proof, and private operator
+  adoption proof separate;
 - keep third-party notices current when code or assets are reused.
+
+## Release Readiness
+
+G008 documents a local release-readiness boundary. On Node 22.22.0,
+`pnpm check` passes, and the opt-in synthetic local Worker+D1+R2 gate passes
+with `pnpm --filter @carpeos/sync-worker test:e2e`. That evidence is not CI
+proof, hosted deployment proof, package publish proof, private vault adoption
+proof, or cross-Mac live deployment proof.
+
+Before maintainers claim a release or deployment, they must collect the evidence
+listed in [Release Readiness](docs/maintainers/release-readiness.md). Without
+that evidence, public documentation and release notes must keep the status as
+`NOT DEPLOYED`.
 
 ## Contribution Review
 

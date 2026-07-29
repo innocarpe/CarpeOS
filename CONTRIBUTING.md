@@ -48,6 +48,7 @@ When adding documentation:
 - mark planned features as planned;
 - avoid commands that do not work yet;
 - verify commands before documenting them as usable;
+- keep local, CI, deployment, and private operator adoption evidence separate;
 - keep design claims aligned with `spec/` and ADRs once those directories exist.
 
 ## Architecture Changes
@@ -101,3 +102,10 @@ Check the relevant items:
 - no credentials, logs, local paths, private project names, or runtime databases
   are included;
 - privacy and authority boundaries remain intact.
+- release-readiness claims cite the exact command, environment, and result;
+- deployment status is explicit. Use `NOT DEPLOYED` when no hosted Worker,
+  production D1/R2 resources, package publish, private vault adoption, hosted
+  MCP, or cross-Mac live deployment is proven.
+
+Use [Release Readiness](docs/maintainers/release-readiness.md) for the full
+maintainer checklist.
