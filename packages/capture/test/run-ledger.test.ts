@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildRunLedgerEntry,
-  completeRunLedgerEntry,
-  linkEventsToRun,
-} from "../src/run-ledger.js";
+import { buildRunLedgerEntry, completeRunLedgerEntry, linkEventsToRun } from "../src/run-ledger.js";
 
 describe("run ledger", () => {
   it("tracks multi-round synthetic agent runs without canonical authority", () => {

@@ -142,6 +142,43 @@ describe("retrieval CLI", () => {
     expect(malformed.stderr).toMatchObject({ ok: false, error: { code: "invalid_usage" } });
   });
 
+  it("builds a memory context pack over seeded local events", () => {
+    const context = makeContext();
+    seedRetrievalEvents(context).close();
+
+    const pack = runJson(
+      [
+        "memory",
+        "context-pack",
+        "--task",
+        "Summarize Alpha synthetic retrieval",
+        "--trust-zone",
+        trustZone.trust_zone_id,
+        "--visible-trust-zone",
+        trustZone.trust_zone_id,
+        "--max-items",
+        "20",
+        "--max-characters",
+        "20000",
+      ],
+      context,
+    );
+    expect(pack.status).toBe(0);
+    expect(pack.stdout).toMatchObject({ ok: true, command: "memory context-pack" });
+    const body = pack.stdout.pack as {
+      tool: string;
+      draft_claims?: Array<{ statement?: string }>;
+      rejected_claims?: Array<{ statement?: string }>;
+      supersessions?: Array<{ record_id?: string }>;
+      budget?: { used?: { items?: number } };
+    };
+    expect(body.tool).toBe("memory_context_pack");
+    expect(body.budget?.used?.items).toBeGreaterThan(0);
+    expect(JSON.stringify(body)).toContain("Beta replacement retrieval is current.");
+    expect(pack.rawStdout).not.toContain(privateSentinel);
+    expect(pack.rawStdout).not.toContain(context.home);
+  }, 30_000);
+
   it("requires a valid active trust zone for every retrieval and memory command", () => {
     const context = makeContext();
     seedRetrievalEvents(context).close();
@@ -154,6 +191,14 @@ describe("retrieval CLI", () => {
         "get",
         "--chunk-id",
         "chk_synthetic_missing",
+        "--visible-trust-zone",
+        trustZone.trust_zone_id,
+      ],
+      [
+        "memory",
+        "context-pack",
+        "--task",
+        "Alpha",
         "--visible-trust-zone",
         trustZone.trust_zone_id,
       ],

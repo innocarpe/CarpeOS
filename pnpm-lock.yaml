@@ -31,6 +31,9 @@ importers:
       '@carpeos/local-store':
         specifier: workspace:*
         version: link:../../packages/local-store
+      '@carpeos/mcp-server':
+        specifier: workspace:*
+        version: link:../carpeos-mcp-server
       '@carpeos/retrieval':
         specifier: workspace:*
         version: link:../../packages/retrieval

@@ -93,7 +93,8 @@ flowchart LR
 
 ### Interfaces for people and agents
 
-- **CLI** — rebuild, embed (dev), `memory search` / `memory get`
+- **CLI** — rebuild, embed (dev), `memory search` / `memory get` /
+  `memory context-pack`
 - **MCP (stdio)** — eight local tools (`memory_context_pack`, `memory_trace`,
   `memory_capture`, `memory_propose_claim`, …)
 - **Obsidian projection** — Markdown files generated from the local store
