@@ -43,6 +43,35 @@ afterEach(() => {
 });
 
 describe("carpeos CLI", () => {
+  it("prints human help for empty argv, --help, help, and command topics", async () => {
+    const empty = await captureHelp([]);
+    expect(empty.status).toBe(0);
+    expect(empty.stdout).toContain("USAGE");
+
+    const flag = await captureHelp(["--help"]);
+    expect(flag.status).toBe(0);
+    expect(flag.stdout).toContain("USAGE");
+    expect(flag.stdout).toContain("memory");
+    expect(flag.stdout).toContain("carpeos setup");
+
+    const short = await captureHelp(["-h"]);
+    expect(short.status).toBe(0);
+    expect(short.stdout).toContain("COMMANDS");
+
+    const topic = await captureHelp(["help", "memory"]);
+    expect(topic.status).toBe(0);
+    expect(topic.stdout).toContain("context-pack");
+    expect(topic.stdout).toContain("--visible-trust-zone");
+
+    const nested = await captureHelp(["memory", "--help"]);
+    expect(nested.status).toBe(0);
+    expect(nested.stdout).toContain("carpeos memory");
+
+    const setupTopic = await captureHelp(["help", "setup"]);
+    expect(setupTopic.status).toBe(0);
+    expect(setupTopic.stdout).toContain("run --apply");
+  });
+
   it("initializes, identifies a project, captures without plaintext output, and replays", () => {
     const context = makeContext();
     const initialized = runJson(["init"], context);
@@ -665,6 +694,27 @@ function runJson(
         : (JSON.parse(stderrLines.at(-1) ?? "{}") as Record<string, unknown>),
     rawStdout,
   };
+}
+
+async function captureHelp(args: string[]): Promise<{ status: number; stdout: string }> {
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  let stdout = "";
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    stdout += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    void chunk;
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    const status = await runCli(args, process.env);
+    return { status, stdout };
+  } finally {
+    process.stdout.write = originalStdoutWrite as typeof process.stdout.write;
+    process.stderr.write = originalStderrWrite as typeof process.stderr.write;
+  }
 }
 
 async function runCliJson(

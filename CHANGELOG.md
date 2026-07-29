@@ -12,13 +12,10 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- `carpeos --help` / `carpeos help [command]` human-readable CLI help for all
+  commands (init, project, capture-hook, outbox, sync, retrieval, memory, setup)
 
 ## [0.1.1] - 2026-07-29
-
-### Added
-
-- (none yet — fold entries here before the next release)
 
 ### Fixed
 

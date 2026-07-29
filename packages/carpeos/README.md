@@ -44,6 +44,8 @@ and Grok Build when those tools are available.
 ## Quick use
 
 ```sh
+carpeos --help                  # full CLI surface
+carpeos help memory             # one command
 carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
 carpeos memory context-pack \
   --task "Summarize my current work" \

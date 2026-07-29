@@ -33,6 +33,32 @@ still follow a consistent rule:
 In `0.y.z`, treat **breaking changes as MINOR** (not silent patches). Call them
 out in the changelog under `### Breaking`.
 
+### When is `1.0.0` allowed?
+
+`1.0.0` is a **contract freeze**, not a feature-complete product milestone.
+Ship it only when maintainers are willing to treat the following as stable
+under SemVer **after** 1.0 (breaking changes require MAJOR):
+
+| Contract surface | Freeze means |
+| --- | --- |
+| CLI command tree + flags | Documented commands (`init`, `memory *`, `setup *`, …) keep behavior or get deprecation windows |
+| MCP tool names + JSON shapes | Tools used by agents do not rename/reshape without MAJOR |
+| Setup / env vars | `CARPEOS_*`, `~/.carpeos` layout, wrapper contract stay compatible |
+| Event / store schema | Existing local stores upgrade via migrations; no silent wipe |
+| Trust-zone + visibility model | Same semantics for zone ids and `--visible-trust-zone` |
+
+**Not required for 1.0.0:** GraphRAG completeness, multi-Mac sync polish,
+production embedding providers, or full session capture UX. Those can land as
+`1.x` MINOR features after the contract freeze.
+
+**Practical gate (checklist before tagging `v1.0.0`):**
+
+1. Public install path (`npm i -g` + `carpeos setup`) is green on a clean machine
+2. CLI + setup expose complete `--help` and README matches reality
+3. MCP smoke (search / context-pack) documented and CI-covered
+4. CHANGELOG lists a deliberate “v1 contract” section; no open “will rename soon” known breaks
+5. Maintainer decision recorded (PR or release notes) — not an automatic version bump
+
 ### After `1.0.0`
 
 | Bump | When |

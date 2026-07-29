@@ -15,12 +15,13 @@ describe("@innocarpe/carpeos packaging", () => {
     assert.equal(existsSync(join(pkg, "bin/carpeos.js")), true);
   });
 
-  it("cli entry reports usage without starting mcp server", () => {
+  it("cli entry prints help without starting mcp server", () => {
     const result = spawnSync(process.execPath, [join(pkg, "bin/carpeos.js")], {
       encoding: "utf8",
     });
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr + result.stdout, /command is required|invalid_usage/i);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /USAGE/);
+    assert.match(result.stdout, /carpeos/);
     assert.doesNotMatch(result.stderr + result.stdout, /carpeos-mcp-server: startup failed/);
   });
 });
