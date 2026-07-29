@@ -1,5 +1,5 @@
+import type { AnySchemaObject } from "ajv/dist/2020.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import type { AnySchemaObject, ValidateFunction } from "ajv/dist/2020.js";
 import canonicalEventSchema from "../../../spec/v1/schema/canonical-event.schema.json" with {
   type: "json",
 };
@@ -15,6 +15,7 @@ import retrievalProjectionSchema from "../../../spec/v1/schema/retrieval-project
   type: "json",
 };
 import syncApiSchema from "../../../spec/v1/schema/sync-api.schema.json" with { type: "json" };
+import { standaloneValidators } from "./generated/standalone-validators.js";
 
 export const SCHEMA_VERSION = "v1" as const;
 
@@ -859,14 +860,18 @@ export type IdempotencyClassification = "new_request" | "replay" | "idempotency_
 
 export type SchemaName = keyof typeof schemas;
 
-export type SchemaValidatorSet = Record<SchemaName, ValidateFunction>;
+export type SchemaValidateFunction = ((value: unknown) => boolean) & {
+  errors?: Array<{ instancePath?: string; message?: string }> | null;
+};
+
+export type SchemaValidatorSet = Record<SchemaName, SchemaValidateFunction>;
 
 export type ConformanceResult = {
   valid: boolean;
   errors: string[];
 };
 
-export function createAjv2020() {
+export function createAjv2020(): Ajv2020 {
   const ajv = new Ajv2020({ allErrors: true });
 
   for (const schema of Object.values(schemas)) {
@@ -877,17 +882,7 @@ export function createAjv2020() {
 }
 
 export function compileSchemaValidators(): SchemaValidatorSet {
-  const ajv = createAjv2020();
-
-  return {
-    common: mustGetSchema(ajv, schemas.common.$id),
-    canonicalEvent: mustGetSchema(ajv, schemas.canonicalEvent.$id),
-    erasureLedger: mustGetSchema(ajv, schemas.erasureLedger.$id),
-    mcpApi: mustGetSchema(ajv, schemas.mcpApi.$id),
-    obsidianProjection: mustGetSchema(ajv, schemas.obsidianProjection.$id),
-    retrievalProjection: mustGetSchema(ajv, schemas.retrievalProjection.$id),
-    syncApi: mustGetSchema(ajv, schemas.syncApi.$id),
-  };
+  return standaloneValidators as SchemaValidatorSet;
 }
 
 export function classifyIdempotency(
@@ -973,16 +968,6 @@ export function validateConformance(schemaName: SchemaName, value: unknown): Con
   };
 }
 
-function mustGetSchema(ajv: Ajv2020, schemaId: string): ValidateFunction {
-  const validate = ajv.getSchema(schemaId);
-
-  if (validate === undefined) {
-    throw new Error(`Schema was not compiled: ${schemaId}`);
-  }
-
-  return validate;
-}
-
 function isTimestampValid(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
     return false;
@@ -998,7 +983,7 @@ function isTimestampValid(value: string): boolean {
   return normalized === value || normalized.replace(".000Z", "Z") === value;
 }
 
-function normalizeAjvErrors(validate: ValidateFunction): string[] {
+function normalizeAjvErrors(validate: SchemaValidateFunction): string[] {
   return (validate.errors ?? []).map((error) => {
     const location = error.instancePath || "/";
     return `${location} ${error.message ?? "failed schema validation"}`;

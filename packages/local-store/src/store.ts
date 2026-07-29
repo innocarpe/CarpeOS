@@ -360,8 +360,8 @@ export class LocalCaptureStore {
     chmodSync(dirname(this.dbPath), 0o700);
     this.db = new DatabaseSync(this.dbPath, { timeout: 5_000 });
     this.db.exec("PRAGMA foreign_keys = ON");
-    this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA busy_timeout = 5000");
+    this.db.exec("PRAGMA journal_mode = WAL");
 
     this.clock = options.clock ?? { now: () => new Date() };
     const identity = resolveProjectIdentity({

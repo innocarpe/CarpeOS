@@ -7,6 +7,12 @@ uses synthetic placeholders only. Do not copy real transcripts, protected
 values, provider payloads, credentials, local paths, production logs, or private
 project names into this repository.
 
+G008 release-readiness documentation keeps retrieval local-only. It does not add
+a hosted retrieval route, hosted MCP service, production Vectorize index,
+Workers AI embedding job, GraphRAG traversal, dashboard, or live deployment. See
+[Threat Model](../architecture/threat-model.md) for retrieval and projection
+risks.
+
 ## Boundary
 
 G006 retrieval is a local projection over canonical events and erasure records.

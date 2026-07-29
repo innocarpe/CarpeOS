@@ -43,6 +43,19 @@ Private instance state should live outside the repository. Examples include:
 Generated projections are not authoritative. If a projection leaks or becomes
 stale, the canonical event store should remain the recovery point.
 
+See [Threat Model](docs/architecture/threat-model.md) for the G008 asset,
+boundary, adversary, control, residual-risk, and non-goal model.
+
+## G008 Security Status
+
+G008 proves release readiness with local documentation and synthetic tests only.
+It does not prove a hosted Worker, production D1/R2 resources, package publish,
+private vault adoption, hosted MCP, or cross-Mac live deployment.
+
+Maintainers should use
+[Release Readiness](docs/maintainers/release-readiness.md) before claiming a
+release, CI result, deployment, or private operator adoption.
+
 ## Reporting a Vulnerability
 
 Please do not disclose vulnerabilities publicly before maintainers have had a

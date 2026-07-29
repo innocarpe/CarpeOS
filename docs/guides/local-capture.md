@@ -3,8 +3,13 @@
 Status: G004 local runtime.
 
 This guide covers the implemented local capture surface. It uses synthetic
-payloads only. Remote sync is not implemented in G004, so cross-Mac sharing is
-not active yet.
+payloads only. Remote sync is not implemented in G004. Later local-only guides
+describe the G005 sync code path and the G008 synthetic end-to-end proof, but
+this guide remains scoped to local capture.
+
+For current sync and cross-Mac operator boundaries, see
+[Cloudflare Sync Guide](cloudflare-sync.md) and
+[Cross-Mac Bootstrap and Recovery](cross-mac-bootstrap-recovery.md).
 
 ## Prerequisites
 
@@ -64,8 +69,8 @@ The Git remote hash lets two machines identify the same repository without
 storing credentials or raw remote URLs in the canonical event. The path fallback
 is device-local, so it should not be used when cross-machine identity matters.
 
-Cross-Mac sharing still requires future G005 remote sync. G004 only prepares
-local project identity and outbox data.
+Cross-Mac sharing requires later sync setup outside this G004 guide. G004 only
+prepares local project identity and outbox data.
 
 ## Initialize
 
@@ -155,9 +160,10 @@ new lease. It returns `lease_id`, `leased_until`, and leased items. Each item
 contains the outbox row, local sequence, attempts count, protected value ID, and
 sync push request.
 
-This does not upload anything. It is a durable metadata-outbox primitive for a
-future sync worker. G005 must separately define how the worker uploads or
-transfers the encrypted protected-value blob addressed by that ID.
+This does not upload anything. It is a durable metadata-outbox primitive for
+sync code outside the G004 capture scope. The sync guide defines how later
+Worker/client paths upload or transfer the encrypted protected-value blob
+addressed by that ID.
 
 ## Acknowledge Delivery
 
@@ -223,4 +229,4 @@ G004 does not include:
 - a background daemon installer.
 
 The metadata outbox is durable, but protected-value blob transfer and a
-background remote worker are not implemented yet.
+background remote worker are outside this G004 capture guide.

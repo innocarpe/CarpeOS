@@ -72,6 +72,21 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schema
     devDependencies:
+      '@carpeos/local-store':
+        specifier: workspace:*
+        version: link:../../packages/local-store
+      '@carpeos/mcp-server':
+        specifier: workspace:*
+        version: link:../carpeos-mcp-server
+      '@carpeos/obsidian-projection':
+        specifier: workspace:*
+        version: link:../../packages/obsidian-projection
+      '@carpeos/retrieval':
+        specifier: workspace:*
+        version: link:../../packages/retrieval
+      '@carpeos/sync-client':
+        specifier: workspace:*
+        version: link:../../packages/sync-client
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.8
         version: 0.18.8(@cloudflare/workers-types@5.20260728.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@7.3.6(@types/node@22.20.1)))
