@@ -32,7 +32,7 @@ Update the **Status** column as work lands. Status values: `done` · `partial` �
 
 | # | Gate | Status (as of G8 inventory PR) | Evidence / notes |
 | --- | --- | --- | --- |
-| G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **done** | Recheck procedure below; verified on maintainer Mac through 0.2.x — **re-run on 0.2.1+ before Approve** |
+| G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **done** | Clean-profile recheck on **0.2.1** recorded in [v1-freeze-decision.md](v1-freeze-decision.md) (2026-07-30) |
 | G2 | CLI + setup expose complete `--help`; README matches reality | **done** | Root/command help (0.1.2+), setup help, README install paths aligned |
 | G3 | `carpeos version` reports published package version | **done** | `carpeos version` / `-V`; npm build embeds package version (`0.2.1` verified) |
 | G4 | Exit codes documented (help + this doc) | **done** | Root `--help` + table below |
@@ -113,7 +113,7 @@ When changing CLI/setup/MCP surfaces:
 ## Current recommendation
 
 Stay on **`0.y.z`** (current public line: **`0.2.1`**). G1–G8 checklist items are
-done; G9 is a recorded **Defer** with soak criteria before Approve. Do not rush
-`1.0.0` for marketing. Re-run the G1 recheck on `0.2.1+`, watch trust-zone
-defaulting feedback, then update [v1-freeze-decision.md](v1-freeze-decision.md)
-to **Approve** and cut the tag.
+done; G1 clean-profile recheck on 0.2.1 is recorded; G9 is a recorded **Defer**
+with remaining soak / Approve judgment. Do not rush `1.0.0` for marketing.
+Watch trust-zone defaulting feedback, then update
+[v1-freeze-decision.md](v1-freeze-decision.md) to **Approve** and cut the tag.
