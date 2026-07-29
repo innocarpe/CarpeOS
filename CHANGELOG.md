@@ -18,10 +18,13 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
   [`docs/contracts/mcp-tools-v1.md`](docs/contracts/mcp-tools-v1.md) +
   [`docs/contracts/mcp-tools-v1.json`](docs/contracts/mcp-tools-v1.json) with
   drift test against `CARPEOS_MCP_TOOLS`
+- G6 local store migration policy:
+  [`docs/architecture/local-store-migrations.md`](docs/architecture/local-store-migrations.md);
+  export migration IDs; test that events survive reopen (no silent wipe)
 
 ### Changed
 
-- v1 readiness G5 and G7 marked **done**
+- v1 readiness G5, G6, and G7 marked **done**
 
 ## [0.1.3] - 2026-07-29
 

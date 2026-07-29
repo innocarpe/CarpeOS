@@ -226,8 +226,16 @@ type OutboxIdRow = {
   outbox_id: number;
 };
 
-const MIGRATION_ID = "001_local_capture_store";
-const SYNC_MIGRATION_ID = "002_sync_transfer_imports";
+/** Capture-store SQLite migrations applied on open (order is historical, not run order). */
+export const LOCAL_STORE_MIGRATION_IDS = [
+  "001_local_capture_store",
+  "002_sync_transfer_imports",
+] as const;
+
+export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
+
+const MIGRATION_ID: LocalStoreMigrationId = "001_local_capture_store";
+const SYNC_MIGRATION_ID: LocalStoreMigrationId = "002_sync_transfer_imports";
 
 export type ProtectedValueTransferExport = {
   protected_value_id: string;
