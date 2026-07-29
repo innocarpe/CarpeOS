@@ -185,6 +185,22 @@ draft보다 앞에 두는 cache-friendly 순서를 씁니다.
 
 Node.js ≥ 22.22, pnpm ≥ 11.16.
 
+### One-stop install (실제 Mac 권장)
+
+git checkout에서 CLI/MCP 래퍼를 `~/.local/bin`에 두고 `~/.carpeos`를 만든 뒤,
+PATH에 있는 Claude Code / Codex / Grok에 MCP를 등록합니다.
+
+```sh
+node scripts/install-local.mjs --dry-run
+node scripts/install-local.mjs --yes
+export PATH="$HOME/.local/bin:$PATH"
+node scripts/install-local.mjs --doctor
+```
+
+자세한 내용: [One-stop install guide](docs/guides/one-stop-install.md).
+
+### 수동 / synthetic 경로
+
 ```sh
 pnpm install
 pnpm build
@@ -201,6 +217,7 @@ node apps/carpeos-cli/dist/index.js outbox status
 
 | 주제 | 가이드 |
 | --- | --- |
+| One-stop install | [docs/guides/one-stop-install.md](docs/guides/one-stop-install.md) |
 | Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
 | Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |

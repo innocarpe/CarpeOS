@@ -191,6 +191,23 @@ Graph-oriented recall remains planned:
 
 Needs Node.js ≥ 22.22 and pnpm ≥ 11.16.
 
+### One-stop install (recommended on a real Mac)
+
+From a git checkout, install CLI/MCP wrappers under `~/.local/bin`, create
+`~/.carpeos`, and register MCP with Claude Code / Codex / Grok when those CLIs
+are on `PATH`:
+
+```sh
+node scripts/install-local.mjs --dry-run   # plan
+node scripts/install-local.mjs --yes       # apply (idempotent)
+export PATH="$HOME/.local/bin:$PATH"
+node scripts/install-local.mjs --doctor
+```
+
+Details: [One-stop install guide](docs/guides/one-stop-install.md).
+
+### Manual / synthetic path
+
 ```sh
 pnpm install
 pnpm build
@@ -207,6 +224,7 @@ node apps/carpeos-cli/dist/index.js outbox status
 
 | Topic | Guide |
 | --- | --- |
+| One-stop install | [docs/guides/one-stop-install.md](docs/guides/one-stop-install.md) |
 | Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
 | Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
