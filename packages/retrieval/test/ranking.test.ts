@@ -92,14 +92,14 @@ describe("retrieval ranking", () => {
       chunkIndex: 1,
       createdAt: "2026-01-01T00:00:01Z",
     });
-    const observation = buildRetrievalChunk({
-      chunkKind: "observation",
-      text: "observation gamma different content",
+    const decision = buildRetrievalChunk({
+      chunkKind: "decision",
+      text: "decision gamma different content",
       sourceRecords: [
         {
           ...sourceRecords[0]!,
-          event_type: "Observation",
-          source_record_id: "evt_obs001",
+          event_type: "AcceptanceDecision",
+          source_record_id: "evt_decision_gamma_000000000001",
           zone_sequence: 2,
         },
       ],
@@ -124,7 +124,7 @@ describe("retrieval ranking", () => {
           recency_score: 0.9,
         },
         {
-          chunk: observation,
+          chunk: decision,
           structured_score: 0.5,
           fts_score: 0.5,
           semantic_score: 0.5,
@@ -135,6 +135,6 @@ describe("retrieval ranking", () => {
     );
     const selected = selectWithDiversity(ranked, 2, { maxPerChunkKind: 1 });
     const kinds = selected.map((item) => item.chunk.chunk_kind).sort();
-    expect(kinds).toEqual(["claim", "observation"]);
+    expect(kinds).toEqual(["claim", "decision"]);
   });
 });
