@@ -1,4 +1,4 @@
-# <img src="docs/assets/carpeos-mark.svg" alt="" width="36" height="36" align="left" />&nbsp; CarpeOS
+# <img src="docs/assets/carpeos-mark.png" alt="" width="36" height="36" align="left" />&nbsp; CarpeOS
 
 [English](README.md) · [한국어](README.ko.md)
 
