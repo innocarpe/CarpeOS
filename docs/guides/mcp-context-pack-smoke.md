@@ -34,15 +34,31 @@ pnpm build
 
 Node.js ≥ 22.22 and pnpm ≥ 11.16, same as the root README.
 
-## Automated smoke (recommended)
+## Automated smoke (recommended) — G5 gate
 
-Two supported smokes exist:
-
-1. **CLI** — `carpeos memory context-pack` (same pack builder as MCP)
-2. **Package tests** — classification, budgets, expert slots, fail-closed visibility
+Named maintainers/CI gate (tool list + search + context-pack):
 
 ```sh
-# CLI context-pack smoke (requires local store + trust zone from init)
+pnpm build          # once, if dist is cold
+pnpm smoke:mcp      # scripts/smoke-mcp.mjs
+```
+
+What it runs:
+
+1. **Unit / app** — MCP stdio tool list, `memory_context_pack` classification,
+   expert slots, CLI retrieval+context-pack vitests
+2. **CLI process** — temp synthetic home: `init` → `capture-hook` →
+   `retrieval rebuild` → `memory search` → `memory context-pack`
+
+Flags: `--cli-only`, `--unit-only`, `--help`.
+
+CI runs `pnpm smoke:mcp` as **“Run MCP smoke (G5)”** after `pnpm check`
+(see `.github/workflows/ci.yml`).
+
+### Manual / focused commands
+
+```sh
+# CLI context-pack only (requires local store + trust zone from init)
 node apps/carpeos-cli/dist/index.js memory context-pack \
   --task "Summarize synthetic Alpha work" \
   --trust-zone tz_synthetic_example \
@@ -50,21 +66,15 @@ node apps/carpeos-cli/dist/index.js memory context-pack \
   --max-items 16 \
   --max-characters 8000
 
-# expert-slot allocator unit tests
+# individual packages (also covered by smoke:mcp)
 pnpm --filter @carpeos/mcp-server exec vitest run test/expert-slots.test.ts
-
-# full MCP application tests (includes memory_context_pack classification)
 pnpm --filter @carpeos/mcp-server exec vitest run test/mcp-app.test.ts
-
-# CLI retrieval + context-pack tests
 pnpm --filter @carpeos/cli exec vitest run test/retrieval-cli.test.ts
-
-# stdio process smoke
 pnpm --filter @carpeos/mcp-server exec vitest run test/stdio.test.ts
 ```
 
-Expected: tests pass; CLI prints JSON with `command: "memory context-pack"` and
-a `pack` object. Classification asserts that accepted, draft, rejected,
+Expected: `smoke-mcp: PASS`; CLI JSON includes `command: "memory context-pack"`
+and a `pack` object. Classification asserts that accepted, draft, rejected,
 conflict, supersession, erasure, and redaction sections stay separate, and that
 non-accepted claims never appear in `accepted_facts`.
 

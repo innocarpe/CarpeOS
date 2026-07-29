@@ -30,13 +30,13 @@ sync polish, production embeddings, or full session-capture UX.
 Update the **Status** column as work lands. Status values: `done` · `partial` ·
 `todo` · `n/a`.
 
-| # | Gate | Status (as of 0.1.2) | Evidence / notes |
+| # | Gate | Status (as of G5 smoke PR) | Evidence / notes |
 | --- | --- | --- | --- |
 | G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **partial** | Verified on maintainer Mac for 0.1.1/0.1.2; keep re-checking each release |
 | G2 | CLI + setup expose complete `--help`; README matches reality | **partial** | Help shipped in 0.1.2; keep README/setup docs in sync on every surface change |
 | G3 | `carpeos version` reports published package version | **done** (this PR) | `carpeos version` / `-V`; npm build embeds package version |
 | G4 | Exit codes documented (help + this doc) | **done** (this PR) | Root `--help` + table below |
-| G5 | MCP smoke (list / search / context-pack) documented + CI or scripted gate | **partial** | Guides exist; tighten a named smoke script/CI step before 1.0 |
+| G5 | MCP smoke (list / search / context-pack) documented + CI or scripted gate | **done** | `pnpm smoke:mcp` (`scripts/smoke-mcp.mjs`) + CI step “Run MCP smoke (G5)” |
 | G6 | Local store migration story written; no silent wipe of existing homes | **todo** | Need explicit migration policy + test for config/schema bumps |
 | G7 | MCP tool contract inventory (names + schema versions) frozen in docs | **todo** | Single source of truth for agent tool surface |
 | G8 | No open “will rename soon” breaks in CHANGELOG / known issues | **partial** | Pre-1.0: breaking still allowed as MINOR; clear list before 1.0 |
