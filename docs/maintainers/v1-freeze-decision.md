@@ -56,9 +56,11 @@ temporary home + bin-dir (not the day-to-day `~/.carpeos`). Public-safe summary:
 Notes:
 
 - `--register-mcp false` kept agent host configs out of the clean-profile run so
-  the recheck isolates install/home/wrappers/init (G1 core). MCP host registration
-  remains covered by normal maintainer setup and G5 CI smoke.
-- Temporary paths under `/tmp/...` are not recorded as durable evidence locations.
+  the recheck isolates runtime home creation, wrapper install, and store init
+  (G1 core). MCP host registration remains covered by normal maintainer setup
+  and G5 CI smoke.
+- Ephemeral temp directories used for the recheck are discarded and are not
+  durable evidence locations.
 
 ### Criteria to flip to Approve
 
