@@ -32,15 +32,15 @@ Update the **Status** column as work lands. Status values: `done` · `partial` �
 
 | # | Gate | Status (as of G8 inventory PR) | Evidence / notes |
 | --- | --- | --- | --- |
-| G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **done** | Recheck procedure below; verified on maintainer Mac through 0.1.3 |
+| G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **done** | Recheck procedure below; verified on maintainer Mac through 0.2.x — **re-run on 0.2.1+ before Approve** |
 | G2 | CLI + setup expose complete `--help`; README matches reality | **done** | Root/command help (0.1.2+), setup help, README install paths aligned |
-| G3 | `carpeos version` reports published package version | **done** | `carpeos version` / `-V`; npm build embeds package version |
+| G3 | `carpeos version` reports published package version | **done** | `carpeos version` / `-V`; npm build embeds package version (`0.2.1` verified) |
 | G4 | Exit codes documented (help + this doc) | **done** | Root `--help` + table below |
 | G5 | MCP smoke (list / search / context-pack) documented + CI or scripted gate | **done** | `pnpm smoke:mcp` (`scripts/smoke-mcp.mjs`) + CI step “Run MCP smoke (G5)” |
 | G6 | Local store migration story written; no silent wipe of existing homes | **done** | [`docs/architecture/local-store-migrations.md`](../architecture/local-store-migrations.md) + preserve-events test |
 | G7 | MCP tool contract inventory (names + schema versions) frozen in docs | **done** | [`docs/contracts/mcp-tools-v1.md`](../contracts/mcp-tools-v1.md) + JSON + `tool-inventory.test.ts` |
 | G8 | No open “will rename soon” breaks in CHANGELOG / known issues | **done** | [`compatibility-and-deprecations.md`](compatibility-and-deprecations.md) — planned breaks empty |
-| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **todo** | Use [v1 freeze decision template](v1-freeze-decision.md) when ready |
+| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **partial** | [v1-freeze-decision.md](v1-freeze-decision.md): **Defer** recorded 2026-07-30; Approve when soak criteria met |
 
 ## Explicit non-goals for 1.0
 
@@ -112,5 +112,8 @@ When changing CLI/setup/MCP surfaces:
 
 ## Current recommendation
 
-Stay on **`0.y.z`** until G5–G8 are solid. Install/help (G1–G2) and version/exit
-docs (G3–G4) are the near-term track; do not rush `1.0.0` for marketing.
+Stay on **`0.y.z`** (current public line: **`0.2.1`**). G1–G8 checklist items are
+done; G9 is a recorded **Defer** with soak criteria before Approve. Do not rush
+`1.0.0` for marketing. Re-run the G1 recheck on `0.2.1+`, watch trust-zone
+defaulting feedback, then update [v1-freeze-decision.md](v1-freeze-decision.md)
+to **Approve** and cut the tag.
