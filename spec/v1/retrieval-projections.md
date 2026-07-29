@@ -1,13 +1,15 @@
 # CarpeOS v1 Retrieval Projections
 
-Status: planned normative design for G006 retrieval implementation.
+Status: G007 retrieval, MCP context-pack, and Obsidian projection contracts.
 
 This document defines the schema-backed source of truth for retrieval
 projections. Retrieval records are rebuildable projections derived from
 canonical events and erasure records. They are never the authoritative store.
 
-The machine-readable contract is
-`spec/v1/schema/retrieval-projection.schema.json`.
+The machine-readable retrieval contract is
+`spec/v1/schema/retrieval-projection.schema.json`. G007 also defines
+`spec/v1/schema/mcp-api.schema.json` and
+`spec/v1/schema/obsidian-projection.schema.json`.
 
 ## Projection Records
 
@@ -113,6 +115,83 @@ Result lineage uses the same `source_records` manifest rules as chunks:
 - every lineage source trust zone must be included in
   `filters_applied.visible_trust_zone_ids`.
 
+## Context-Pack Projection
+
+MCP context packs are deterministic local projections over visible canonical
+events and erasure records. They are agent-facing, budgeted, and
+non-authoritative.
+
+Context packs MUST separate:
+
+- `accepted_facts`;
+- `draft_claims`;
+- `rejected_claims`;
+- `observations`;
+- `evidence_summaries`;
+- `conflicts`;
+- `supersessions`;
+- `erasures`;
+- `verification_gaps`;
+- `redactions`.
+
+`accepted_facts` require visible `AcceptanceDecision` lineage with
+`decision: "accepted"`. Draft, rejected, conflicted, superseded, erased,
+hidden, or protected-policy-denied records MUST stay out of `accepted_facts`.
+
+Each context-pack request MUST declare `ContextBudget` with `max_items` and
+`max_characters`. Responses MUST report deterministic `used`, `truncated`, and
+`omitted` metadata. These are item and character limits only; they are not
+token-exact budgets.
+
+## Obsidian Projection
+
+G007 implements a deterministic, manifest-bounded Obsidian projection. Obsidian
+files are human reading surfaces and have no canonical authority.
+
+The closed note category enum is:
+
+- `accepted_fact`;
+- `observation`;
+- `evidence_summary`;
+- `proposed_claim`;
+- `rejected_claim`;
+- `conflict`;
+- `supersession`;
+- `erasure`;
+- `index`.
+
+Every generated note MUST include category-specific source lineage:
+
+| Category | Required lineage |
+| --- | --- |
+| `accepted_fact` | visible claim plus acceptance lineage |
+| `proposed_claim` | visible draft claim lineage |
+| `rejected_claim` | visible rejection lineage |
+| `conflict` | visible contradiction lineage |
+| `supersession` | visible supersession lineage |
+| `erasure` | visible erasure lineage |
+| `evidence_summary` | visible safe evidence metadata lineage |
+| `observation` | visible observation lineage |
+| `index` | projection config lineage |
+
+Generated files MUST be listed in
+`.carpeos-obsidian-projection-manifest.json`. The manifest bounds file paths,
+source lineage, content digests, configuration digest, visible trust zones, path
+policy, and generated timestamp policy. A rebuild may delete files previously
+managed by a valid manifest when canonical inputs no longer produce them. If
+the previous manifest is corrupt, the implementation MUST preserve prior files
+instead of guessing what to delete.
+
+Projection paths MUST be vault-relative Markdown paths using forward slashes.
+Absolute paths, empty segments, `.`, `..`, `~`, null bytes, backslashes, and
+paths escaping the managed output root MUST be rejected. Generated Markdown MUST
+include stable canonical references and projection metadata, not raw protected
+plaintext.
+
+Editing generated Obsidian notes does not mutate canonical knowledge. A later
+capture flow MAY record a human edit as a new canonical event, but that is
+outside G007.
+
 ## Freshness
 
 Projection freshness compares the last indexed zone sequence against the local
@@ -128,3 +207,9 @@ Allowed freshness relationships:
 - `last_indexed_zone_sequence > sync_cursor_after_sequence`: invalid because a
   projection cannot be ahead of the sync cursor it claims to reflect;
 - any `stale = true` freshness record MUST include a non-empty `reason`.
+
+## Hosted Deployment
+
+G007 does not include hosted retrieval, hosted MCP, hosted Obsidian sync,
+Workers AI execution, Vectorize operation, or a dashboard deployment. Those
+remain planned hosted/operator milestones.

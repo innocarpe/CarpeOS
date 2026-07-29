@@ -9,11 +9,13 @@ CarpeOS is a personal knowledge operating system for AI-assisted work.
 It is designed to capture work across AI agents, structure it as
 provenance-aware knowledge, synchronize it across devices, and expose that
 knowledge through retrieval interfaces for both humans and LLMs. The current
-G006 implementation covers local capture, durable outbox storage, a Cloudflare
-Worker/D1/R2 sync backend and client, and local rebuildable retrieval
-projections with CLI search/get commands. These paths are locally tested with
-synthetic data. No live Cloudflare deployment is claimed. MCP, GraphRAG,
-Obsidian projections, hosted embedding jobs, and production semantic retrieval
+G007 implementation covers local capture, durable outbox storage, a Cloudflare
+Worker/D1/R2 sync backend and client, local rebuildable retrieval projections
+with CLI search/get commands, a local stdio MCP server, deterministic MCP
+context packs, and a manifest-bounded Obsidian projection package. These paths
+have synthetic test coverage in the repository. No live Cloudflare deployment
+or hosted MCP/Obsidian service is claimed. GraphRAG, hosted embedding jobs,
+hosted retrieval, dashboard deployment, and production semantic retrieval
 quality are planned milestones, not active features.
 
 This repository is the canonical place for the public design, specifications,
@@ -102,6 +104,29 @@ AI and Vectorize bindings are adapter boundaries in code, but this repository
 does not claim live Workers AI/Vectorize resources, hosted embedding execution,
 or production semantic quality.
 
+G007 adds local agent and human projection interfaces:
+
+- `@carpeos/mcp-server`, a local stdio MCP server over the typed local store;
+- exactly eight MCP tools: `memory_search`, `memory_get`,
+  `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
+  `memory_capture`, and `memory_propose_claim`;
+- trust-zone fail-close checks and protected-value redactions before content
+  leaves the local process;
+- deterministic `ContextBudget` limits by `max_items` and `max_characters`,
+  with `used`, `truncated`, and `omitted` metadata, but no token-exact claim;
+- accepted facts in context packs only from visible accepted
+  `AcceptanceDecision` lineage after conflict, supersession, erasure,
+  protected-value, trust-zone, lifecycle, authority, valid-time, and
+  recorded-time checks;
+- `memory_propose_claim`, which writes draft `Claim` events to the local outbox
+  and never writes an `AcceptanceDecision`;
+- `@carpeos/obsidian-projection`, a deterministic Markdown and manifest
+  projection with closed categories, path-safety checks, manifest-bounded
+  cleanup, and `canonical_effect: "none"`.
+
+The MCP server is local stdio only. The Obsidian package generates files from
+typed local-store snapshots; generated notes are not canonical authority.
+
 ## Quick Start
 
 Prerequisites:
@@ -167,7 +192,11 @@ surface and hook template notes. See
 [Cloudflare Sync Guide](docs/guides/cloudflare-sync.md) for local Worker, D1,
 R2, secret-file, and MacBook/Mac mini sync setup. See
 [Retrieval Guide](docs/guides/retrieval.md) for local projection rebuild,
-development embedding, search, and get commands.
+development embedding, search, and get commands. See
+[MCP Server Guide](docs/guides/mcp-server.md) for local stdio MCP setup and
+client configuration examples. See
+[Obsidian Projection Guide](docs/guides/obsidian-projection.md) for the
+manifest-bounded Markdown projection.
 
 ## Architecture Model
 
@@ -272,7 +301,8 @@ The current CLI commands are:
 - `carpeos memory search --query ... --visible-trust-zone ...`
 - `carpeos memory get --chunk-id ... --visible-trust-zone ...`
 
-The target LLM-facing interface is MCP. Planned tools include:
+The implemented local LLM-facing interface is MCP over stdio. The G007 tools
+are:
 
 - `memory_search`
 - `memory_get`
@@ -280,10 +310,26 @@ The target LLM-facing interface is MCP. Planned tools include:
 - `memory_trace`
 - `memory_timeline`
 - `memory_related`
-- `memory_open_loops`
 - `memory_capture`
+- `memory_propose_claim`
 
-These tools are planned API surfaces, not completed features.
+Every MCP request must declare visible trust zones and protected-value policy.
+The active local trust zone must be visible, and requests fail closed before
+content resolution when visibility is missing or outside the configured
+allowlist.
+
+Context packs are deterministic projections. They separate accepted facts,
+draft claims, rejected claims, observations, evidence summaries, conflicts,
+supersessions, erasures, verification gaps, and redactions. Accepted facts
+require visible accepted `AcceptanceDecision` lineage. Draft, rejected,
+conflicted, superseded, erased, hidden, and protected-policy-denied records are
+not accepted facts.
+
+The current Obsidian interface is a local package, not a hosted sync service or
+end-user Obsidian plugin. It generates manifest-bounded Markdown notes with the
+closed categories `accepted_fact`, `observation`, `evidence_summary`,
+`proposed_claim`, `rejected_claim`, `conflict`, `supersession`, `erasure`, and
+`index`.
 
 ## Agent Integrations
 
@@ -297,9 +343,11 @@ References:
 - Claude Code hooks: <https://code.claude.com/docs/en/hooks>
 - Grok Build hooks: <https://docs.x.ai/build/features/hooks>
 
-Agents should eventually be able to read from the same knowledge plane through
-MCP without coupling the canonical store to one provider. That read path is not
-implemented yet.
+Agents can read from the same local knowledge plane through the G007 stdio MCP
+server without coupling the canonical store to one provider. Public-safe setup
+examples for Codex CLI, Claude Code, Grok Build, and generic MCP clients are in
+the MCP guide. Client examples are labeled with their verification status; the
+Grok syntax is illustrative unless independently confirmed in a client session.
 
 ## Local-First Sync
 
@@ -384,11 +432,11 @@ dimensions; these quotas are operational limits, not correctness guarantees.
    - canonical recheck
 
 7. Add projections and interfaces.
-   - Obsidian projection generator
-   - context pack generation
-   - MCP server
-   - graph projection
-   - optional dashboard
+   - Obsidian projection generator: implemented locally in G007
+   - context pack generation: implemented locally in G007
+   - MCP server: implemented locally over stdio in G007
+   - graph projection: planned
+   - optional dashboard: planned
 
 ## Repository Boundary
 
@@ -444,10 +492,12 @@ copyright and license notices.
 
 ## Project Status
 
-CarpeOS is pre-MVP. The G006 local capture, sync, and local retrieval runtime is
-implemented and locally tested with synthetic data, but the project is not ready
-as a packaged end-user release and no live deployment is claimed.
+CarpeOS is pre-MVP. The G007 local capture, sync, retrieval, stdio MCP, context
+pack, and Obsidian projection paths are implemented with synthetic test coverage
+in the repository, but the project is not ready as a packaged end-user release
+and no live deployment is claimed.
 
-Do not treat planned MCP, adapter installation, Obsidian projection, GraphRAG,
-hosted embedding, Vectorize operation, or live deployment paths as stable until
-they are implemented, tested, and documented in this repository.
+Do not treat adapter installation, GraphRAG, hosted embedding, Vectorize
+operation, hosted MCP, hosted Obsidian sync, dashboard deployment, or other live
+deployment paths as stable until they are implemented, tested, and documented in
+this repository.

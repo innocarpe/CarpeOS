@@ -130,8 +130,21 @@ must not collapse this metadata into a single accepted answer.
 
 ## LLM Use
 
-G006 exposes retrieval through CLI commands only. MCP tools such as
-`memory_search`, `memory_get`, `memory_context_pack`, `memory_trace`, and
-`memory_timeline` remain planned interfaces. Until those tools exist, an LLM can
-only use this retrieval path when an operator or local integration runs the CLI
-and passes the bounded output into the model context.
+G006 exposes retrieval through CLI commands. G007 adds a local stdio MCP server
+over the same local-store and retrieval boundaries. The implemented tool surface
+is:
+
+- `memory_search`;
+- `memory_get`;
+- `memory_context_pack`;
+- `memory_trace`;
+- `memory_timeline`;
+- `memory_related`;
+- `memory_capture`;
+- `memory_propose_claim`.
+
+The MCP server is local stdio only. It does not expose a hosted retrieval route,
+hosted MCP service, GraphRAG traversal, hosted embedding job, Vectorize
+operation, dashboard, or live deployment. See
+[MCP Server Guide](mcp-server.md) for setup examples and current verification
+status.

@@ -7,6 +7,10 @@ import commonSchema from "../../../spec/v1/schema/common.schema.json" with { typ
 import erasureLedgerSchema from "../../../spec/v1/schema/erasure-ledger.schema.json" with {
   type: "json",
 };
+import mcpApiSchema from "../../../spec/v1/schema/mcp-api.schema.json" with { type: "json" };
+import obsidianProjectionSchema from "../../../spec/v1/schema/obsidian-projection.schema.json" with {
+  type: "json",
+};
 import retrievalProjectionSchema from "../../../spec/v1/schema/retrieval-projection.schema.json" with {
   type: "json",
 };
@@ -18,6 +22,8 @@ export const schemas = {
   common: commonSchema,
   canonicalEvent: canonicalEventSchema,
   erasureLedger: erasureLedgerSchema,
+  mcpApi: mcpApiSchema,
+  obsidianProjection: obsidianProjectionSchema,
   retrievalProjection: retrievalProjectionSchema,
   syncApi: syncApiSchema,
 } as const;
@@ -584,6 +590,265 @@ export type RetrievalProjectionMessage =
   | RetrievalQuery
   | RetrievalResult;
 
+export type ContextBudget = {
+  max_items: number;
+  max_characters: number;
+};
+
+export type ContextBudgetUsage = {
+  used: { items: number; characters: number };
+  truncated: boolean;
+  omitted: { items: number; characters: number };
+};
+
+export type McpVisibility = {
+  visible_trust_zone_ids: string[];
+  protected_value_policy: "metadata_only" | "allow_decrypt" | "deny";
+};
+
+export type McpToolName =
+  | "memory_search"
+  | "memory_get"
+  | "memory_context_pack"
+  | "memory_trace"
+  | "memory_timeline"
+  | "memory_related"
+  | "memory_capture"
+  | "memory_propose_claim";
+
+export type McpSafeError = {
+  code:
+    | "invalid_schema"
+    | "unauthorized"
+    | "not_found"
+    | "idempotency_conflict"
+    | "protected_value_denied"
+    | "budget_exceeded"
+    | "internal_error";
+  message: string;
+  ref_id?: string;
+};
+
+export type McpCommonInput<TTool extends McpToolName = McpToolName> = {
+  schema_version: SchemaVersion;
+  tool: TTool;
+  visibility: McpVisibility;
+  context_budget?: ContextBudget;
+  valid_time?: BitemporalInterval;
+  recorded_time?: BitemporalInterval;
+};
+
+export type McpRecordRef = {
+  record_id: string;
+  record_kind: "event" | "erasure" | "projection";
+  event_type?: EventType;
+  trust_zone_id: string;
+  lifecycle_status: LifecycleStatus;
+  epistemic_authority: EpistemicAuthority;
+  source_event_ids?: string[];
+  redactions?: string[];
+};
+
+export type MemorySearchInput = McpCommonInput<"memory_search"> & {
+  query: string;
+  context_budget: ContextBudget;
+};
+
+export type MemoryGetInput = McpCommonInput<"memory_get"> & {
+  record_id: string;
+};
+
+export type MemoryContextPackInput = McpCommonInput<"memory_context_pack"> & {
+  task: string;
+  context_budget: ContextBudget;
+};
+
+export type MemoryTraceInput = McpCommonInput<"memory_trace"> & {
+  record_id: string;
+  max_depth?: number;
+  context_budget: ContextBudget;
+};
+
+export type MemoryTimelineInput = McpCommonInput<"memory_timeline"> & {
+  context_budget: ContextBudget;
+};
+
+export type MemoryRelatedInput = McpCommonInput<"memory_related"> & {
+  record_id: string;
+  max_depth?: number;
+  context_budget: ContextBudget;
+};
+
+export type MemoryCaptureInput = {
+  schema_version: SchemaVersion;
+  tool: "memory_capture";
+  visibility: McpVisibility;
+  provider: string;
+  hook_event_name: string;
+  captured_at: string;
+  media_type: string;
+  subject_ref: string;
+  payload: Record<string, unknown>;
+  idempotency_key?: string;
+};
+
+export type MemoryCaptureOutput =
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_capture";
+      status: "captured" | "replay";
+      event_id: string;
+      recorded_time: BitemporalInterval;
+    }
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_capture";
+      error: McpSafeError;
+    };
+
+export type MemoryProposeClaimInput = {
+  schema_version: SchemaVersion;
+  tool: "memory_propose_claim";
+  visibility: McpVisibility;
+  statement: string;
+  claim_type?: Claim["claim_type"];
+  support: ProvenanceRef[];
+  confidence?: number;
+  subject_ref?: string;
+  valid_time?: BitemporalInterval;
+  idempotency_key?: string;
+};
+
+export type MemoryProposeClaimOutput =
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_propose_claim";
+      status: "proposed" | "replay";
+      event_id: string;
+      claim_id: string;
+      lifecycle_status: "draft";
+      valid_time: BitemporalInterval;
+      recorded_time: BitemporalInterval;
+      valid_time_defaulted: boolean;
+      acceptance_decision_event_ids: [];
+    }
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_propose_claim";
+      error: McpSafeError;
+    };
+
+export type McpApiMessage =
+  | MemorySearchInput
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_search";
+      records: McpRecordRef[];
+      budget: ContextBudgetUsage;
+      error?: McpSafeError;
+    }
+  | MemoryGetInput
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_get";
+      record: McpRecordRef;
+      error?: McpSafeError;
+    }
+  | MemoryContextPackInput
+  | Record<string, unknown>
+  | MemoryTraceInput
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_trace";
+      records: McpRecordRef[];
+      budget: ContextBudgetUsage;
+      error?: McpSafeError;
+    }
+  | MemoryTimelineInput
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_timeline";
+      records: McpRecordRef[];
+      budget: ContextBudgetUsage;
+      error?: McpSafeError;
+    }
+  | MemoryRelatedInput
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_related";
+      records: McpRecordRef[];
+      budget: ContextBudgetUsage;
+      error?: McpSafeError;
+    }
+  | MemoryCaptureInput
+  | MemoryCaptureOutput
+  | MemoryProposeClaimInput
+  | MemoryProposeClaimOutput;
+
+export type ObsidianProjectionCategory =
+  | "accepted_fact"
+  | "observation"
+  | "evidence_summary"
+  | "proposed_claim"
+  | "rejected_claim"
+  | "conflict"
+  | "supersession"
+  | "erasure"
+  | "index";
+
+export type ObsidianSourceLineage = {
+  source_kind: "event" | "erasure" | "config";
+  source_id: string;
+  trust_zone_id: string;
+  zone_sequence: number;
+  source_fingerprint: string;
+  relationship?:
+    | "primary"
+    | "support"
+    | "acceptance"
+    | "rejection"
+    | "contradiction"
+    | "supersession"
+    | "erasure"
+    | "config";
+};
+
+export type ObsidianGeneratedFile = {
+  path: string;
+  category: ObsidianProjectionCategory;
+  source_lineage: ObsidianSourceLineage[];
+  content_digest: string;
+  tombstoned: boolean;
+};
+
+export type ObsidianProjectionManifest = {
+  schema_version: SchemaVersion;
+  manifest_type: "obsidian_projection_manifest";
+  projection_version: string;
+  output_root: string;
+  generated_at_policy: "fixed_input" | "wall_clock_disclosed";
+  config_digest: string;
+  visible_trust_zone_ids: string[];
+  path_policy: "delete_missing" | "tombstone_missing";
+  files: ObsidianGeneratedFile[];
+};
+
+export type ObsidianProjectionNote = {
+  schema_version: SchemaVersion;
+  note_type: "obsidian_projection_note";
+  path: string;
+  category: ObsidianProjectionCategory;
+  source_lineage: ObsidianSourceLineage[];
+  front_matter: {
+    carpeos_projection: true;
+    category: ObsidianProjectionCategory;
+    source_ids: string[];
+    canonical_effect: "none";
+  };
+};
+
+export type ObsidianProjectionMessage = ObsidianProjectionManifest | ObsidianProjectionNote;
+
 export type IdempotencyInput = {
   trust_zone_id: string;
   idempotency_key: string;
@@ -618,6 +883,8 @@ export function compileSchemaValidators(): SchemaValidatorSet {
     common: mustGetSchema(ajv, schemas.common.$id),
     canonicalEvent: mustGetSchema(ajv, schemas.canonicalEvent.$id),
     erasureLedger: mustGetSchema(ajv, schemas.erasureLedger.$id),
+    mcpApi: mustGetSchema(ajv, schemas.mcpApi.$id),
+    obsidianProjection: mustGetSchema(ajv, schemas.obsidianProjection.$id),
     retrievalProjection: mustGetSchema(ajv, schemas.retrievalProjection.$id),
     syncApi: mustGetSchema(ajv, schemas.syncApi.$id),
   };
@@ -690,6 +957,14 @@ export function validateConformance(schemaName: SchemaName, value: unknown): Con
 
   if (schemaName === "retrievalProjection" && isObject(value)) {
     errors.push(...collectRetrievalProjectionSemanticErrors(value));
+  }
+
+  if (schemaName === "mcpApi" && isObject(value)) {
+    errors.push(...collectMcpApiSemanticErrors(value));
+  }
+
+  if (schemaName === "obsidianProjection" && isObject(value)) {
+    errors.push(...collectObsidianProjectionSemanticErrors(value));
   }
 
   return {
@@ -919,6 +1194,184 @@ function collectRetrievalProjectionSemanticErrors(message: Record<string, unknow
   }
 
   return errors;
+}
+
+function collectMcpApiSemanticErrors(message: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  if (isObject(message.visibility)) {
+    const visibleTrustZones = asStringSet(message.visibility.visible_trust_zone_ids);
+    if (visibleTrustZones.size === 0) {
+      errors.push("MCP inputs must declare at least one visible trust zone");
+    }
+  }
+
+  if (message.tool === "memory_propose_claim") {
+    if ("acceptance_decision_event_ids" in message) {
+      if (
+        !Array.isArray(message.acceptance_decision_event_ids) ||
+        message.acceptance_decision_event_ids.length !== 0
+      ) {
+        errors.push("memory_propose_claim output must not include AcceptanceDecision ids");
+      }
+    }
+
+    if (isObject(message.valid_time)) {
+      errors.push(...collectIntervalValueErrors(message.valid_time, "valid_time"));
+    }
+
+    if (isObject(message.recorded_time)) {
+      errors.push(...collectIntervalValueErrors(message.recorded_time, "recorded_time"));
+    }
+
+    if (message.lifecycle_status !== undefined && message.lifecycle_status !== "draft") {
+      errors.push("memory_propose_claim output lifecycle_status must be draft");
+    }
+  }
+
+  if (isObject(message.context_budget)) {
+    const maxItems = message.context_budget.max_items;
+    const maxCharacters = message.context_budget.max_characters;
+    if (
+      typeof maxItems === "number" &&
+      typeof maxCharacters === "number" &&
+      maxItems > maxCharacters
+    ) {
+      errors.push("context budget max_items must not exceed max_characters");
+    }
+  }
+
+  if (isObject(message.budget)) {
+    const used = isObject(message.budget.used) ? message.budget.used : undefined;
+    const omitted = isObject(message.budget.omitted) ? message.budget.omitted : undefined;
+    if (
+      used !== undefined &&
+      omitted !== undefined &&
+      typeof message.budget.truncated === "boolean" &&
+      typeof omitted.items === "number" &&
+      typeof omitted.characters === "number"
+    ) {
+      const hasOmissions = omitted.items > 0 || omitted.characters > 0;
+      if (hasOmissions !== message.budget.truncated) {
+        errors.push("budget truncated must match omitted item or character counts");
+      }
+    }
+  }
+
+  if (message.tool === "memory_context_pack" && Array.isArray(message.accepted_facts)) {
+    for (const fact of message.accepted_facts) {
+      if (!isObject(fact)) {
+        continue;
+      }
+      if (typeof fact.acceptance_decision_event_id !== "string") {
+        errors.push("accepted facts require visible AcceptanceDecision lineage");
+      }
+      if (
+        Array.isArray(fact.source_event_ids) &&
+        typeof fact.claim_event_id === "string" &&
+        !fact.source_event_ids.includes(fact.claim_event_id)
+      ) {
+        errors.push("accepted fact source_event_ids must include the claim event id");
+      }
+      if (
+        Array.isArray(fact.source_event_ids) &&
+        typeof fact.acceptance_decision_event_id === "string" &&
+        !fact.source_event_ids.includes(fact.acceptance_decision_event_id)
+      ) {
+        errors.push("accepted fact source_event_ids must include the AcceptanceDecision event id");
+      }
+    }
+  }
+
+  return errors;
+}
+
+function collectObsidianProjectionSemanticErrors(message: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  if (Array.isArray(message.files)) {
+    const paths = message.files
+      .filter((file): file is Record<string, unknown> => isObject(file))
+      .map((file) => String(file.path ?? ""));
+    const sortedPaths = [...paths].sort();
+    if (paths.some((path, index) => path !== sortedPaths[index])) {
+      errors.push("obsidian manifest files must be sorted deterministically by path");
+    }
+    if (new Set(paths).size !== paths.length) {
+      errors.push("obsidian manifest files must be deduplicated by path");
+    }
+
+    for (const file of message.files) {
+      if (isObject(file)) {
+        errors.push(...collectObsidianLineageErrors(file.category, file.source_lineage));
+      }
+    }
+  }
+
+  if (Array.isArray(message.source_lineage)) {
+    errors.push(...collectObsidianLineageErrors(message.category, message.source_lineage));
+  }
+
+  if (
+    isObject(message.front_matter) &&
+    typeof message.category === "string" &&
+    message.front_matter.category !== message.category
+  ) {
+    errors.push("obsidian note front_matter category must match note category");
+  }
+
+  return errors;
+}
+
+function collectObsidianLineageErrors(category: unknown, lineage: unknown): string[] {
+  if (typeof category !== "string" || !Array.isArray(lineage)) {
+    return [];
+  }
+
+  const relationships = lineage
+    .filter((item): item is Record<string, unknown> => isObject(item))
+    .map((item) => String(item.relationship ?? ""));
+
+  const requires = (relationship: string, message: string) => {
+    if (!relationships.includes(relationship)) {
+      return [message];
+    }
+    return [];
+  };
+
+  switch (category) {
+    case "accepted_fact":
+      return requires("acceptance", "accepted_fact notes require acceptance lineage");
+    case "proposed_claim":
+      return requires("primary", "proposed_claim notes require draft Claim lineage");
+    case "rejected_claim":
+      return requires("rejection", "rejected_claim notes require rejection lineage");
+    case "conflict":
+      return requires("contradiction", "conflict notes require contradiction lineage");
+    case "supersession":
+      return requires("supersession", "supersession notes require supersession lineage");
+    case "erasure":
+      return requires("erasure", "erasure notes require erasure lineage");
+    case "evidence_summary":
+      return requires("support", "evidence_summary notes require visible evidence lineage");
+    default:
+      return [];
+  }
+}
+
+function collectIntervalValueErrors(
+  interval: Record<string, unknown>,
+  label: "valid_time" | "recorded_time",
+): string[] {
+  if (
+    typeof interval.start === "string" &&
+    (typeof interval.end === "string" || interval.end === null) &&
+    !isBitemporalIntervalValid(interval as BitemporalInterval)
+  ) {
+    return [`${label}.start must be before or equal to ${label}.end`];
+  }
+
+  return [];
 }
 
 function collectProjectionFreshnessErrors(message: Record<string, unknown>): string[] {

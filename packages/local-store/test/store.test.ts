@@ -181,6 +181,156 @@ describe("LocalCaptureStore", () => {
     expect(otherZone.countRows("canonical_events")).toBe(2);
   });
 
+  it("proposes draft claims with explicit and default valid time without accepting them", () => {
+    const { store } = makeStore();
+    const supportEvent = store.captureHook(makeEnvelope({ source_event_id: "source_support_001" }));
+    const support = [
+      {
+        ref_type: "event" as const,
+        ref_id: supportEvent.event.event_id,
+        relationship: "supports" as const,
+      },
+    ];
+
+    const defaulted = store.proposeClaimDraft({
+      statement: "Synthetic default-time claim.",
+      support,
+      idempotencyKey: "idem_claim_default_000001",
+    });
+    expect(defaulted.status).toBe("proposed");
+    expect(defaulted.valid_time_defaulted).toBe(true);
+    expect(defaulted.event.event_type).toBe("Claim");
+    expect(defaulted.event.lifecycle_status).toBe("draft");
+    expect(defaulted.event.valid_time).toEqual(defaulted.event.recorded_time);
+    expect(defaulted.event.payload.support).toEqual(support);
+    expect(store.countRows("canonical_events")).toBe(2);
+
+    const historical = store.proposeClaimDraft({
+      statement: "Synthetic historical claim.",
+      support,
+      validTime: { start: "2025-01-01T00:00:00Z", end: null },
+      idempotencyKey: "idem_claim_history_000001",
+    });
+    expect(historical.valid_time_defaulted).toBe(false);
+    expect(historical.event.valid_time.start).toBe("2025-01-01T00:00:00Z");
+    expect(historical.event.recorded_time.start).toBe(now.toISOString());
+    expect(historical.event.valid_time.start).not.toBe(historical.event.recorded_time.start);
+
+    const future = store.proposeClaimDraft({
+      statement: "Synthetic future claim.",
+      support,
+      validTime: { start: "2027-01-01T00:00:00Z", end: null },
+      idempotencyKey: "idem_claim_future_000001",
+    });
+    expect(future.event.valid_time.start).toBe("2027-01-01T00:00:00Z");
+    const eventTypes = store
+      .listCanonicalEventSnapshots()
+      .map((snapshot) => snapshot.event.event_type);
+    expect(eventTypes).toEqual(["EvidenceArtifact", "Claim", "Claim", "Claim"]);
+    expect(eventTypes).not.toContain("AcceptanceDecision");
+  });
+
+  it("replays and conflicts propose-claim idempotency without duplicate canonical writes", () => {
+    const { store } = makeStore();
+    const supportEvent = store.captureHook(makeEnvelope({ source_event_id: "source_support_002" }));
+    const support = [
+      {
+        ref_type: "event" as const,
+        ref_id: supportEvent.event.event_id,
+        relationship: "supports" as const,
+      },
+    ];
+    const input = {
+      statement: "Synthetic replay claim.",
+      support,
+      idempotencyKey: "idem_claim_replay_000001",
+    };
+
+    const proposed = store.proposeClaimDraft(input);
+    const replay = store.proposeClaimDraft(input);
+    expect(replay.status).toBe("replay");
+    expect(replay.event.event_id).toBe(proposed.event.event_id);
+    expect(store.countRows("canonical_events")).toBe(2);
+    expect(() =>
+      store.proposeClaimDraft({
+        ...input,
+        statement: "Synthetic conflicting claim.",
+      }),
+    ).toThrow(IdempotencyConflictError);
+    expect(store.countRows("canonical_events")).toBe(2);
+  });
+
+  it("rejects unknown, unauthorized, and cross-zone support before writing draft claims", () => {
+    const { store } = makeStore();
+    const supportEvent = store.captureHook(makeEnvelope({ source_event_id: "source_support_003" }));
+
+    expect(() =>
+      store.proposeClaimDraft({
+        statement: "Unknown support fails.",
+        support: [{ ref_type: "event", ref_id: "evt_missing_support", relationship: "supports" }],
+      }),
+    ).toThrow(/support reference not found or unauthorized/);
+    expect(() =>
+      store.proposeClaimDraft({
+        statement: "Hidden support fails.",
+        support: [
+          { ref_type: "event", ref_id: supportEvent.event.event_id, relationship: "supports" },
+        ],
+        visibleTrustZoneIds: ["tz_hidden_only"],
+      }),
+    ).toThrow(/local trust zone must be visible/);
+
+    const otherZone = new LocalCaptureStore({
+      runtimeDir: tempDir(),
+      workspaceRoot: tempDir(),
+      trustZoneId: "tz_other_support",
+      keyProvider: new StaticKeyProvider(staticMaterial),
+      clock: { now: () => now },
+    });
+    const otherSupport = otherZone.captureHook(
+      makeEnvelope({ source_event_id: "source_support_004" }),
+    );
+    expect(() =>
+      store.proposeClaimDraft({
+        statement: "Cross-zone support fails.",
+        support: [
+          { ref_type: "event", ref_id: otherSupport.event.event_id, relationship: "supports" },
+        ],
+        visibleTrustZoneIds: [store.trustZone.trust_zone_id, otherZone.trustZone.trust_zone_id],
+      }),
+    ).toThrow(/support reference not found or unauthorized|different trust zone/);
+    expect(store.countRows("canonical_events")).toBe(1);
+  });
+
+  it("returns deterministic authorized canonical, inbox, erasure, and retrieval snapshots", () => {
+    const { store } = makeStore();
+    const captured = store.captureHook(makeEnvelope({ source_event_id: "source_snapshot_001" }));
+    const imported = makeExternalEvent("evt_snapshot_import_0001", store.trustZone.trust_zone_id);
+    const erasure = makeErasure("era_snapshot_0001", store.trustZone.trust_zone_id);
+    store.importPulledEvent(imported);
+    store.importPulledErasure(erasure);
+    store.persistSyncCursor({ afterSequence: 4, now });
+
+    const snapshot = store.getRetrievalInputSnapshot();
+    expect(snapshot.visible_trust_zone_ids).toEqual([store.trustZone.trust_zone_id]);
+    expect(snapshot.events.map((event) => event.event_id)).toEqual([
+      captured.event.event_id,
+      imported.event_id,
+    ]);
+    expect(snapshot.erasures.map((item) => item.erasure_id)).toEqual([erasure.erasure_id]);
+    expect(snapshot.sync_cursor.after_sequence).toBe(4);
+    expect(store.getAuthorizedCanonicalEvent({ eventId: captured.event.event_id })?.event_id).toBe(
+      captured.event.event_id,
+    );
+    expect(
+      store.getAuthorizedCanonicalEvent({
+        eventId: captured.event.event_id,
+        visibleTrustZoneIds: ["tz_hidden_only"],
+      }),
+    ).toBeUndefined();
+    expect(store.getObsidianProjectionInputSnapshot()).toEqual(snapshot);
+  });
+
   it("stores distinct protected values for identical payloads with different logical request identity", () => {
     const { store } = makeStore();
     const first = store.captureHook(

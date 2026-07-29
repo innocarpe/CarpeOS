@@ -1,0 +1,172 @@
+{
+  "$id": "https://spec.carpeos.org/v1/schema/obsidian-projection.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarpeOS v1 Obsidian projection schemas",
+  "oneOf": [
+    { "$ref": "#/$defs/obsidianProjectionManifest" },
+    { "$ref": "#/$defs/obsidianProjectionNote" }
+  ],
+  "$defs": {
+    "projectionCategory": {
+      "type": "string",
+      "enum": [
+        "accepted_fact",
+        "observation",
+        "evidence_summary",
+        "proposed_claim",
+        "rejected_claim",
+        "conflict",
+        "supersession",
+        "erasure",
+        "index"
+      ]
+    },
+    "pathPolicy": {
+      "type": "string",
+      "enum": ["delete_missing", "tombstone_missing"]
+    },
+    "sourceLineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "source_id",
+        "trust_zone_id",
+        "zone_sequence",
+        "source_fingerprint"
+      ],
+      "properties": {
+        "source_kind": { "type": "string", "enum": ["event", "erasure", "config"] },
+        "source_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "zone_sequence": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/zoneSequence"
+        },
+        "source_fingerprint": { "type": "string", "pattern": "^sha-256:[a-f0-9]{64}$" },
+        "relationship": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "support",
+            "acceptance",
+            "rejection",
+            "contradiction",
+            "supersession",
+            "erasure",
+            "config"
+          ]
+        }
+      }
+    },
+    "generatedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "category", "source_lineage", "content_digest", "tombstoned"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.md$"
+        },
+        "category": { "$ref": "#/$defs/projectionCategory" },
+        "source_lineage": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLineage" }
+        },
+        "content_digest": { "type": "string", "pattern": "^sha-256:[a-f0-9]{64}$" },
+        "tombstoned": { "type": "boolean" }
+      }
+    },
+    "obsidianProjectionManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "manifest_type",
+        "projection_version",
+        "output_root",
+        "generated_at_policy",
+        "config_digest",
+        "visible_trust_zone_ids",
+        "path_policy",
+        "files"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "manifest_type": { "const": "obsidian_projection_manifest" },
+        "projection_version": { "type": "string", "pattern": "^obsidian/v[0-9]+$" },
+        "output_root": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "generated_at_policy": {
+          "type": "string",
+          "enum": ["fixed_input", "wall_clock_disclosed"]
+        },
+        "config_digest": { "type": "string", "pattern": "^sha-256:[a-f0-9]{64}$" },
+        "visible_trust_zone_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+          }
+        },
+        "path_policy": { "$ref": "#/$defs/pathPolicy" },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/generatedFile" }
+        }
+      }
+    },
+    "obsidianProjectionNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "note_type",
+        "path",
+        "category",
+        "source_lineage",
+        "front_matter"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "note_type": { "const": "obsidian_projection_note" },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.md$"
+        },
+        "category": { "$ref": "#/$defs/projectionCategory" },
+        "source_lineage": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLineage" }
+        },
+        "front_matter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["carpeos_projection", "category", "source_ids", "canonical_effect"],
+          "properties": {
+            "carpeos_projection": { "const": true },
+            "category": { "$ref": "#/$defs/projectionCategory" },
+            "source_ids": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+            },
+            "canonical_effect": { "const": "none" }
+          }
+        }
+      }
+    }
+  }
+}

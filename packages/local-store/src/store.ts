@@ -7,11 +7,15 @@ import {
   type CaptureEnvelope,
   deriveIdempotencyKey,
   fingerprintEnvelope,
+  fingerprintObject,
   hashHex,
+  isIdempotencyKey,
   stableJson,
 } from "@carpeos/capture";
 import type {
   CanonicalEvent,
+  Claim,
+  ProvenanceRef,
   ProtectedValueMetadata,
   ProtectedValueRef,
   ProtectedValueUploadIntent,
@@ -74,6 +78,77 @@ export type CaptureResult =
       protected_value_id: string;
     };
 
+export type ProposeClaimDraftInput = {
+  statement: string;
+  claimType?: Claim["claim_type"];
+  support: readonly ProvenanceRef[];
+  confidence?: number;
+  subjectRef?: string;
+  validTime?: CanonicalEvent["valid_time"];
+  visibleTrustZoneIds?: readonly string[];
+  idempotencyKey?: string;
+};
+
+export type ProposeClaimDraftResult =
+  | {
+      status: "proposed";
+      event: CanonicalEvent<"Claim">;
+      local_sequence: number;
+      outbox_id: number;
+      request_fingerprint: string;
+      protected_value_id: string;
+      valid_time_defaulted: boolean;
+    }
+  | {
+      status: "replay";
+      event: CanonicalEvent<"Claim">;
+      local_sequence: number;
+      outbox_id: number;
+      request_fingerprint: string;
+      protected_value_id: string;
+      valid_time_defaulted: boolean;
+    };
+
+export type LocalCanonicalEventSnapshot = {
+  source: "canonical" | "inbox";
+  local_sequence: number | null;
+  event_id: string;
+  event_type: CanonicalEvent["event_type"];
+  trust_zone_id: string;
+  zone_sequence: number;
+  protected_value_id: string | null;
+  event: CanonicalEvent;
+  imported_at?: string;
+};
+
+export type LocalErasureSnapshot = {
+  source: "inbox";
+  erasure_id: string;
+  trust_zone_id: string;
+  zone_sequence: number;
+  erasure: ErasureLedgerRecord;
+  imported_at: string;
+};
+
+export type LocalRetrievalInputSnapshot = {
+  trust_zone_id: string;
+  visible_trust_zone_ids: string[];
+  events: LocalCanonicalEventSnapshot[];
+  erasures: LocalErasureSnapshot[];
+  sync_cursor: SyncCursor;
+};
+
+export type LocalSupportReference = {
+  ref: ProvenanceRef;
+  event_id: string;
+  trust_zone_id: string;
+  event_type: CanonicalEvent["event_type"];
+};
+
+export type LocalSupportValidationResult = {
+  support: LocalSupportReference[];
+};
+
 export type OutboxStatus = {
   pending: number;
   leased: number;
@@ -99,6 +174,26 @@ type EventRow = {
   event_json: string;
   local_sequence: number;
   protected_value_id: string;
+};
+
+type EventSnapshotRow = {
+  source: "canonical" | "inbox";
+  local_sequence: number | null;
+  event_id: string;
+  event_type: CanonicalEvent["event_type"];
+  trust_zone_id: string;
+  zone_sequence: number | null;
+  protected_value_id: string | null;
+  event_json: string;
+  imported_at?: string;
+};
+
+type ErasureSnapshotRow = {
+  erasure_id: string;
+  trust_zone_id: string;
+  zone_sequence: number;
+  erasure_json: string;
+  imported_at: string;
 };
 
 type ProtectedValueRow = {
@@ -462,6 +557,191 @@ export class LocalCaptureStore {
         outbox_id: Number(outboxInsert.lastInsertRowid),
         request_fingerprint: built.requestFingerprint,
         protected_value_id: protectedValueId,
+      };
+    });
+  }
+
+  proposeClaimDraft(input: ProposeClaimDraftInput): ProposeClaimDraftResult {
+    const recordedAt = this.clock.now().toISOString();
+    const statement = input.statement.trim();
+    if (statement.length === 0) {
+      throw new Error("claim statement is required");
+    }
+    if (input.support.length === 0) {
+      throw new Error("claim support is required");
+    }
+    if (input.confidence !== undefined && (input.confidence < 0 || input.confidence > 1)) {
+      throw new Error("claim confidence must be between 0 and 1");
+    }
+    if (input.idempotencyKey !== undefined && !isIdempotencyKey(input.idempotencyKey)) {
+      throw new Error("idempotency_key must match idem_[A-Za-z0-9_-]{16,128}");
+    }
+    const visibleTrustZoneIds = input.visibleTrustZoneIds ?? [this.trustZone.trust_zone_id];
+    const support = this.validateSupportReferences({
+      support: input.support,
+      visibleTrustZoneIds,
+    }).support.map((item) => item.ref);
+    const validTime = input.validTime ?? { start: recordedAt, end: null };
+    if (!isBitemporalInterval(validTime)) {
+      throw new Error("valid_time.start must be before or equal to valid_time.end");
+    }
+
+    const normalizedInput = {
+      statement,
+      claim_type: input.claimType ?? "inference",
+      support,
+      confidence: input.confidence,
+      subject_ref: input.subjectRef ?? this.projectId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      valid_time: validTime,
+    };
+    const requestFingerprint = fingerprintObject({
+      tool: "propose_claim",
+      ...normalizedInput,
+    });
+    const idempotencyKey =
+      input.idempotencyKey ?? `idem_${hashHex(stableJson(normalizedInput)).slice(0, 32)}`;
+    const eventDigest = hashHex(
+      stableJson({
+        trust_zone_id: this.trustZone.trust_zone_id,
+        idempotency_key: idempotencyKey,
+        request_fingerprint: requestFingerprint,
+      }),
+    );
+    const protectedValueId = `pv_${eventDigest.slice(0, 24)}`;
+    const protectedPayload = Buffer.from(
+      stableJson({
+        tool: "propose_claim",
+        proposed_at: recordedAt,
+        statement,
+        claim_type: normalizedInput.claim_type,
+        support: normalizedInput.support,
+        confidence: normalizedInput.confidence,
+        valid_time: validTime,
+      }),
+      "utf8",
+    );
+    const encrypted = encrypt(protectedPayload, this.keyBytes);
+    const event: CanonicalEvent<"Claim"> = {
+      schema_version: "v1",
+      event_id: `evt_${eventDigest.slice(0, 32)}`,
+      event_type: "Claim",
+      subject_ref: normalizeIdentifier(normalizedInput.subject_ref),
+      valid_time: validTime,
+      recorded_time: { start: recordedAt, end: null },
+      lifecycle_status: "draft",
+      epistemic_authority: "self_reported",
+      trust_zone: this.trustZone,
+      provenance: normalizedInput.support,
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      payload: {
+        claim_id: `claim_${eventDigest.slice(32, 56)}`,
+        statement,
+        claim_type: normalizedInput.claim_type,
+        support: normalizedInput.support,
+        ...(normalizedInput.confidence === undefined
+          ? {}
+          : { confidence: normalizedInput.confidence }),
+      },
+    };
+    assertCanonicalEventConformance(event);
+    const eventJson = stableJson(event);
+    const syncRequest: SyncPushRequest = {
+      schema_version: "v1",
+      request_id: `req_${hashHex(stableJson({ event_id: event.event_id, client_id: this.clientId })).slice(0, 32)}`,
+      client_id: this.clientId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      events: [event],
+      erasures: [],
+    };
+    const syncConformance = validateConformance("syncApi", syncRequest);
+    if (!syncConformance.valid) {
+      throw new Error(`invalid sync push request: ${syncConformance.errors.join("; ")}`);
+    }
+
+    return this.withImmediateTransaction(() => {
+      const existing = this.findEventByIdempotency(this.trustZone.trust_zone_id, idempotencyKey);
+      if (existing !== undefined) {
+        const existingEvent = JSON.parse(existing.event_json) as CanonicalEvent<"Claim">;
+        if (existingEvent.request_fingerprint !== requestFingerprint) {
+          throw new IdempotencyConflictError({
+            idempotencyKey,
+            existingFingerprint: existingEvent.request_fingerprint,
+            incomingFingerprint: requestFingerprint,
+          });
+        }
+        return {
+          status: "replay",
+          event: existingEvent,
+          local_sequence: Number(existing.local_sequence),
+          outbox_id: this.findOutboxIdForEvent(existingEvent.event_id),
+          request_fingerprint: requestFingerprint,
+          protected_value_id: existing.protected_value_id,
+          valid_time_defaulted: input.validTime === undefined,
+        };
+      }
+
+      this.db
+        .prepare(`
+          INSERT INTO protected_values (
+            protected_value_id, vault_ref, key_ref, nonce_ref, tag_ref,
+            nonce, tag, ciphertext, plaintext_digest, size_bytes, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          protectedValueId,
+          "vault_local",
+          "key_local_active",
+          `nonce_${protectedValueId.slice(3)}`,
+          `tag_${protectedValueId.slice(3)}`,
+          encrypted.nonce,
+          encrypted.tag,
+          encrypted.ciphertext,
+          hashHex(protectedPayload),
+          protectedPayload.byteLength,
+          recordedAt,
+        );
+
+      const eventInsert = this.db
+        .prepare(`
+          INSERT INTO canonical_events (
+            event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+            protected_value_id, event_json, recorded_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          event.event_id,
+          event.event_type,
+          this.trustZone.trust_zone_id,
+          idempotencyKey,
+          requestFingerprint,
+          protectedValueId,
+          eventJson,
+          recordedAt,
+        );
+
+      const outboxInsert = this.db
+        .prepare(`
+          INSERT INTO outbox (
+            event_id, state, attempts, available_at, push_request_json, created_at, updated_at
+          )
+          VALUES (?, 'pending', 0, ?, ?, ?, ?)
+        `)
+        .run(event.event_id, recordedAt, stableJson(syncRequest), recordedAt, recordedAt);
+
+      return {
+        status: "proposed",
+        event,
+        local_sequence: Number(eventInsert.lastInsertRowid),
+        outbox_id: Number(outboxInsert.lastInsertRowid),
+        request_fingerprint: requestFingerprint,
+        protected_value_id: protectedValueId,
+        valid_time_defaulted: input.validTime === undefined,
       };
     });
   }
@@ -977,6 +1257,167 @@ export class LocalCaptureStore {
     return inboxRow === undefined ? undefined : (JSON.parse(inboxRow.event_json) as CanonicalEvent);
   }
 
+  getAuthorizedCanonicalEvent(input: {
+    eventId: string;
+    visibleTrustZoneIds?: readonly string[];
+  }): LocalCanonicalEventSnapshot | undefined {
+    const visibleTrustZoneIds = input.visibleTrustZoneIds ?? [this.trustZone.trust_zone_id];
+    assertVisibleTrustZones(visibleTrustZoneIds);
+    const snapshot = this.listCanonicalEventSnapshots({ visibleTrustZoneIds }).find(
+      (event) => event.event_id === input.eventId,
+    );
+    return snapshot;
+  }
+
+  listCanonicalEventSnapshots(
+    input: {
+      visibleTrustZoneIds?: readonly string[];
+      eventTypes?: readonly CanonicalEvent["event_type"][];
+      includeInbox?: boolean;
+    } = {},
+  ): LocalCanonicalEventSnapshot[] {
+    const visibleTrustZoneIds = input.visibleTrustZoneIds ?? [this.trustZone.trust_zone_id];
+    assertVisibleTrustZones(visibleTrustZoneIds);
+    const visible = new Set(visibleTrustZoneIds);
+    const eventTypes = input.eventTypes === undefined ? undefined : new Set(input.eventTypes);
+    const rows = this.db
+      .prepare(`
+        SELECT
+          'canonical' AS source,
+          local_sequence,
+          event_id,
+          event_type,
+          trust_zone_id,
+          0 AS zone_sequence,
+          protected_value_id,
+          event_json,
+          NULL AS imported_at
+        FROM canonical_events
+        UNION ALL
+        SELECT
+          'inbox' AS source,
+          NULL AS local_sequence,
+          event_id,
+          json_extract(event_json, '$.event_type') AS event_type,
+          trust_zone_id,
+          zone_sequence,
+          protected_value_id,
+          event_json,
+          imported_at
+        FROM sync_inbox_events
+      `)
+      .all() as EventSnapshotRow[];
+
+    return rows
+      .filter((row) => visible.has(row.trust_zone_id))
+      .filter((row) => input.includeInbox !== false || row.source === "canonical")
+      .filter((row) => eventTypes === undefined || eventTypes.has(row.event_type))
+      .map(snapshotEventRow)
+      .sort(compareEventSnapshots);
+  }
+
+  listErasureSnapshots(
+    input: { visibleTrustZoneIds?: readonly string[] } = {},
+  ): LocalErasureSnapshot[] {
+    const visibleTrustZoneIds = input.visibleTrustZoneIds ?? [this.trustZone.trust_zone_id];
+    assertVisibleTrustZones(visibleTrustZoneIds);
+    const visible = new Set(visibleTrustZoneIds);
+    const rows = this.db
+      .prepare(`
+        SELECT erasure_id, trust_zone_id, zone_sequence, erasure_json, imported_at
+        FROM sync_inbox_erasures
+      `)
+      .all() as ErasureSnapshotRow[];
+
+    return rows
+      .filter((row) => visible.has(row.trust_zone_id))
+      .map((row) => ({
+        source: "inbox" as const,
+        erasure_id: row.erasure_id,
+        trust_zone_id: row.trust_zone_id,
+        zone_sequence: Number(row.zone_sequence),
+        erasure: JSON.parse(row.erasure_json) as ErasureLedgerRecord,
+        imported_at: row.imported_at,
+      }))
+      .sort(
+        (left, right) =>
+          [
+            left.trust_zone_id.localeCompare(right.trust_zone_id),
+            left.zone_sequence - right.zone_sequence,
+            left.erasure_id.localeCompare(right.erasure_id),
+          ].find((value) => value !== 0) ?? 0,
+      );
+  }
+
+  getRetrievalInputSnapshot(
+    input: { visibleTrustZoneIds?: readonly string[] } = {},
+  ): LocalRetrievalInputSnapshot {
+    const visibleTrustZoneIds = input.visibleTrustZoneIds ?? [this.trustZone.trust_zone_id];
+    assertVisibleTrustZones(visibleTrustZoneIds);
+    return {
+      trust_zone_id: this.trustZone.trust_zone_id,
+      visible_trust_zone_ids: [...visibleTrustZoneIds].sort(),
+      events: this.listCanonicalEventSnapshots({ visibleTrustZoneIds }),
+      erasures: this.listErasureSnapshots({ visibleTrustZoneIds }),
+      sync_cursor: this.getSyncCursor(this.trustZone.trust_zone_id),
+    };
+  }
+
+  getObsidianProjectionInputSnapshot(
+    input: { visibleTrustZoneIds?: readonly string[] } = {},
+  ): LocalRetrievalInputSnapshot {
+    return this.getRetrievalInputSnapshot(input);
+  }
+
+  validateSupportReferences(input: {
+    support: readonly ProvenanceRef[];
+    visibleTrustZoneIds?: readonly string[];
+  }): LocalSupportValidationResult {
+    if (input.support.length === 0) {
+      throw new Error("claim support is required");
+    }
+    const visibleTrustZoneIds = input.visibleTrustZoneIds ?? [this.trustZone.trust_zone_id];
+    assertVisibleTrustZones(visibleTrustZoneIds);
+    const visible = new Set(visibleTrustZoneIds);
+    if (!visible.has(this.trustZone.trust_zone_id)) {
+      throw new Error("local trust zone must be visible to propose a claim");
+    }
+
+    const events = this.listCanonicalEventSnapshots({ visibleTrustZoneIds });
+    const byRef = new Map<string, LocalCanonicalEventSnapshot>();
+    for (const event of events) {
+      byRef.set(event.event_id, event);
+      if (event.event.event_type === "EvidenceArtifact") {
+        byRef.set((event.event as CanonicalEvent<"EvidenceArtifact">).payload.artifact_id, event);
+      } else if (event.event.event_type === "Observation") {
+        byRef.set((event.event as CanonicalEvent<"Observation">).payload.observation_id, event);
+      } else if (event.event.event_type === "Claim") {
+        byRef.set((event.event as CanonicalEvent<"Claim">).payload.claim_id, event);
+      }
+    }
+
+    return {
+      support: input.support.map((ref) => {
+        const event = byRef.get(ref.ref_id);
+        if (event === undefined) {
+          throw new Error(`support reference not found or unauthorized: ${ref.ref_id}`);
+        }
+        if (event.trust_zone_id !== this.trustZone.trust_zone_id) {
+          throw new Error(`support reference ${ref.ref_id} belongs to a different trust zone`);
+        }
+        if (!visible.has(event.trust_zone_id)) {
+          throw new Error(`support reference not authorized: ${ref.ref_id}`);
+        }
+        return {
+          ref,
+          event_id: event.event_id,
+          trust_zone_id: event.trust_zone_id,
+          event_type: event.event_type,
+        };
+      }),
+    };
+  }
+
   withRetrievalDatabase<T>(callback: (db: LocalStoreSqlDatabase) => T): T {
     let active = true;
     const assertActive = () => {
@@ -1329,6 +1770,61 @@ function assertValidErasure(erasure: ErasureLedgerRecord): void {
   }
 }
 
+function assertVisibleTrustZones(visibleTrustZoneIds: readonly string[]): void {
+  if (visibleTrustZoneIds.length === 0) {
+    throw new Error("visible trust zones are required");
+  }
+  for (const trustZoneId of visibleTrustZoneIds) {
+    if (!isTrustZoneId(trustZoneId)) {
+      throw new Error(`invalid visible trust zone id: ${trustZoneId}`);
+    }
+  }
+}
+
+function snapshotEventRow(row: EventSnapshotRow): LocalCanonicalEventSnapshot {
+  return {
+    source: row.source,
+    local_sequence: row.local_sequence === null ? null : Number(row.local_sequence),
+    event_id: row.event_id,
+    event_type: row.event_type,
+    trust_zone_id: row.trust_zone_id,
+    zone_sequence: Number(row.zone_sequence ?? 0),
+    protected_value_id: row.protected_value_id,
+    event: JSON.parse(row.event_json) as CanonicalEvent,
+    ...(row.imported_at === undefined ? {} : { imported_at: row.imported_at }),
+  };
+}
+
+function compareEventSnapshots(
+  left: LocalCanonicalEventSnapshot,
+  right: LocalCanonicalEventSnapshot,
+): number {
+  return (
+    left.trust_zone_id.localeCompare(right.trust_zone_id) ||
+    left.zone_sequence - right.zone_sequence ||
+    (left.local_sequence ?? Number.MAX_SAFE_INTEGER) -
+      (right.local_sequence ?? Number.MAX_SAFE_INTEGER) ||
+    left.event_id.localeCompare(right.event_id)
+  );
+}
+
+function isBitemporalInterval(interval: CanonicalEvent["valid_time"]): boolean {
+  const start = Date.parse(interval.start);
+  const end = interval.end === null ? start : Date.parse(interval.end);
+  return (
+    !Number.isNaN(start) &&
+    !Number.isNaN(end) &&
+    timestampMatches(start, interval.start) &&
+    (interval.end === null || timestampMatches(end, interval.end)) &&
+    start <= end
+  );
+}
+
+function timestampMatches(epochMs: number, value: string): boolean {
+  const normalized = new Date(epochMs).toISOString();
+  return normalized === value || normalized.replace(".000Z", "Z") === value;
+}
+
 function getEventProtectedValueRef(event: CanonicalEvent): ProtectedValueRef | undefined {
   return event.event_type === "EvidenceArtifact" &&
     event.payload.content_ref.ref_type === "protected_value"
@@ -1463,6 +1959,21 @@ function normalizeTimestamp(value: string): string {
     throw new Error(`invalid timestamp: ${value}`);
   }
   return parsed.toISOString().replace(".000Z", "Z");
+}
+
+function normalizeIdentifier(value: string): string {
+  const candidate = value
+    .toLowerCase()
+    .replace(/[^a-z0-9_:-]+/g, "_")
+    .replace(/^[^a-z]+/, "subject_")
+    .replace(/_+/g, "_")
+    .slice(0, 128);
+
+  if (/^[a-z][a-z0-9_:-]{2,127}$/.test(candidate)) {
+    return candidate;
+  }
+
+  return `subject_${hashHex(value).slice(0, 16)}`;
 }
 
 function encrypt(
