@@ -31,9 +31,9 @@ Do not replace tracked placeholders with real values. Use an ignored complete
 standalone private Wrangler config for private operator work; see
 [Private Cloudflare Operator Config](private-cloudflare-operator-config.md).
 This repository does not claim that a live Worker, D1 database, or R2 bucket
-exists. The package scripts target the placeholder `carpeos_sync` database name
-from the example config and are not private remote-operation proof unless a
-later story explicitly passes an ignored private config path.
+exists. The local migration command uses the tracked placeholder `carpeos_sync`
+database for local work. Private remote operations require an ignored standalone
+private Wrangler config.
 
 One private operator provisions the Cloudflare resources outside Git in a later
 rollout step. These are examples of that later rollout resource creation shape,
@@ -48,15 +48,21 @@ Decline any Wrangler prompt that would write real binding data into the tracked
 `apps/carpeos-sync-worker/wrangler.toml`. Real bindings belong only in the
 ignored standalone private config.
 
-Run only local D1 migrations from the Worker package script:
+Run local D1 migrations from the Worker package script:
 
 ```sh
 pnpm --filter @carpeos/sync-worker d1:migrations:local
 ```
 
-Do not run `pnpm --filter @carpeos/sync-worker d1:migrations:remote`; that
-package script uses the tracked placeholder config. Remote D1 migration belongs
-to the standalone private-config guide and later rollout operator evidence.
+An authorized remote migration must use the package operator route with
+`CARPEOS_CF_CONFIG` pointing to the ignored standalone private config:
+
+```sh
+pnpm --filter @carpeos/sync-worker d1:migrations:remote
+```
+
+The operator validates the private config and passes it explicitly to Wrangler.
+The tracked `apps/carpeos-sync-worker/wrangler.toml` remains placeholder-only.
 
 For the broader local-first operator boundary, see
 [Local-First Operator Runbook](local-first-operator-runbook.md). For the
