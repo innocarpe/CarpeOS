@@ -14,10 +14,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - Named G5 MCP smoke gate: `pnpm smoke:mcp` (`scripts/smoke-mcp.mjs`) covering
   MCP tool list, `memory search`, and `memory context-pack`, wired into CI
+- G7 MCP tool contract inventory:
+  [`docs/contracts/mcp-tools-v1.md`](docs/contracts/mcp-tools-v1.md) +
+  [`docs/contracts/mcp-tools-v1.json`](docs/contracts/mcp-tools-v1.json) with
+  drift test against `CARPEOS_MCP_TOOLS`
 
 ### Changed
 
-- v1 readiness G5 marked **done**
+- v1 readiness G5 and G7 marked **done**
 
 ## [0.1.3] - 2026-07-29
 

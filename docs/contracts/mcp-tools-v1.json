@@ -1,0 +1,161 @@
+{
+  "contract_id": "mcp-tools-v1",
+  "schema_version": "v1",
+  "description": "Frozen agent-facing MCP tool inventory for @innocarpe/carpeos local stdio server. Source of truth for names; shapes live in packages/schema + apps/carpeos-mcp-server.",
+  "list_order_is_contract": true,
+  "tools": [
+    {
+      "name": "memory_search",
+      "kind": "read",
+      "requires_context_budget": true,
+      "required_input": ["schema_version", "tool", "visibility", "query", "context_budget"],
+      "optional_input": ["valid_time", "recorded_time"],
+      "success_output_keys": ["schema_version", "tool", "records", "budget"],
+      "summary": "Search visible local memory; return budgeted McpRecordRef list."
+    },
+    {
+      "name": "memory_get",
+      "kind": "read",
+      "requires_context_budget": false,
+      "required_input": ["schema_version", "tool", "visibility", "record_id"],
+      "optional_input": [],
+      "success_output_keys": ["schema_version", "tool", "record"],
+      "summary": "Fetch one visible event or erasure by stable record_id."
+    },
+    {
+      "name": "memory_context_pack",
+      "kind": "read",
+      "requires_context_budget": true,
+      "required_input": ["schema_version", "tool", "visibility", "task", "context_budget"],
+      "optional_input": ["valid_time", "recorded_time"],
+      "success_output_keys": [
+        "schema_version",
+        "tool",
+        "accepted_facts",
+        "conflicts",
+        "supersessions",
+        "observations",
+        "evidence_summaries",
+        "draft_claims",
+        "rejected_claims",
+        "erasures",
+        "verification_gaps",
+        "redactions",
+        "budget"
+      ],
+      "summary": "Bounded expert-slot context pack for an agent task (active capacity)."
+    },
+    {
+      "name": "memory_trace",
+      "kind": "read",
+      "requires_context_budget": true,
+      "required_input": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
+      "optional_input": ["max_depth"],
+      "success_output_keys": ["schema_version", "tool", "records", "budget"],
+      "summary": "Provenance / support lineage from a root record."
+    },
+    {
+      "name": "memory_timeline",
+      "kind": "read",
+      "requires_context_budget": true,
+      "required_input": ["schema_version", "tool", "visibility", "context_budget"],
+      "optional_input": ["valid_time", "recorded_time"],
+      "success_output_keys": ["schema_version", "tool", "records", "budget"],
+      "summary": "Visible bitemporal timeline of events and erasures."
+    },
+    {
+      "name": "memory_related",
+      "kind": "read",
+      "requires_context_budget": true,
+      "required_input": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
+      "optional_input": ["max_depth"],
+      "success_output_keys": ["schema_version", "tool", "records", "budget"],
+      "summary": "Deterministic related-record graph neighborhood."
+    },
+    {
+      "name": "memory_capture",
+      "kind": "write",
+      "requires_context_budget": false,
+      "required_input": [
+        "schema_version",
+        "tool",
+        "visibility",
+        "provider",
+        "hook_event_name",
+        "captured_at",
+        "media_type",
+        "subject_ref",
+        "payload"
+      ],
+      "optional_input": ["idempotency_key"],
+      "success_output_keys": ["schema_version", "tool", "status", "event_id", "recorded_time"],
+      "summary": "Capture local evidence through the durable outbox."
+    },
+    {
+      "name": "memory_propose_claim",
+      "kind": "write",
+      "requires_context_budget": false,
+      "required_input": ["schema_version", "tool", "visibility", "statement", "support"],
+      "optional_input": [
+        "claim_type",
+        "confidence",
+        "subject_ref",
+        "valid_time",
+        "idempotency_key"
+      ],
+      "success_output_keys": [
+        "schema_version",
+        "tool",
+        "status",
+        "event_id",
+        "claim_id",
+        "lifecycle_status",
+        "valid_time",
+        "recorded_time",
+        "valid_time_defaulted",
+        "acceptance_decision_event_ids"
+      ],
+      "summary": "Write a draft Claim only; never auto-accepts."
+    }
+  ],
+  "safe_error_codes": [
+    "invalid_schema",
+    "unauthorized",
+    "not_found",
+    "idempotency_conflict",
+    "protected_value_denied",
+    "budget_exceeded",
+    "internal_error"
+  ],
+  "visibility": {
+    "required": true,
+    "fields": {
+      "visible_trust_zone_ids": "non-empty string[]; must include active local trust zone",
+      "protected_value_policy": "metadata_only | allow_decrypt | deny"
+    }
+  },
+  "context_budget": {
+    "fields": {
+      "max_items": "positive integer",
+      "max_characters": "positive integer (stable JSON character length, not tokens)"
+    },
+    "usage_fields": [
+      "used.items",
+      "used.characters",
+      "truncated",
+      "omitted.items",
+      "omitted.characters"
+    ]
+  },
+  "not_implemented": [
+    {
+      "name": "memory_open_loops",
+      "note": "Reserved / not in G007 surface; must not appear in listTools until implemented with a MINOR/MAJOR bump per policy."
+    }
+  ],
+  "code_anchors": {
+    "tool_list": "apps/carpeos-mcp-server/src/tools.ts#CARPEOS_MCP_TOOLS",
+    "types": "packages/schema/src/index.ts (McpToolName and Memory*Input/Output)",
+    "json_schema_defs": "packages/schema MCP API $defs via apps/carpeos-mcp-server/src/schemas.ts"
+  }
+}
