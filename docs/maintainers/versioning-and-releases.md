@@ -124,6 +124,19 @@ node scripts/release.mjs 0.1.0 --force-tag
 git push origin main && git push origin v0.1.0
 ```
 
+## Agent harness skill (Claude / Codex / Grok)
+
+All coding agents should use the same release procedure:
+
+- Skill: [`skills/carpeos-release/SKILL.md`](../../skills/carpeos-release/SKILL.md)
+- Install into Claude Code, Codex/agents, and Grok Build skill dirs:
+
+```sh
+./scripts/install-release-skill.sh
+```
+
+Agents must not invent alternate SemVer, tagging, or publish flows.
+
 ## Related
 
 - [Release readiness checklist](release-readiness.md)
