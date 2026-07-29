@@ -9,9 +9,11 @@ project names into this repository.
 
 G008 release-readiness documentation keeps retrieval local-only. It does not add
 a hosted retrieval route, hosted MCP service, production Vectorize index,
-Workers AI embedding job, GraphRAG traversal, dashboard, or live deployment. See
-[Threat Model](../architecture/threat-model.md) for retrieval and projection
-risks.
+Workers AI embedding job, GraphRAG traversal, dashboard UI, or live deployment.
+GraphRAG remains planned only — see [GraphRAG roadmap](../plans/graphrag-roadmap.md).
+See [Threat Model](../architecture/threat-model.md) for retrieval and projection
+risks. Context-pack active-capacity checks live under
+[MCP context-pack smoke](mcp-context-pack-smoke.md).
 
 ## Boundary
 

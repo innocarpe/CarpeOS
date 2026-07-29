@@ -53,7 +53,7 @@ The server exposes exactly eight tools:
 | --- | --- |
 | `memory_search` | Search visible local memory and return budgeted canonical record refs. |
 | `memory_get` | Retrieve one visible canonical event or erasure record by stable ID. |
-| `memory_context_pack` | Build a deterministic bounded context pack for an agent task. Uses expert-slot allocation (default 16 sparse slots) and a cache-friendly section order: accepted facts and conflicts before high-churn draft/erasure sections. Procedure-trace evidence competes for procedure slots inside `evidence_summaries`. |
+| `memory_context_pack` | Build a deterministic bounded context pack for an agent task. Uses expert-slot allocation (default 16 sparse slots) and a cache-friendly section order: accepted facts and conflicts before high-churn draft/erasure sections. Procedure-trace evidence competes for procedure slots inside `evidence_summaries`. See [Context Pack Smoke](mcp-context-pack-smoke.md) for verified local checks. |
 | `memory_trace` | Show visible provenance and support lineage for one record. |
 | `memory_timeline` | Return a visible bitemporal timeline. |
 | `memory_related` | Return visible records related by deterministic graph edges. |

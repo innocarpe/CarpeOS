@@ -109,3 +109,10 @@ CarpeOS remains the private hippocampus and epistemic control plane.
 See `docs/plans/k3-memory-capacity-master-plan.md` for delivery stories M1–M10
 and merge order. Features land only when their PR tests pass; this document
 describes the target architecture.
+
+Related operator docs:
+
+- [MCP context-pack smoke](../guides/mcp-context-pack-smoke.md) — verify active
+  capacity packs locally
+- [GraphRAG roadmap](../plans/graphrag-roadmap.md) — planned graph-augmented
+  candidate generation (not implemented yet)
