@@ -160,8 +160,29 @@ Rules worth knowing up front:
 
 More detail:
 [Architecture overview](docs/architecture/overview.md),
+[Memory capacity](docs/architecture/memory-capacity.md),
+[ADR 0009](docs/adr/0009-memory-capacity-model.md),
 [ADRs](docs/adr/),
 [spec/v1](spec/v1/).
+
+### Memory capacity (total vs active)
+
+CarpeOS separates **how much private knowledge you store** from **how much an
+agent loads right now**:
+
+| Axis | Meaning | Where it lives |
+| --- | --- | --- |
+| **Total capacity** | Visible append-only events + protected blobs under trust zones | L1 store |
+| **Active capacity** | What fits a bounded pack or search response after budgets and recheck | L2 working memory |
+| **Procedural memory** | Thinking/tool traces as protected evidence, never auto-accepted | L3 |
+| **Product projections** | Rebuildable notes, packs, open loops, dashboards | L4 |
+
+Context packs use sparse **expert-slot** allocation (default 16 slots) and a
+cache-friendly section order so accepted facts stay ahead of high-churn drafts.
+See the [memory capacity architecture note](docs/architecture/memory-capacity.md)
+and the [capacity master plan](docs/plans/k3-memory-capacity-master-plan.md).
+Graph-oriented recall remains planned:
+[GraphRAG roadmap](docs/plans/graphrag-roadmap.md).
 
 ---
 
@@ -189,7 +210,10 @@ node apps/carpeos-cli/dist/index.js outbox status
 | Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
 | Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| MCP context-pack smoke | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) |
 | Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
+| Memory capacity | [docs/architecture/memory-capacity.md](docs/architecture/memory-capacity.md) |
+| GraphRAG roadmap (planned) | [docs/plans/graphrag-roadmap.md](docs/plans/graphrag-roadmap.md) |
 | Threat model | [docs/architecture/threat-model.md](docs/architecture/threat-model.md) |
 | Local-first operator runbook | [docs/guides/local-first-operator-runbook.md](docs/guides/local-first-operator-runbook.md) |
 | Cross-Mac bootstrap & recovery | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
@@ -217,9 +241,12 @@ Worker+D1+R2 gate passes with
 | Sync Worker/client | Code + local tests; no production deploy claimed |
 | Local hybrid retrieval | Implemented (deterministic dev embeddings) |
 | MCP stdio server (8 tools) | Local only |
+| Expert-slot context packs | Local only (see MCP smoke guide) |
+| OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection package | Local only |
 | Synthetic G008 local e2e | Local only; opt-in Worker+D1+R2 proof |
-| Hosted embeddings / GraphRAG / dashboard | Not built |
+| Hosted embeddings | Not built |
+| GraphRAG traversal | Planned — [roadmap](docs/plans/graphrag-roadmap.md) |
 | Packaged end-user install | Not ready |
 
 **NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, package publish,

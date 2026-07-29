@@ -154,8 +154,29 @@ flowchart LR
 
 더 자세한 내용:
 [Architecture overview](docs/architecture/overview.md),
+[Memory capacity](docs/architecture/memory-capacity.md),
+[ADR 0009](docs/adr/0009-memory-capacity-model.md),
 [ADRs](docs/adr/),
 [spec/v1](spec/v1/).
+
+### 메모리 용량 (전체 vs 활성)
+
+CarpeOS는 **얼마나 쌓아 두는지**와 **지금 에이전트가 얼마나 불러오는지**를
+나눕니다.
+
+| 축 | 의미 | 위치 |
+| --- | --- | --- |
+| **Total capacity** | trust zone 아래 visible 이벤트 + protected blob | L1 store |
+| **Active capacity** | budget·재검사 후 pack/search에 실리는 양 | L2 working memory |
+| **Procedural memory** | thinking/tool 트레이스 (자동 수락 없음) | L3 |
+| **Product projections** | 다시 만들 수 있는 노트·pack·open loop·dashboard | L4 |
+
+Context pack은 기본 16개 **expert-slot**으로 sparse 하게 채우고, accepted fact를
+draft보다 앞에 두는 cache-friendly 순서를 씁니다.
+[메모리 용량 아키텍처](docs/architecture/memory-capacity.md),
+[capacity 마스터 플랜](docs/plans/k3-memory-capacity-master-plan.md)을 보세요.
+그래프 기반 회상은 아직 계획 단계입니다:
+[GraphRAG 로드맵](docs/plans/graphrag-roadmap.md).
 
 ---
 
@@ -183,7 +204,10 @@ node apps/carpeos-cli/dist/index.js outbox status
 | Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
 | Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| MCP context-pack smoke | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) |
 | Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
+| Memory capacity | [docs/architecture/memory-capacity.md](docs/architecture/memory-capacity.md) |
+| GraphRAG 로드맵 (planned) | [docs/plans/graphrag-roadmap.md](docs/plans/graphrag-roadmap.md) |
 | Threat model | [docs/architecture/threat-model.md](docs/architecture/threat-model.md) |
 | Local-first operator runbook | [docs/guides/local-first-operator-runbook.md](docs/guides/local-first-operator-runbook.md) |
 | Cross-Mac bootstrap & recovery | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
@@ -211,9 +235,12 @@ Worker+D1+R2 gate가 통과했습니다. 이 증거는 로컬 증거일 뿐입�
 | Sync Worker/client | 코드 + 로컬 테스트. production 배포 주장 없음 |
 | Local hybrid retrieval | 구현 (개발용 deterministic embedding) |
 | MCP stdio server (도구 8개) | 로컬만 |
+| Expert-slot context pack | 로컬만 (MCP smoke 가이드 참고) |
+| OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection package | 로컬만 |
 | Synthetic G008 local e2e | 로컬만. opt-in Worker+D1+R2 proof |
-| Hosted embeddings / GraphRAG / dashboard | 아직 없음 |
+| Hosted embeddings | 아직 없음 |
+| GraphRAG traversal | 계획 — [로드맵](docs/plans/graphrag-roadmap.md) |
 | 패키지형 사용자 설치 | 아직 아님 |
 
 **NOT DEPLOYED:** 이 저장소는 hosted Worker, D1/R2 production resource, package
