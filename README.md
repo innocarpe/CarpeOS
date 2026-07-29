@@ -187,69 +187,76 @@ Graph-oriented recall remains planned:
 
 ---
 
-## Quick start
+## Install
 
-Needs Node.js ≥ 22.22 and pnpm ≥ 11.16.
+Requires **Node.js ≥ 22.22**.
 
-### Install like other open-source CLIs
+### Users
 
 ```sh
-# npm global (recommended once published)
+# npm (preferred)
 npm install -g @innocarpe/carpeos
 carpeos setup --yes
 
-# curl one-liner (same as Codex-style installers)
+# or curl (installs the same package, then setup)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
 ```
 
-Requires Node.js ≥ 22.22. `carpeos setup` creates `~/.carpeos` and registers the
-local MCP server with Claude Code / Codex / Grok when those CLIs are available.
+`carpeos setup` creates a private runtime under `~/.carpeos` and registers the
+local MCP server with **Claude Code / Codex CLI / Grok Build** when those tools
+are on `PATH`. Verify with `carpeos setup --doctor`.
 
-### From a git checkout (developers)
+Pin a version when you care about reproducibility: `npm i -g @innocarpe/carpeos@0.1.0`.
+Changelog: [CHANGELOG.md](CHANGELOG.md).
+
+### Developers (git checkout)
 
 ```sh
-node scripts/install-local.mjs --dry-run   # plan
-node scripts/install-local.mjs --yes       # apply (idempotent)
+git clone https://github.com/innocarpe/carpeos.git && cd carpeos
+node scripts/install-local.mjs --yes    # build, wrappers, MCP registration
 export PATH="$HOME/.local/bin:$PATH"
 node scripts/install-local.mjs --doctor
 ```
 
-Details: [One-stop install guide](docs/guides/one-stop-install.md) ·
-[npm package](packages/carpeos/README.md).
+For monorepo work without global install: `pnpm install && pnpm build`, then use
+`node apps/carpeos-cli/dist/index.js …` (see [local capture](docs/guides/local-capture.md)).
 
-### Manual / synthetic path
+### After install (smoke)
 
 ```sh
-pnpm install
-pnpm build
-
-node apps/carpeos-cli/dist/index.js init
-node apps/carpeos-cli/dist/index.js project identify
-
-# one synthetic capture
-node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
-  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
-
-node apps/carpeos-cli/dist/index.js outbox status
+carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+carpeos memory context-pack \
+  --task "Smoke: list what I know" \
+  --trust-zone tz_local_default \
+  --visible-trust-zone tz_local_default
 ```
 
-| Topic | Guide |
-| --- | --- |
-| One-stop install | [docs/guides/one-stop-install.md](docs/guides/one-stop-install.md) |
-| Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
-| Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
-| Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
-| MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
-| MCP context-pack smoke | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) |
-| Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
-| Memory capacity | [docs/architecture/memory-capacity.md](docs/architecture/memory-capacity.md) |
-| GraphRAG roadmap (planned) | [docs/plans/graphrag-roadmap.md](docs/plans/graphrag-roadmap.md) |
-| Threat model | [docs/architecture/threat-model.md](docs/architecture/threat-model.md) |
-| Local-first operator runbook | [docs/guides/local-first-operator-runbook.md](docs/guides/local-first-operator-runbook.md) |
-| Cross-Mac bootstrap & recovery | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
-| Release readiness | [docs/maintainers/release-readiness.md](docs/maintainers/release-readiness.md) |
+Optional session **capture** still uses host hooks under [`adapters/`](adapters/)
+(separate from MCP). Full notes:
+[one-stop install](docs/guides/one-stop-install.md) ·
+[MCP](docs/guides/mcp-server.md) ·
+[context-pack smoke](docs/guides/mcp-context-pack-smoke.md).
 
-Hook templates: [`adapters/`](adapters/).
+### For agents installing this repo
+
+Keep install **idempotent** and **out of the git tree** for private data.
+
+1. Prefer `npm i -g @innocarpe/carpeos` + `carpeos setup --yes` (or `install.sh`).
+2. If working from source: `node scripts/install-local.mjs --yes` from the checkout.
+3. Never commit `~/.carpeos`, credentials, or real session data.
+4. Do not invent alternate install paths; setup registers MCP for Claude/Codex/Grok.
+5. Releases use SemVer + `vX.Y.Z` tags only — see
+   [versioning](docs/maintainers/versioning-and-releases.md) and skill
+   `skills/carpeos-release/SKILL.md` (`./scripts/install-release-skill.sh`).
+
+| Guide | Link |
+| --- | --- |
+| Install (all paths) | [docs/guides/one-stop-install.md](docs/guides/one-stop-install.md) |
+| Capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
+| Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
+| MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
+| Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 
 ---
 
@@ -271,17 +278,18 @@ Worker+D1+R2 gate passes with
 | Sync Worker/client | Code + local tests; no production deploy claimed |
 | Local hybrid retrieval | Implemented (deterministic dev embeddings) |
 | MCP stdio server (8 tools) | Local only |
-| Expert-slot context packs | Local only (see MCP smoke guide) |
+| Expert-slot context packs | CLI + MCP (local) |
+| `carpeos setup` / one-stop install | In tree; npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection package | Local only |
 | Synthetic G008 local e2e | Local only; opt-in Worker+D1+R2 proof |
 | Hosted embeddings | Not built |
 | GraphRAG traversal | Planned — [roadmap](docs/plans/graphrag-roadmap.md) |
-| Packaged end-user install | Not ready |
+| Hosted multi-tenant SaaS | Not a goal of this repo |
 
-**NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, package publish,
-private vault adoption, hosted MCP, or cross-Mac live deployment is proven by
-this repository.
+**NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, private vault
+adoption, or hosted MCP is proven by this repository. npm publish is gated by
+SemVer tags + CI ([versioning](docs/maintainers/versioning-and-releases.md)).
 
 Do not treat adapter install, a live Cloudflare setup, hosted MCP, or
 production search quality as done until this repo says so with tests and docs.
@@ -318,6 +326,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), and
 
 ```sh
 pnpm check   # format, lint, build, typecheck, test, public-boundary
+```
+
+Public package releases use one shared process (any coding agent should follow
+the same skill):
+
+```sh
+./scripts/install-release-skill.sh   # Claude / Codex / Grok skill links
+# then: release / tag / npm — see skills/carpeos-release/SKILL.md
 ```
 
 ---
