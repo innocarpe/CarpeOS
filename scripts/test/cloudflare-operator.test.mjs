@@ -380,4 +380,36 @@ describe("cloudflare operator private config validation", () => {
       assert.doesNotMatch(command, /(?:^|\s)wrangler(?:\s|$)/);
     }
   });
+
+  it("documents operator package scripts with explicit run commands", () => {
+    const documentedScripts = new Map([
+      [
+        new URL("../../docs/guides/cloudflare-sync.md", import.meta.url),
+        ["d1:migrations:local", "d1:migrations:remote"],
+      ],
+      [
+        new URL("../../docs/guides/private-cloudflare-operator-config.md", import.meta.url),
+        ["cloudflare:validate", "d1:migrations:remote", "deploy"],
+      ],
+    ]);
+
+    for (const [guide, scripts] of documentedScripts) {
+      const contents = readFileSync(guide, "utf8");
+      const shellLines = [...contents.matchAll(/```sh\r?\n([\s\S]*?)\r?\n```/g)].flatMap(
+        ([, block]) =>
+          block
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+      );
+
+      for (const script of scripts) {
+        const explicitCommand = `pnpm --filter @carpeos/sync-worker run ${script}`;
+        const implicitCommand = `pnpm --filter @carpeos/sync-worker ${script}`;
+
+        assert.equal(shellLines.filter((line) => line === explicitCommand).length, 1);
+        assert.equal(shellLines.filter((line) => line === implicitCommand).length, 0);
+      }
+    }
+  });
 });

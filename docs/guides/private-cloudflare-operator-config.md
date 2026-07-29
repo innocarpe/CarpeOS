@@ -123,7 +123,7 @@ test -f "$CARPEOS_CF_CONFIG"
 test "$(stat -f "%Lp" "$CARPEOS_CF_DIR")" = "700"
 test "$(stat -f "%Lp" "$CARPEOS_CF_CONFIG")" = "600"
 git check-ignore "$CARPEOS_CF_CONFIG"
-pnpm --filter @carpeos/sync-worker cloudflare:validate
+pnpm --filter @carpeos/sync-worker run cloudflare:validate
 ```
 
 The validation command checks the exact ignored, untracked repository-local
@@ -150,8 +150,8 @@ CARPEOS_REPO_ROOT="$(git rev-parse --show-toplevel)"
 CARPEOS_CF_DIR="$CARPEOS_REPO_ROOT/.carpeos/cloudflare"
 export CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
 
-pnpm --filter @carpeos/sync-worker d1:migrations:remote
-pnpm --filter @carpeos/sync-worker deploy
+pnpm --filter @carpeos/sync-worker run d1:migrations:remote
+pnpm --filter @carpeos/sync-worker run deploy
 ```
 
 Do not run those commands from the tracked placeholder config. These package

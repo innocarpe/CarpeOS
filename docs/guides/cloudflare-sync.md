@@ -51,14 +51,14 @@ ignored standalone private config.
 Run local D1 migrations from the Worker package script:
 
 ```sh
-pnpm --filter @carpeos/sync-worker d1:migrations:local
+pnpm --filter @carpeos/sync-worker run d1:migrations:local
 ```
 
 An authorized remote migration must use the package operator route with
 `CARPEOS_CF_CONFIG` pointing to the ignored standalone private config:
 
 ```sh
-pnpm --filter @carpeos/sync-worker d1:migrations:remote
+pnpm --filter @carpeos/sync-worker run d1:migrations:remote
 ```
 
 The operator validates the private config and passes it explicitly to Wrangler.
