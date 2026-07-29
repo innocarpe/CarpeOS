@@ -1,0 +1,38 @@
+{
+  "name": "@carpeos/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local stdio MCP server for CarpeOS memory tools.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "carpeos-mcp-server": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@carpeos/capture": "workspace:*",
+    "@carpeos/local-store": "workspace:*",
+    "@carpeos/obsidian-projection": "workspace:*",
+    "@carpeos/retrieval": "workspace:*",
+    "@carpeos/schema": "workspace:*",
+    "@modelcontextprotocol/server": "2.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0"
+  }
+}

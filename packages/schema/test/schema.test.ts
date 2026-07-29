@@ -5,6 +5,10 @@ import {
   type EmbeddingJob,
   type EmbeddingRecord,
   type ErasureLedgerRecord,
+  type MemoryCaptureOutput,
+  type MemoryProposeClaimInput,
+  type MemoryProposeClaimOutput,
+  type ObsidianProjectionManifest,
   type ProjectionFreshness,
   type ProtectedValueMetadata,
   type ProtectedValueUploadIntent,
@@ -634,6 +638,8 @@ describe("CarpeOS v1 schemas", () => {
       "canonicalEvent",
       "common",
       "erasureLedger",
+      "mcpApi",
+      "obsidianProjection",
       "retrievalProjection",
       "syncApi",
     ]);
@@ -1312,5 +1318,270 @@ describe("CarpeOS v1 schemas", () => {
         request_fingerprint: `sha-256:${"c".repeat(64)}`,
       }),
     ).toBe("idempotency_conflict");
+  });
+
+  it("validates the G007 MCP tool schemas and keeps propose-claim draft-only", () => {
+    const visibility = {
+      visible_trust_zone_ids: ["tz_local_default"],
+      protected_value_policy: "metadata_only",
+    } satisfies MemoryProposeClaimInput["visibility"];
+    const context_budget = { max_items: 8, max_characters: 4000 };
+    const support: ProvenanceRef[] = [
+      { ref_type: "event", ref_id: "evt_support_0001", relationship: "supports" },
+    ];
+    const proposeInput: MemoryProposeClaimInput = {
+      schema_version: "v1",
+      tool: "memory_propose_claim",
+      visibility,
+      statement: "Synthetic claim remains draft until accepted elsewhere.",
+      claim_type: "inference",
+      support,
+      valid_time: { start: "2025-01-01T00:00:00Z", end: null },
+      idempotency_key: "idem_mcp_claim_00000001",
+    };
+    const proposeOutput: MemoryProposeClaimOutput = {
+      schema_version: "v1",
+      tool: "memory_propose_claim",
+      status: "proposed",
+      event_id: "evt_mcp_claim_0001",
+      claim_id: "claim_mcp_claim_0001",
+      lifecycle_status: "draft",
+      valid_time: { start: "2025-01-01T00:00:00Z", end: null },
+      recorded_time: { start: "2026-01-01T00:00:00Z", end: null },
+      valid_time_defaulted: false,
+      acceptance_decision_event_ids: [],
+    };
+    const captureOutput: MemoryCaptureOutput = {
+      schema_version: "v1",
+      tool: "memory_capture",
+      status: "captured",
+      event_id: "evt_capture_0001",
+      recorded_time: { start: "2026-01-01T00:00:00Z", end: null },
+    };
+    const captureErrorOutput: MemoryCaptureOutput = {
+      schema_version: "v1",
+      tool: "memory_capture",
+      error: {
+        code: "unauthorized",
+        message: "visible trust zone is not authorized",
+      },
+    };
+    const proposeErrorOutput: MemoryProposeClaimOutput = {
+      schema_version: "v1",
+      tool: "memory_propose_claim",
+      error: {
+        code: "not_found",
+        message: "support reference was not found or authorized",
+        ref_id: "evt_missing_support",
+      },
+    };
+    const toolInputs = [
+      {
+        schema_version: "v1",
+        tool: "memory_search",
+        visibility,
+        query: "synthetic",
+        context_budget,
+      },
+      { schema_version: "v1", tool: "memory_get", visibility, record_id: "evt_support_0001" },
+      {
+        schema_version: "v1",
+        tool: "memory_context_pack",
+        visibility,
+        task: "assemble synthetic context",
+        context_budget,
+      },
+      {
+        schema_version: "v1",
+        tool: "memory_trace",
+        visibility,
+        record_id: "evt_support_0001",
+        context_budget,
+      },
+      { schema_version: "v1", tool: "memory_timeline", visibility, context_budget },
+      {
+        schema_version: "v1",
+        tool: "memory_related",
+        visibility,
+        record_id: "evt_support_0001",
+        context_budget,
+      },
+      {
+        schema_version: "v1",
+        tool: "memory_capture",
+        visibility,
+        provider: "codex",
+        hook_event_name: "SessionEnd",
+        captured_at: "2026-01-01T00:00:00Z",
+        media_type: "application/json",
+        subject_ref: "subject_synthetic",
+        payload: { note: "synthetic" },
+      },
+      proposeInput,
+    ];
+
+    for (const input of toolInputs) {
+      expect(validateConformance("mcpApi", input), JSON.stringify(input)).toEqual({
+        valid: true,
+        errors: [],
+      });
+    }
+    expect(validateConformance("mcpApi", captureOutput)).toEqual({ valid: true, errors: [] });
+    expect(validateConformance("mcpApi", captureErrorOutput)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    expect(validateConformance("mcpApi", proposeOutput)).toEqual({ valid: true, errors: [] });
+    expect(validateConformance("mcpApi", proposeErrorOutput)).toEqual({ valid: true, errors: [] });
+    expect(
+      validateConformance("mcpApi", {
+        ...captureErrorOutput,
+        status: "replay",
+        event_id: "evt_fake_capture",
+      }).valid,
+    ).toBe(false);
+    expect(
+      validateConformance("mcpApi", {
+        ...proposeErrorOutput,
+        status: "replay",
+        event_id: "evt_fake_claim",
+        claim_id: "claim_fake_claim",
+      }).valid,
+    ).toBe(false);
+    expect(
+      validateConformance("mcpApi", {
+        ...proposeOutput,
+        acceptance_decision_event_ids: ["evt_decision_0001"],
+      }).errors,
+    ).toContain("memory_propose_claim output must not include AcceptanceDecision ids");
+  });
+
+  it("enforces accepted-fact lineage and deterministic budget semantics in MCP outputs", () => {
+    const output = {
+      schema_version: "v1",
+      tool: "memory_context_pack",
+      accepted_facts: [
+        {
+          claim_event_id: "evt_claim_0001",
+          acceptance_decision_event_id: "evt_decision_0001",
+          statement: "Synthetic fact has visible acceptance lineage.",
+          source_event_ids: ["evt_claim_0001", "evt_decision_0001"],
+        },
+      ],
+      draft_claims: [],
+      rejected_claims: [],
+      observations: [],
+      evidence_summaries: [],
+      conflicts: [],
+      supersessions: [],
+      erasures: [],
+      verification_gaps: [],
+      redactions: [],
+      budget: {
+        used: { items: 1, characters: 47 },
+        truncated: false,
+        omitted: { items: 0, characters: 0 },
+      },
+    };
+
+    expect(validateConformance("mcpApi", output)).toEqual({ valid: true, errors: [] });
+    expect(
+      validateConformance("mcpApi", {
+        ...output,
+        accepted_facts: [{ ...output.accepted_facts[0], source_event_ids: ["evt_claim_0001"] }],
+      }).errors,
+    ).toContain("accepted fact source_event_ids must include the AcceptanceDecision event id");
+    expect(
+      validateConformance("mcpApi", {
+        ...output,
+        budget: { ...output.budget, truncated: true },
+      }).errors,
+    ).toContain("budget truncated must match omitted item or character counts");
+  });
+
+  it("validates closed Obsidian projection manifests and category lineage", () => {
+    const manifest: ObsidianProjectionManifest = {
+      schema_version: "v1",
+      manifest_type: "obsidian_projection_manifest",
+      projection_version: "obsidian/v1",
+      output_root: "SyntheticVault",
+      generated_at_policy: "fixed_input",
+      config_digest: `sha-256:${"a".repeat(64)}`,
+      visible_trust_zone_ids: ["tz_local_default"],
+      path_policy: "tombstone_missing",
+      files: [
+        {
+          path: "Accepted/synthetic-fact.md",
+          category: "accepted_fact",
+          source_lineage: [
+            {
+              source_kind: "event",
+              source_id: "evt_claim_0001",
+              trust_zone_id: "tz_local_default",
+              zone_sequence: 1,
+              source_fingerprint: `sha-256:${"b".repeat(64)}`,
+              relationship: "primary",
+            },
+            {
+              source_kind: "event",
+              source_id: "evt_decision_0001",
+              trust_zone_id: "tz_local_default",
+              zone_sequence: 2,
+              source_fingerprint: `sha-256:${"c".repeat(64)}`,
+              relationship: "acceptance",
+            },
+          ],
+          content_digest: `sha-256:${"d".repeat(64)}`,
+          tombstoned: false,
+        },
+        {
+          path: "Claims/synthetic-draft.md",
+          category: "proposed_claim",
+          source_lineage: [
+            {
+              source_kind: "event",
+              source_id: "evt_claim_0002",
+              trust_zone_id: "tz_local_default",
+              zone_sequence: 3,
+              source_fingerprint: `sha-256:${"e".repeat(64)}`,
+              relationship: "primary",
+            },
+          ],
+          content_digest: `sha-256:${"f".repeat(64)}`,
+          tombstoned: false,
+        },
+      ],
+    };
+
+    expect(validateConformance("obsidianProjection", manifest)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    expect(
+      validateConformance("obsidianProjection", {
+        ...manifest,
+        files: [...manifest.files].reverse(),
+      }).errors,
+    ).toContain("obsidian manifest files must be sorted deterministically by path");
+    const firstManifestFile = manifest.files[0];
+    if (firstManifestFile === undefined) {
+      throw new Error("expected manifest file");
+    }
+    const firstLineage = firstManifestFile.source_lineage[0];
+    if (firstLineage === undefined) {
+      throw new Error("expected manifest lineage");
+    }
+    expect(
+      validateConformance("obsidianProjection", {
+        ...manifest,
+        files: [{ ...firstManifestFile, source_lineage: [firstLineage] }],
+      }).errors,
+    ).toContain("accepted_fact notes require acceptance lineage");
+    expect(
+      validateConformance("obsidianProjection", {
+        ...manifest,
+        files: [{ ...firstManifestFile, category: "private_note" }],
+      }).valid,
+    ).toBe(false);
   });
 });

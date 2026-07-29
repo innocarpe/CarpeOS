@@ -1,0 +1,532 @@
+{
+  "$id": "https://spec.carpeos.org/v1/schema/mcp-api.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarpeOS v1 MCP API schemas",
+  "oneOf": [
+    { "$ref": "#/$defs/memorySearchInput" },
+    { "$ref": "#/$defs/memorySearchOutput" },
+    { "$ref": "#/$defs/memoryGetInput" },
+    { "$ref": "#/$defs/memoryGetOutput" },
+    { "$ref": "#/$defs/memoryContextPackInput" },
+    { "$ref": "#/$defs/memoryContextPackOutput" },
+    { "$ref": "#/$defs/memoryTraceInput" },
+    { "$ref": "#/$defs/memoryTraceOutput" },
+    { "$ref": "#/$defs/memoryTimelineInput" },
+    { "$ref": "#/$defs/memoryTimelineOutput" },
+    { "$ref": "#/$defs/memoryRelatedInput" },
+    { "$ref": "#/$defs/memoryRelatedOutput" },
+    { "$ref": "#/$defs/memoryCaptureInput" },
+    { "$ref": "#/$defs/memoryCaptureOutput" },
+    { "$ref": "#/$defs/memoryProposeClaimInput" },
+    { "$ref": "#/$defs/memoryProposeClaimOutput" }
+  ],
+  "$defs": {
+    "toolName": {
+      "type": "string",
+      "enum": [
+        "memory_search",
+        "memory_get",
+        "memory_context_pack",
+        "memory_trace",
+        "memory_timeline",
+        "memory_related",
+        "memory_capture",
+        "memory_propose_claim"
+      ]
+    },
+    "contextBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_items", "max_characters"],
+      "properties": {
+        "max_items": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "max_characters": { "type": "integer", "minimum": 1, "maximum": 200000 }
+      }
+    },
+    "budgetUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "truncated", "omitted"],
+      "properties": {
+        "used": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items", "characters"],
+          "properties": {
+            "items": { "type": "integer", "minimum": 0 },
+            "characters": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "truncated": { "type": "boolean" },
+        "omitted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items", "characters"],
+          "properties": {
+            "items": { "type": "integer", "minimum": 0 },
+            "characters": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "visibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible_trust_zone_ids", "protected_value_policy"],
+      "properties": {
+        "visible_trust_zone_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+          }
+        },
+        "protected_value_policy": {
+          "type": "string",
+          "enum": ["metadata_only", "allow_decrypt", "deny"]
+        }
+      }
+    },
+    "commonInput": {
+      "type": "object",
+      "required": ["schema_version", "tool", "visibility"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "tool": { "$ref": "#/$defs/toolName" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "context_budget": { "$ref": "#/$defs/contextBudget" },
+        "valid_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        },
+        "recorded_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        }
+      }
+    },
+    "safeError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "invalid_schema",
+            "unauthorized",
+            "not_found",
+            "idempotency_conflict",
+            "protected_value_denied",
+            "budget_exceeded",
+            "internal_error"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "ref_id": { "type": "string", "minLength": 1, "maxLength": 160 }
+      }
+    },
+    "recordRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id",
+        "record_kind",
+        "trust_zone_id",
+        "lifecycle_status",
+        "epistemic_authority"
+      ],
+      "properties": {
+        "record_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "record_kind": { "type": "string", "enum": ["event", "erasure", "projection"] },
+        "event_type": {
+          "type": "string",
+          "enum": ["EvidenceArtifact", "Observation", "Claim", "AcceptanceDecision", "Supersession"]
+        },
+        "trust_zone_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/trustZoneId"
+        },
+        "lifecycle_status": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/lifecycleStatus"
+        },
+        "epistemic_authority": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/epistemicAuthority"
+        },
+        "source_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          }
+        },
+        "redactions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+        }
+      }
+    },
+    "acceptedFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_event_id",
+        "acceptance_decision_event_id",
+        "statement",
+        "source_event_ids"
+      ],
+      "properties": {
+        "claim_event_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+        },
+        "acceptance_decision_event_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+        },
+        "statement": { "type": "string", "minLength": 1 },
+        "source_event_ids": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          }
+        }
+      }
+    },
+    "draftClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_event_id", "statement", "support_event_ids", "status"],
+      "properties": {
+        "claim_event_id": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+        },
+        "statement": { "type": "string", "minLength": 1 },
+        "support_event_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+          }
+        },
+        "status": { "const": "draft" }
+      }
+    },
+    "memorySearchInput": {
+      "allOf": [
+        { "$ref": "#/$defs/commonInput" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "query", "context_budget"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_search" },
+            "visibility": { "$ref": "#/$defs/visibility" },
+            "context_budget": { "$ref": "#/$defs/contextBudget" },
+            "query": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "valid_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            },
+            "recorded_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            }
+          }
+        }
+      ]
+    },
+    "memorySearchOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryGetInput": {
+      "allOf": [
+        { "$ref": "#/$defs/commonInput" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "record_id"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_get" },
+            "visibility": { "$ref": "#/$defs/visibility" },
+            "context_budget": { "$ref": "#/$defs/contextBudget" },
+            "record_id": { "type": "string", "minLength": 1, "maxLength": 160 }
+          }
+        }
+      ]
+    },
+    "memoryGetOutput": { "$ref": "#/$defs/recordOutput" },
+    "memoryContextPackInput": {
+      "allOf": [
+        { "$ref": "#/$defs/commonInput" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "task", "context_budget"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_context_pack" },
+            "visibility": { "$ref": "#/$defs/visibility" },
+            "context_budget": { "$ref": "#/$defs/contextBudget" },
+            "task": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "valid_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            },
+            "recorded_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            }
+          }
+        }
+      ]
+    },
+    "memoryContextPackOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tool",
+        "accepted_facts",
+        "draft_claims",
+        "rejected_claims",
+        "observations",
+        "evidence_summaries",
+        "conflicts",
+        "supersessions",
+        "erasures",
+        "verification_gaps",
+        "redactions",
+        "budget"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "tool": { "const": "memory_context_pack" },
+        "accepted_facts": { "type": "array", "items": { "$ref": "#/$defs/acceptedFact" } },
+        "draft_claims": { "type": "array", "items": { "$ref": "#/$defs/draftClaim" } },
+        "rejected_claims": { "type": "array", "items": { "$ref": "#/$defs/draftClaim" } },
+        "observations": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
+        "evidence_summaries": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
+        "conflicts": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
+        "supersessions": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
+        "erasures": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
+        "verification_gaps": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "redactions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "budget": { "$ref": "#/$defs/budgetUsage" },
+        "error": { "$ref": "#/$defs/safeError" }
+      }
+    },
+    "memoryTraceInput": {
+      "allOf": [
+        { "$ref": "#/$defs/commonInput" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_trace" },
+            "visibility": { "$ref": "#/$defs/visibility" },
+            "record_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
+            "context_budget": { "$ref": "#/$defs/contextBudget" }
+          }
+        }
+      ]
+    },
+    "memoryTraceOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryTimelineInput": {
+      "allOf": [
+        { "$ref": "#/$defs/commonInput" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "context_budget"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_timeline" },
+            "visibility": { "$ref": "#/$defs/visibility" },
+            "context_budget": { "$ref": "#/$defs/contextBudget" },
+            "valid_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            },
+            "recorded_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            }
+          }
+        }
+      ]
+    },
+    "memoryTimelineOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryRelatedInput": {
+      "allOf": [
+        { "$ref": "#/$defs/commonInput" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_related" },
+            "visibility": { "$ref": "#/$defs/visibility" },
+            "record_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
+            "context_budget": { "$ref": "#/$defs/contextBudget" }
+          }
+        }
+      ]
+    },
+    "memoryRelatedOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryCaptureInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tool",
+        "visibility",
+        "provider",
+        "hook_event_name",
+        "captured_at",
+        "media_type",
+        "subject_ref",
+        "payload"
+      ],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "tool": { "const": "memory_capture" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "provider": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "hook_event_name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "captured_at": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "media_type": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "subject_ref": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "payload": { "type": "object" },
+        "idempotency_key": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
+        }
+      }
+    },
+    "memoryCaptureOutput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "status", "event_id", "recorded_time"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_capture" },
+            "status": { "type": "string", "enum": ["captured", "replay"] },
+            "event_id": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+            },
+            "recorded_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "error"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_capture" },
+            "error": { "$ref": "#/$defs/safeError" }
+          }
+        }
+      ]
+    },
+    "memoryProposeClaimInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tool", "visibility", "statement", "support"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "tool": { "const": "memory_propose_claim" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 20000 },
+        "claim_type": { "type": "string", "enum": ["factual", "inference", "decision"] },
+        "support": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/provenanceRef"
+          }
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "subject_ref": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "valid_time": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+        },
+        "idempotency_key": {
+          "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
+        }
+      }
+    },
+    "memoryProposeClaimOutput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "tool",
+            "status",
+            "event_id",
+            "claim_id",
+            "lifecycle_status",
+            "valid_time",
+            "recorded_time",
+            "valid_time_defaulted",
+            "acceptance_decision_event_ids"
+          ],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_propose_claim" },
+            "status": { "type": "string", "enum": ["proposed", "replay"] },
+            "event_id": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
+            },
+            "claim_id": { "type": "string", "pattern": "^claim_[a-z0-9][a-z0-9_-]{7,127}$" },
+            "lifecycle_status": { "const": "draft" },
+            "valid_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            },
+            "recorded_time": {
+              "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            },
+            "valid_time_defaulted": { "type": "boolean" },
+            "acceptance_decision_event_ids": { "type": "array", "maxItems": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "error"],
+          "properties": {
+            "schema_version": { "const": "v1" },
+            "tool": { "const": "memory_propose_claim" },
+            "error": { "$ref": "#/$defs/safeError" }
+          }
+        }
+      ]
+    },
+    "recordOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tool", "record"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "tool": { "$ref": "#/$defs/toolName" },
+        "record": { "$ref": "#/$defs/recordRef" },
+        "error": { "$ref": "#/$defs/safeError" }
+      }
+    },
+    "budgetedRecordOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tool", "records", "budget"],
+      "properties": {
+        "schema_version": { "const": "v1" },
+        "tool": { "$ref": "#/$defs/toolName" },
+        "records": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
+        "budget": { "$ref": "#/$defs/budgetUsage" },
+        "error": { "$ref": "#/$defs/safeError" }
+      }
+    }
+  }
+}

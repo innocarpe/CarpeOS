@@ -1,6 +1,6 @@
 # CarpeOS v1 Query Semantics
 
-Status: planned normative design for the v1 runtime.
+Status: G007 local query semantics for retrieval, MCP, and projections.
 
 This document defines how implementations derive facts, lineage, and projection
 inputs from canonical events.
@@ -41,6 +41,27 @@ visible Claims
 
 The accepted-fact view is a projection. It MUST be rebuildable from canonical
 events and MUST NOT be edited directly.
+
+For G007 MCP context packs and Obsidian accepted-fact notes, a fact is accepted
+only when a visible `Claim` has visible `AcceptanceDecision` lineage with
+`decision: "accepted"`. Implementations MUST apply trust-zone authorization,
+protected-value policy, lifecycle, epistemic authority, valid-time,
+recorded-time, conflict, supersession, and erasure checks before a claim is
+eligible.
+
+The following states MUST NOT be collapsed into accepted facts:
+
+- draft claims;
+- rejected claims;
+- claims with both visible accepted and rejected decisions;
+- superseded claims;
+- erased claims or records targeted by visible erasure ledger entries;
+- hidden claims or hidden acceptance decisions;
+- claims whose required protected support is denied by policy.
+
+These records SHOULD remain available as draft, rejected, conflicted,
+superseded, erased, hidden, or redacted lineage when the requester is authorized
+to see that metadata.
 
 ## Supersession
 
@@ -84,6 +105,30 @@ They MUST respect trust-zone visibility and protected-value access policy.
 
 Projection builders MUST be deterministic for the same canonical input,
 configuration, and permission set.
+
+G007 interface packages MUST use typed local-store snapshot/query APIs rather
+than direct SQL against canonical tables. The local store owns canonical event
+lookup, erasure lookup, retrieval input snapshots, support-reference validation,
+and draft claim writes. MCP and Obsidian code may consume those typed shapes,
+but they MUST NOT bypass the local-store boundary to broaden visibility or drift
+policy-adjacent filters.
+
+Obsidian, vector, graph, dashboard, accepted-fact, and MCP context-pack outputs
+are projections. Editing or caching those outputs has no canonical effect unless
+a separate capture flow records a new canonical event.
+
+## Bitemporal Draft Claims
+
+`memory_propose_claim` writes a draft `Claim`, not an accepted fact. Its
+caller-provided `valid_time` is distinct from `recorded_time`.
+
+- `valid_time` can be historical, current, or future when schema validation and
+  trust-zone policy allow it.
+- `recorded_time` is assigned by the local-store clock at write time.
+- omitted `valid_time` defaults to the write clock instant with `end: null`.
+- no MCP draft-claim write creates an `AcceptanceDecision`.
+
+Acceptance remains a separate canonical decision flow.
 
 ## Synthetic Example
 

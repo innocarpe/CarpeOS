@@ -8,13 +8,15 @@ CarpeOS는 AI-assisted work를 위한 개인 지식 운영체제입니다.
 
 CarpeOS는 여러 AI agent에서 발생하는 작업 맥락을 수집하고,
 provenance-aware knowledge로 구조화하며, 여러 기기 사이에서 동기화하고, 사람과
-LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G006
+LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G007
 구현 범위는 local capture, durable outbox storage, Cloudflare Worker/D1/R2 sync
-backend와 client, 그리고 local rebuildable retrieval projection과 CLI
-search/get command입니다. 이 경로들은 synthetic data로 local test되어 있습니다.
-Live Cloudflare deployment를 완료했다고 주장하지 않습니다. MCP, GraphRAG,
-Obsidian projection, hosted embedding job, production semantic retrieval quality는
-계획된 milestone이며 아직 active feature가 아닙니다.
+backend와 client, local rebuildable retrieval projection과 CLI search/get
+command, local stdio MCP server, deterministic MCP context pack,
+manifest-bounded Obsidian projection package입니다. 이 경로들은 synthetic data로
+test coverage를 갖고 있습니다. Live Cloudflare deployment나 hosted MCP/Obsidian
+service를 완료했다고 주장하지 않습니다. GraphRAG, hosted embedding job, hosted
+retrieval, dashboard deployment, production semantic retrieval quality는 계획된
+milestone이며 아직 active feature가 아닙니다.
 
 이 저장소는 공개 설계, specification, 구현, roadmap의 canonical 위치입니다. 이
 저장소에는 사용자의 private knowledge store가 들어가지 않습니다.
@@ -96,6 +98,30 @@ Workers AI와 Vectorize binding은 adapter boundary로 코드에 있지만, 이 
 live Workers AI/Vectorize resource, hosted embedding execution, production
 semantic quality를 주장하지 않습니다.
 
+G007은 local agent와 human projection interface를 추가합니다.
+
+- typed local store 위에서 동작하는 local stdio MCP server인
+  `@carpeos/mcp-server`;
+- 정확히 8개 MCP tool: `memory_search`, `memory_get`,
+  `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
+  `memory_capture`, `memory_propose_claim`;
+- content가 local process를 떠나기 전에 수행되는 trust-zone fail-close check와
+  protected-value redaction;
+- `max_items`, `max_characters` 기준 deterministic `ContextBudget` limit과
+  `used`, `truncated`, `omitted` metadata. Token-exact budget이라고 주장하지
+  않습니다;
+- conflict, supersession, erasure, protected-value, trust-zone, lifecycle,
+  authority, valid-time, recorded-time check 이후 visible accepted
+  `AcceptanceDecision` lineage가 있을 때만 context pack의 accepted fact로 포함;
+- local outbox에 draft `Claim` event를 쓰지만 `AcceptanceDecision`은 쓰지 않는
+  `memory_propose_claim`;
+- closed category, path-safety check, manifest-bounded cleanup,
+  `canonical_effect: "none"`을 갖는 deterministic Markdown/manifest projection인
+  `@carpeos/obsidian-projection`.
+
+MCP server는 local stdio 전용입니다. Obsidian package는 typed local-store
+snapshot에서 file을 생성하며, generated note는 canonical authority가 아닙니다.
+
 ## 빠른 시작
 
 Prerequisite:
@@ -161,7 +187,10 @@ command behavior를 테스트합니다. Package installation과 binary distribut
 D1, R2, secret file, MacBook/Mac mini sync setup은
 [Cloudflare Sync Guide](docs/guides/cloudflare-sync.md)를 참고하십시오. Local
 projection rebuild, development embedding, search/get command는
-[Retrieval Guide](docs/guides/retrieval.md)를 참고하십시오.
+[Retrieval Guide](docs/guides/retrieval.md)를 참고하십시오. Local stdio MCP setup과
+client configuration example은 [MCP Server Guide](docs/guides/mcp-server.md)를
+참고하십시오. Manifest-bounded Markdown projection은
+[Obsidian Projection Guide](docs/guides/obsidian-projection.md)를 참고하십시오.
 
 ## Architecture Model
 
@@ -265,7 +294,8 @@ accepted fact로 만들지 않습니다.
 - `carpeos memory search --query ... --visible-trust-zone ...`
 - `carpeos memory get --chunk-id ... --visible-trust-zone ...`
 
-목표 LLM-facing interface는 MCP입니다. 계획 중인 tool은 다음과 같습니다.
+구현된 local LLM-facing interface는 stdio 기반 MCP입니다. G007 tool은 다음과
+같습니다.
 
 - `memory_search`
 - `memory_get`
@@ -273,10 +303,24 @@ accepted fact로 만들지 않습니다.
 - `memory_trace`
 - `memory_timeline`
 - `memory_related`
-- `memory_open_loops`
 - `memory_capture`
+- `memory_propose_claim`
 
-이 tool들은 계획된 API surface이며, 아직 완료된 기능이 아닙니다.
+모든 MCP request는 visible trust zone과 protected-value policy를 선언해야 합니다.
+Active local trust zone은 visible이어야 하며, visibility가 없거나 configured
+allowlist 밖이면 content resolution 전에 fail closed됩니다.
+
+Context pack은 deterministic projection입니다. Accepted fact, draft claim,
+rejected claim, observation, evidence summary, conflict, supersession, erasure,
+verification gap, redaction을 분리합니다. Accepted fact에는 visible accepted
+`AcceptanceDecision` lineage가 필요합니다. Draft, rejected, conflicted,
+superseded, erased, hidden, protected-policy-denied record는 accepted fact가
+아닙니다.
+
+현재 Obsidian interface는 local package이며, hosted sync service나 end-user
+Obsidian plugin이 아닙니다. `accepted_fact`, `observation`, `evidence_summary`,
+`proposed_claim`, `rejected_claim`, `conflict`, `supersession`, `erasure`,
+`index`의 closed category를 가진 manifest-bounded Markdown note를 생성합니다.
 
 ## Agent Integrations
 
@@ -289,8 +333,11 @@ References:
 - Claude Code hooks: <https://code.claude.com/docs/en/hooks>
 - Grok Build hooks: <https://docs.x.ai/build/features/hooks>
 
-Agent들은 canonical store를 하나의 provider에 묶지 않고, MCP를 통해 같은
-knowledge plane을 읽을 수 있어야 합니다. 이 read path는 아직 구현되지 않았습니다.
+Agent는 canonical store를 하나의 provider에 묶지 않고 G007 stdio MCP server를
+통해 같은 local knowledge plane을 읽을 수 있습니다. Codex CLI, Claude Code, Grok
+Build, generic MCP client에 대한 public-safe setup example은 MCP guide에 있습니다.
+Client example은 verification status를 표시합니다. Grok syntax는 client
+session에서 별도로 확인되기 전까지 illustrative example입니다.
 
 ## Local-First Sync
 
@@ -376,11 +423,11 @@ Neurons/day로, Vectorize free usage는 queried/stored vector dimensions로
    - canonical recheck
 
 7. Projection과 interface 추가.
-   - Obsidian projection generator
-   - context pack generation
-   - MCP server
-   - graph projection
-   - optional dashboard
+   - Obsidian projection generator: G007에서 local implementation 완료
+   - context pack generation: G007에서 local implementation 완료
+   - MCP server: G007에서 local stdio implementation 완료
+   - graph projection: planned
+   - optional dashboard: planned
 
 ## Repository Boundary
 
@@ -437,10 +484,11 @@ CarpeOS는 다른 architecture model을 가진 독립적인 구현입니다.
 
 ## Project Status
 
-CarpeOS는 pre-MVP 단계입니다. G006 local capture, sync, local retrieval runtime은
-synthetic data로 구현 및 local test되어 있지만, packaged end-user release로
-사용할 준비는 아직 되지 않았고 live deployment도 주장하지 않습니다.
+CarpeOS는 pre-MVP 단계입니다. G007 local capture, sync, retrieval, stdio MCP,
+context pack, Obsidian projection path는 구현되어 있고 repository 안에 synthetic
+test coverage가 있지만, packaged end-user release로 사용할 준비는 아직 되지
+않았고 live deployment도 주장하지 않습니다.
 
-계획된 MCP, adapter installation, Obsidian projection, GraphRAG, hosted
-embedding, Vectorize operation, live deployment path는 이 저장소에서 구현, 테스트,
-문서화되기 전까지 stable한 것으로 간주하지 마십시오.
+Adapter installation, GraphRAG, hosted embedding, Vectorize operation, hosted
+MCP, hosted Obsidian sync, dashboard deployment, 기타 live deployment path는 이
+저장소에서 구현, 테스트, 문서화되기 전까지 stable한 것으로 간주하지 마십시오.
