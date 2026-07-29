@@ -3,6 +3,13 @@ Title convention: use an English Conventional Commit title, for example
 `docs: add ontology ADR template` or `fix: preserve claim supersession order`.
 For CarpeOS milestone PRs, keep the PR to one coherent milestone and exactly
 one atomic commit unless a maintainer explicitly requests otherwise.
+
+AGENT / HARNESS RULES (Claude Code, Codex, Grok Build):
+- Fill EVERY section below with real content. Do not ship a three-bullet body.
+- Prefer complete sentences in Why / Scope / Risks / Review guide.
+- Validation table: only commands you ran, with results. Use "Not run — <reason>" otherwise.
+- Empty sections are not allowed; write "None" or "Not applicable" with a short reason.
+- Full authoring skill: skills/carpeos-pr/SKILL.md (install: ./scripts/install-pr-skill.sh)
 -->
 
 ## Summary
@@ -13,7 +20,11 @@ one atomic commit unless a maintainer explicitly requests otherwise.
 
 ## Why
 
-<!-- Explain the problem, design need, bug, or milestone this PR addresses. -->
+<!--
+Explain the problem, design need, bug, or milestone this PR addresses.
+Include enough context that a cold reviewer understands the failure mode
+without reading session notes. Keep examples synthetic/public-safe.
+-->
 
 -
 

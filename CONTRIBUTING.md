@@ -65,6 +65,28 @@ Architecture changes should be captured in ADRs when they affect:
 Specifications under `spec/` are the design source of truth. Runtime event
 stores are the knowledge source of truth for each private instance.
 
+## Pull Requests
+
+Use the repository PR template (`.github/PULL_REQUEST_TEMPLATE.md`). A short
+summary-only description is not enough for review.
+
+At minimum the body should cover:
+
+- **Why** the change exists (problem / failure mode, public-safe);
+- **Scope** (what changed and what deliberately did not);
+- **Architecture or contract impact** (or explicit “None”);
+- **Validation** with real commands and results;
+- **Compatibility / migrations / deployment** status;
+- **Risks and rollback**;
+- **Review guide** (where to start in the diff).
+
+AI agents and maintainer harnesses should load `skills/carpeos-pr/SKILL.md` and
+run `./scripts/install-pr-skill.sh` so Claude Code, Codex, and Grok Build share
+the same standard.
+
+Labels: one kind (`feat|fix|docs|spec|chore`) and optionally one area from
+`.github/labels.json`. See `docs/maintainers/github-labels.md`.
+
 ## Commit Style
 
 Use English Conventional Commit subjects:
