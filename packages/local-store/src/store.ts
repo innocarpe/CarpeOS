@@ -1076,7 +1076,7 @@ export class LocalCaptureStore {
     return this.withImmediateTransaction(() => {
       const existingEvent = this.getEvent(input.event.event_id);
       if (existingEvent !== undefined) {
-        assertSameCanonicalJson(existingEvent, input.event, "event", input.event.event_id);
+        assertPullReplayCompatible(existingEvent, input.event, "event", input.event.event_id);
         this.recordProtectedValueImport({
           eventId: input.event.event_id,
           protectedValueId: input.metadata.protected_value_id,
@@ -1180,7 +1180,7 @@ export class LocalCaptureStore {
     return this.withImmediateTransaction(() => {
       const existing = this.getEvent(event.event_id);
       if (existing !== undefined) {
-        assertSameCanonicalJson(existing, event, "event", event.event_id);
+        assertPullReplayCompatible(existing, event, "event", event.event_id);
         return { status: "replay", event_id: event.event_id };
       }
 
@@ -2064,6 +2064,40 @@ function assertSameCanonicalJson(
   id: string,
 ): void {
   assertSameJson(stableJson(existing), stableJson(incoming), kind, id);
+}
+
+/**
+ * Same-origin pull: a device that already captured an event locally will see it
+ * again after push+pull with only remote `zone_sequence` assigned. Treat that as
+ * idempotent replay. Any other field divergence still fails closed.
+ */
+function assertPullReplayCompatible(
+  existing: CanonicalEvent,
+  incoming: CanonicalEvent,
+  kind: string,
+  id: string,
+): void {
+  if (existing.zone_sequence !== undefined) {
+    assertSameCanonicalJson(existing, incoming, kind, id);
+    return;
+  }
+
+  const existingWithoutSequence = stripZoneSequence(existing);
+  const incomingWithoutSequence = stripZoneSequence(incoming);
+  assertSameJson(
+    stableJson(existingWithoutSequence),
+    stableJson(incomingWithoutSequence),
+    kind,
+    id,
+  );
+}
+
+function stripZoneSequence(event: CanonicalEvent): CanonicalEvent {
+  if (event.zone_sequence === undefined) {
+    return event;
+  }
+  const { zone_sequence: _zoneSequence, ...rest } = event;
+  return rest as CanonicalEvent;
 }
 
 function assertSameJson(
