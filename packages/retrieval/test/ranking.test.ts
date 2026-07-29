@@ -7,6 +7,7 @@ import {
   scoreFts,
   scoreStructured,
   cosineSimilarity,
+  selectWithDiversity,
 } from "../src/ranking.js";
 
 const sourceRecords = [
@@ -73,5 +74,67 @@ describe("retrieval ranking", () => {
     expect(ranked.map((candidate) => candidate.chunk.chunk_id)).toEqual(
       [...ranked.map((candidate) => candidate.chunk.chunk_id)].sort(),
     );
+  });
+
+  it("selects with chunk_kind diversity instead of pure score monopoly", () => {
+    const claimA = buildRetrievalChunk({
+      chunkKind: "claim",
+      text: "claim alpha unique wording",
+      sourceRecords,
+      derivation,
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+    const claimB = buildRetrievalChunk({
+      chunkKind: "claim",
+      text: "claim beta distinct text",
+      sourceRecords,
+      derivation,
+      chunkIndex: 1,
+      createdAt: "2026-01-01T00:00:01Z",
+    });
+    const observation = buildRetrievalChunk({
+      chunkKind: "observation",
+      text: "observation gamma different content",
+      sourceRecords: [
+        {
+          ...sourceRecords[0]!,
+          event_type: "Observation",
+          source_record_id: "evt_obs001",
+          zone_sequence: 2,
+        },
+      ],
+      derivation,
+      chunkIndex: 2,
+      createdAt: "2026-01-01T00:00:02Z",
+    });
+    const ranked = rankHybrid(
+      [
+        {
+          chunk: claimA,
+          structured_score: 1,
+          fts_score: 1,
+          semantic_score: 1,
+          recency_score: 1,
+        },
+        {
+          chunk: claimB,
+          structured_score: 0.9,
+          fts_score: 0.9,
+          semantic_score: 0.9,
+          recency_score: 0.9,
+        },
+        {
+          chunk: observation,
+          structured_score: 0.5,
+          fts_score: 0.5,
+          semantic_score: 0.5,
+          recency_score: 0.5,
+        },
+      ],
+      { structured: 1, fts: 1, semantic: 1, recency: 1 },
+    );
+    const selected = selectWithDiversity(ranked, 2, { maxPerChunkKind: 1 });
+    const kinds = selected.map((item) => item.chunk.chunk_kind).sort();
+    expect(kinds).toEqual(["claim", "observation"]);
   });
 });

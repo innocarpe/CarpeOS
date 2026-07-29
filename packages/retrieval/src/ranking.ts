@@ -34,6 +34,92 @@ export function rankHybrid(
     .sort(compareRankedCandidates);
 }
 
+export type DiversityOptions = {
+  /** Soft max items per chunk_kind in the selected window. Defaults to ceil(limit/2). */
+  maxPerChunkKind?: number;
+  /** Jaccard token similarity above which a later candidate is deferred. */
+  nearDuplicateThreshold?: number;
+};
+
+/**
+ * Quantile-style diversity selection over a score-ranked list.
+ * Preserves determinism: walks ranked order, admits when kind/diversity caps allow,
+ * then fills remainder from deferred candidates.
+ */
+export function selectWithDiversity(
+  ranked: readonly RankedCandidate[],
+  limit: number,
+  options: DiversityOptions = {},
+): RankedCandidate[] {
+  if (limit <= 0 || ranked.length === 0) {
+    return [];
+  }
+  const maxPerChunkKind = options.maxPerChunkKind ?? Math.max(1, Math.ceil(limit / 2));
+  const nearDuplicateThreshold = options.nearDuplicateThreshold ?? 0.9;
+  const selected: RankedCandidate[] = [];
+  const deferred: RankedCandidate[] = [];
+  const kindCounts = new Map<string, number>();
+
+  for (const candidate of ranked) {
+    if (selected.length >= limit) {
+      break;
+    }
+    const kind = candidate.chunk.chunk_kind;
+    const kindCount = kindCounts.get(kind) ?? 0;
+    if (kindCount >= maxPerChunkKind) {
+      deferred.push(candidate);
+      continue;
+    }
+    if (isNearDuplicate(candidate, selected, nearDuplicateThreshold)) {
+      deferred.push(candidate);
+      continue;
+    }
+    selected.push(candidate);
+    kindCounts.set(kind, kindCount + 1);
+  }
+
+  for (const candidate of deferred) {
+    if (selected.length >= limit) {
+      break;
+    }
+    if (isNearDuplicate(candidate, selected, nearDuplicateThreshold)) {
+      continue;
+    }
+    selected.push(candidate);
+  }
+
+  return selected;
+}
+
+function isNearDuplicate(
+  candidate: RankedCandidate,
+  selected: readonly RankedCandidate[],
+  threshold: number,
+): boolean {
+  const candidateTokens = new Set(tokenize(candidate.chunk.text));
+  for (const prior of selected) {
+    const priorTokens = new Set(tokenize(prior.chunk.text));
+    if (jaccard(candidateTokens, priorTokens) >= threshold) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+  if (left.size === 0 && right.size === 0) {
+    return 1;
+  }
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) {
+      intersection += 1;
+    }
+  }
+  const union = left.size + right.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
 export function scoreCandidate(
   candidate: RetrievalCandidate,
   weights: RankWeights,

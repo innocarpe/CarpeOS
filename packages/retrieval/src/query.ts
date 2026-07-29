@@ -16,6 +16,7 @@ import {
   scoreFts,
   scoreRecency,
   scoreStructured,
+  selectWithDiversity,
   type RetrievalCandidate,
 } from "./ranking.js";
 import {
@@ -47,7 +48,13 @@ export function searchMemory(input: SearchInput): RetrievalResult {
     recency_score: scoreRecency(chunk, newestEpochMs),
   }));
   const ranked = rankHybrid(candidates, input.query.ranking.weights);
-  const results = ranked
+  // Score first, then sparse diversity selection before canonical recheck.
+  // Over-select slightly so excluded candidates after recheck still leave room.
+  const diversified = selectWithDiversity(
+    ranked,
+    Math.max(input.query.limit * 2, input.query.limit),
+  );
+  const results = diversified
     .map((candidate) =>
       recheckCandidate({
         chunk: candidate.chunk,
