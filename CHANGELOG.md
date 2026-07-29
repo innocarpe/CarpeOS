@@ -21,10 +21,15 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 - G6 local store migration policy:
   [`docs/architecture/local-store-migrations.md`](docs/architecture/local-store-migrations.md);
   export migration IDs; test that events survive reopen (no silent wipe)
+- G8 compatibility inventory:
+  [`docs/maintainers/compatibility-and-deprecations.md`](docs/maintainers/compatibility-and-deprecations.md)
+  (active deprecations + empty “planned breaks before 1.0”)
+- G9 freeze decision template:
+  [`docs/maintainers/v1-freeze-decision.md`](docs/maintainers/v1-freeze-decision.md)
 
 ### Changed
 
-- v1 readiness G5, G6, and G7 marked **done**
+- v1 readiness G1–G8 marked **done**; only G9 (freeze decision) remains
 
 ## [0.1.3] - 2026-07-29
 

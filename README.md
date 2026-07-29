@@ -276,6 +276,8 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | MCP smoke (G5) | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | v1.0 contract readiness | [docs/maintainers/v1-readiness.md](docs/maintainers/v1-readiness.md) |
+| Compatibility / deprecations (G8) | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
+| v1 freeze decision (G9) | [docs/maintainers/v1-freeze-decision.md](docs/maintainers/v1-freeze-decision.md) |
 | Local store migrations (G6) | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 
