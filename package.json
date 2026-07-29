@@ -17,10 +17,12 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "public-boundary": "node scripts/check-public-boundary.mjs",
-    "test": "pnpm -r --if-present test && node --test scripts/test/*.test.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/test/*.test.mjs packages/carpeos/test/*.test.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "install:local": "node scripts/install-local.mjs",
-    "pack:npm": "pnpm --filter @innocarpe/carpeos build && pnpm --filter @innocarpe/carpeos exec npm pack --pack-destination ../.."
+    "pack:npm": "pnpm --filter @innocarpe/carpeos build && pnpm --filter @innocarpe/carpeos exec npm pack --pack-destination ../..",
+    "release": "node scripts/release.mjs",
+    "release:dry": "node scripts/release.mjs patch --dry-run"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",

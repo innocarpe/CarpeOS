@@ -22,7 +22,18 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Package source: `packages/carpeos` → npm name `@innocarpe/carpeos`.
 
-Publishing (maintainers, requires npm login + `@innocarpe` org access):
+Publishing (maintainers): use SemVer + tags, not ad-hoc publish.
+
+```sh
+# after CI green on main
+node scripts/release.mjs patch   # or minor | major | X.Y.Z
+git push origin HEAD
+git push origin vX.Y.Z           # triggers npm publish + GitHub Release
+```
+
+Policy: [Versioning and Releases](../maintainers/versioning-and-releases.md).
+
+Manual fallback (only if Actions cannot publish):
 
 ```sh
 pnpm --filter @innocarpe/carpeos build
