@@ -43,6 +43,29 @@ afterEach(() => {
 });
 
 describe("carpeos CLI", () => {
+  it("prints package version as JSON", async () => {
+    const viaCommand = await captureHelp(["version"]);
+    expect(viaCommand.status).toBe(0);
+    const body = JSON.parse(viaCommand.stdout) as {
+      ok: boolean;
+      command: string;
+      name: string;
+      version: string;
+      node: string;
+    };
+    expect(body).toMatchObject({
+      ok: true,
+      command: "version",
+      name: "@innocarpe/carpeos",
+    });
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(body.node).toMatch(/^v\d+/);
+
+    const viaFlag = await captureHelp(["--version"]);
+    expect(viaFlag.status).toBe(0);
+    expect(JSON.parse(viaFlag.stdout)).toMatchObject({ ok: true, command: "version" });
+  });
+
   it("prints human help for empty argv, --help, help, and command topics", async () => {
     const empty = await captureHelp([]);
     expect(empty.status).toBe(0);

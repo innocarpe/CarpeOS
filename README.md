@@ -239,6 +239,7 @@ For monorepo work without global install: `pnpm install && pnpm build`, then use
 
 ```sh
 carpeos --help
+carpeos version
 carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
 carpeos memory context-pack \
   --task "Smoke: list what I know" \
@@ -272,6 +273,7 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
+| v1.0 contract readiness | [docs/maintainers/v1-readiness.md](docs/maintainers/v1-readiness.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 
 ---

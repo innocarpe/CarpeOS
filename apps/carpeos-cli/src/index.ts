@@ -29,6 +29,7 @@ import type { RetrievalQuery } from "@carpeos/schema";
 import type { RetrievalChunk } from "@carpeos/schema";
 import { OutboxSyncCoordinator, SyncHttpError, SyncHttpTransport } from "@carpeos/sync-client";
 import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
+import { packageName, packageVersion } from "./package-version.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -61,6 +62,8 @@ export async function runCli(
 
     failOpen = command === "capture-hook" && rest.includes("--fail-open");
     switch (command) {
+      case "version":
+        return runVersion(rest);
       case "init":
         return runInit(rest, env);
       case "project":
@@ -750,6 +753,10 @@ function isHelpToken(value: string | undefined): boolean {
   return value === "--help" || value === "-h" || value === "help";
 }
 
+function isVersionToken(value: string | undefined): boolean {
+  return value === "--version" || value === "-V";
+}
+
 function splitCommand(argv: readonly string[]): {
   command: string | undefined;
   rest: readonly string[];
@@ -758,6 +765,10 @@ function splitCommand(argv: readonly string[]): {
     return { command: undefined, rest: [] };
   }
   const [head, ...tail] = argv;
+  // `carpeos --version` / `-V`
+  if (isVersionToken(head)) {
+    return { command: "version", rest: tail };
+  }
   // `carpeos --help`, `carpeos -h`, `carpeos help [topic]`
   if (isHelpToken(head)) {
     if (head === "help") {
@@ -767,6 +778,22 @@ function splitCommand(argv: readonly string[]): {
     return { command: "help", rest: [] };
   }
   return { command: head, rest: tail };
+}
+
+function runVersion(argv: readonly string[]): number {
+  for (const arg of argv) {
+    // Output is always JSON; --json is accepted as a no-op for scripting symmetry.
+    if (arg === "--json") continue;
+    throw new CliUsageError(`unexpected argument for version: ${arg}\nRun: carpeos help version`);
+  }
+  writeJson(process.stdout, {
+    ok: true,
+    command: "version",
+    name: packageName(),
+    version: packageVersion(),
+    node: process.version,
+  });
+  return 0;
 }
 
 /** Root help text for humans and agents. Keep in sync with real commands. */
@@ -784,6 +811,7 @@ MACHINE SETUP (npm package entry — not the monorepo CLI bundle)
   carpeos setup --help
 
 COMMANDS
+  version              Print package name + version (JSON)
   init                 Initialize local runtime store (~/.carpeos by default)
   project identify     Print resolved project_id / client_id / trust zone
   capture-hook         Ingest a provider hook envelope (codex|claude|grok)
@@ -798,7 +826,12 @@ COMMON OPTIONS (most store commands)
   --project-id <id>    Override project id
   --trust-zone <id>    Trust zone id (tz_…); required for memory/retrieval
 
+GLOBAL FLAGS
+  -h, --help           Show help
+  -V, --version        Same as: carpeos version
+
 EXAMPLES
+  carpeos version
   carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
   carpeos memory context-pack \\
     --task "Summarize current work" \\
@@ -809,15 +842,43 @@ EXAMPLES
 
 OUTPUT
   Successful command results are JSON on stdout.
-  Usage errors are JSON on stderr with exit code 2.
   Help is plain text on stdout with exit code 0.
+  Errors are JSON on stderr.
+
+EXIT CODES
+  0   success (including help)
+  1   retryable failure or internal error
+  2   invalid usage / validation
+  3   idempotency conflict
+  4   non-retryable sync / remote block
 
 Docs: https://github.com/innocarpe/carpeos#readme
+v1 readiness: https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/v1-readiness.md
 `;
 }
 
 export function formatCommandHelp(command: string): string {
   switch (command) {
+    case "version":
+      return `carpeos version — print the installed package version
+
+USAGE
+  carpeos version
+  carpeos --version
+  carpeos -V
+
+OUTPUT (JSON on stdout)
+  {
+    "ok": true,
+    "command": "version",
+    "name": "@innocarpe/carpeos",
+    "version": "X.Y.Z",
+    "node": "v22.…"
+  }
+
+EXIT CODES
+  0   success
+`;
     case "init":
       return `carpeos init — create/open the local runtime store
 

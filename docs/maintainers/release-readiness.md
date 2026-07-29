@@ -9,6 +9,9 @@ collapsed into one claim.
 For **npm + Git tag SemVer**, see
 [Versioning and Releases](versioning-and-releases.md).
 
+For the **first stable `1.0.0` contract freeze**, see
+[v1 Readiness](v1-readiness.md).
+
 ## G008 Verified Evidence
 
 The G008 documentation slice may cite only this already-proven local evidence:

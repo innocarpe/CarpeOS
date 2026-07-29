@@ -12,7 +12,13 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- `carpeos version` / `--version` / `-V` (JSON: package name, version, Node)
+- Maintainer tracker: [docs/maintainers/v1-readiness.md](docs/maintainers/v1-readiness.md)
+  for the `1.0.0` contract-freeze checklist (gates G1–G9, exit codes, non-goals)
+
+### Changed
+
+- Root CLI help documents exit codes `0|1|2|3|4`
 
 ## [0.1.2] - 2026-07-29
 
