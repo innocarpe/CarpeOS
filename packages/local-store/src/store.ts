@@ -491,6 +491,9 @@ export class LocalCaptureStore {
             subject_ref: normalizedEnvelope.subject_ref,
             idempotency_key: normalizedEnvelope.idempotency_key,
             protected_value_id: protectedValueId,
+            ...(normalizedEnvelope.procedure_trace === undefined
+              ? {}
+              : { procedure_trace: normalizedEnvelope.procedure_trace }),
           }),
           protectedValueId,
           normalizedEnvelope.captured_at,

@@ -111,6 +111,14 @@ solely because they appear in a budgeted response.
 `memory_open_loops` is not a G007 tool. Open-loop projection work remains
 planned.
 
+## Procedure traces
+
+Agent thinking and tool histories MAY be captured as `EvidenceArtifact` records
+with `payload.kind = "procedure_trace"` and media type
+`application/vnd.carpeos.procedure-trace+json`. Procedure traces are procedural
+memory (ADR 0009 L3). They MUST remain protected-value referenced by default and
+MUST NOT auto-create `AcceptanceDecision` or populate `accepted_facts`.
+
 ## Accepted Facts
 
 MCP context packs SHOULD return:

@@ -211,7 +211,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["document", "image", "audio", "dataset", "message", "other"]
+          "enum": ["document", "image", "audio", "dataset", "message", "procedure_trace", "other"]
         },
         "media_type": {
           "type": "string",

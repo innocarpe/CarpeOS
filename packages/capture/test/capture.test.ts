@@ -3,10 +3,13 @@ import { validateConformance } from "@carpeos/schema";
 import { describe, expect, it } from "vitest";
 import {
   buildEvidenceArtifactEvent,
+  buildProcedureTraceEnvelope,
   buildSyncPushRequest,
   deriveIdempotencyKey,
   fingerprintObject,
   isIdempotencyKey,
+  isProcedureTraceEnvelope,
+  PROCEDURE_TRACE_MEDIA_TYPE,
   stableCanonicalJson,
 } from "../src/index.js";
 
@@ -136,6 +139,47 @@ describe("provider-neutral capture", () => {
 
     expect(built.canonicalJson).not.toContain("SYNTHETIC_RAW_PAYLOAD_SENTINEL");
     expect(stableCanonicalJson(built.event)).not.toContain("SYNTHETIC_RAW_PAYLOAD_SENTINEL");
+  });
+
+  it("builds procedure_trace evidence without treating it as accepted knowledge", () => {
+    const envelope = buildProcedureTraceEnvelope({
+      provider: "synthetic-agent",
+      hook_event_name: "TurnEnd",
+      captured_at: "2026-01-01T00:00:00Z",
+      session_id: "session_procedure_synthetic",
+      turn_id: "turn_001",
+      completeness: "full",
+      has_reasoning: true,
+      has_tool_calls: true,
+      subject_ref: "subject_synthetic_project",
+      payload: {
+        reasoning_content: "SYNTHETIC_REASONING_SHOULD_STAY_PROTECTED",
+        tool_calls: [{ name: "memory_search", arguments: { query: "alpha" } }],
+      },
+    });
+
+    expect(isProcedureTraceEnvelope(envelope)).toBe(true);
+    expect(envelope.media_type).toBe(PROCEDURE_TRACE_MEDIA_TYPE);
+
+    const built = buildEvidenceArtifactEvent({
+      envelope,
+      recordedAt,
+      trustZone,
+      protectedValueRef,
+    });
+
+    expect(built.event.event_type).toBe("EvidenceArtifact");
+    expect(built.event.payload.kind).toBe("procedure_trace");
+    expect(built.event.payload.media_type).toBe(PROCEDURE_TRACE_MEDIA_TYPE);
+    expect(built.event.epistemic_authority).toBe("imported");
+    expect(built.event.payload.content_ref.ref_type).toBe("protected_value");
+    expect(stableCanonicalJson(built.event)).not.toContain(
+      "SYNTHETIC_REASONING_SHOULD_STAY_PROTECTED",
+    );
+    expect(validateConformance("canonicalEvent", built.event)).toEqual({
+      valid: true,
+      errors: [],
+    });
   });
 
   it("rejects invalid timestamps and invalid empty provenance", () => {
