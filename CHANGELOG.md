@@ -10,13 +10,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- `carpeos setup` / `install-local.mjs` now expose an explicit CLI surface:
-  commands `plan | run | doctor | show | help`, apply gate `--apply`, and
-  documented options (`--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
-  `--register-mcp`). Bare `setup` prints help; machine changes require `--apply`.
-  Legacy `--yes` / `-y` still work as a deprecated alias for `--apply`.
+- (none yet — fold entries here before the next release)
 
 ## [0.1.0] - 2026-07-29
 
@@ -25,9 +21,12 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 ### Added
 
 - npm package `@innocarpe/carpeos` with bins `carpeos` and `carpeos-mcp-server`
-- `carpeos setup` / `carpeos setup --doctor` for per-machine runtime + agent MCP registration
+- `carpeos setup` CLI surface: commands `plan | run | doctor | show | help`,
+  options `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
+  `--register-mcp`, and `--apply` safety gate for per-machine runtime + agent
+  MCP registration (legacy `--yes` / `-y` still accepted as a deprecated alias)
 - curl installer: `scripts/install.sh`
-- git-checkout installer: `scripts/install-local.mjs`
+- git-checkout installer: `scripts/install-local.mjs` (same command surface)
 - Local capture, retrieval, memory search/get/context-pack, and MCP tools (bundled)
 - Maintainer SemVer + tag + GitHub Release / npm publish pipeline
 
