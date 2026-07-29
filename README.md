@@ -238,6 +238,7 @@ For monorepo work without global install: `pnpm install && pnpm build`, then use
 ### After install (smoke)
 
 ```sh
+carpeos --help
 carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
 carpeos memory context-pack \
   --task "Smoke: list what I know" \

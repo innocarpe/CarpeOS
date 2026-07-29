@@ -47,6 +47,18 @@ export async function runCli(
 
   try {
     const { command, rest } = splitCommand(argv);
+
+    // Human-readable help on stdout (not JSON) — empty argv / --help / help [cmd]
+    if (command === undefined || command === "help") {
+      const topic = rest[0];
+      process.stdout.write(topic ? formatCommandHelp(topic) : formatRootHelp());
+      return 0;
+    }
+    if (rest.some((token) => isHelpToken(token))) {
+      process.stdout.write(formatCommandHelp(command));
+      return 0;
+    }
+
     failOpen = command === "capture-hook" && rest.includes("--fail-open");
     switch (command) {
       case "init":
@@ -66,10 +78,10 @@ export async function runCli(
       case "setup":
       case "doctor":
         throw new CliUsageError(
-          "setup/doctor are provided by the @innocarpe/carpeos package entrypoint (carpeos setup). If you are in a git checkout, use: node scripts/install-local.mjs",
+          "setup/doctor are provided by the package entrypoint: carpeos setup … (npm) or node scripts/install-local.mjs … (git checkout). Try: carpeos setup --help",
         );
       default:
-        throw new CliUsageError(`unknown command: ${command}`);
+        throw new CliUsageError(`unknown command: ${command}\nRun: carpeos --help`);
     }
   } catch (error) {
     if (failOpen) {
@@ -98,7 +110,7 @@ export async function runCli(
 function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
-    throw new CliUsageError("retrieval requires rebuild or embed");
+    throw new CliUsageError("retrieval requires rebuild or embed (see: carpeos help retrieval)");
   }
   const parsed = parseArgs({
     args: rest,
@@ -198,7 +210,9 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
 async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
-    throw new CliUsageError("memory requires search, get, or context-pack");
+    throw new CliUsageError(
+      "memory requires search, get, or context-pack (see: carpeos help memory)",
+    );
   }
   const parsed = parseArgs({
     args: rest,
@@ -344,7 +358,7 @@ function runInit(argv: readonly string[], env: NodeJS.ProcessEnv): number {
 function runProject(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand !== "identify") {
-    throw new CliUsageError("project requires the identify subcommand");
+    throw new CliUsageError("project requires the identify subcommand (see: carpeos help project)");
   }
   const options = parseCommonOptions(rest);
   const store = openStore(options, env);
@@ -433,7 +447,9 @@ async function runCaptureHook(argv: readonly string[], env: NodeJS.ProcessEnv): 
 function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
-    throw new CliUsageError("outbox requires status, lease, ack, or retry");
+    throw new CliUsageError(
+      "outbox requires status, lease, ack, or retry (see: carpeos help outbox)",
+    );
   }
 
   const parsed = parseArgs({
@@ -521,7 +537,9 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
 async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
-    throw new CliUsageError("sync requires status, push, pull, or once");
+    throw new CliUsageError(
+      "sync requires status, push, pull, once, or credential-hash (see: carpeos help sync)",
+    );
   }
 
   const parsed = parseArgs({
@@ -728,14 +746,270 @@ function openStore(options: CommonOptions, env: NodeJS.ProcessEnv): LocalCapture
   });
 }
 
-function splitCommand(argv: readonly string[]): { command: string; rest: readonly string[] } {
-  const [command, ...rest] = argv;
-  if (command === undefined) {
-    throw new CliUsageError(
-      "a command is required: init, project identify, capture-hook, outbox, sync, retrieval, or memory",
-    );
+function isHelpToken(value: string | undefined): boolean {
+  return value === "--help" || value === "-h" || value === "help";
+}
+
+function splitCommand(argv: readonly string[]): {
+  command: string | undefined;
+  rest: readonly string[];
+} {
+  if (argv.length === 0) {
+    return { command: undefined, rest: [] };
   }
-  return { command, rest };
+  const [head, ...tail] = argv;
+  // `carpeos --help`, `carpeos -h`, `carpeos help [topic]`
+  if (isHelpToken(head)) {
+    if (head === "help") {
+      return { command: "help", rest: tail };
+    }
+    // `--help` / `-h` always mean root help (flags after are ignored)
+    return { command: "help", rest: [] };
+  }
+  return { command: head, rest: tail };
+}
+
+/** Root help text for humans and agents. Keep in sync with real commands. */
+export function formatRootHelp(): string {
+  return `carpeos — local knowledge OS CLI (capture, memory, sync)
+
+USAGE
+  carpeos <command> [options]
+  carpeos help [command]
+  carpeos --help
+
+MACHINE SETUP (npm package entry — not the monorepo CLI bundle)
+  carpeos setup plan|run|doctor|show|help
+  carpeos setup run --apply
+  carpeos setup --help
+
+COMMANDS
+  init                 Initialize local runtime store (~/.carpeos by default)
+  project identify     Print resolved project_id / client_id / trust zone
+  capture-hook         Ingest a provider hook envelope (codex|claude|grok)
+  outbox               Local durable outbox (status|lease|ack|retry)
+  sync                 Push/pull with a remote sync edge (status|push|pull|once)
+  retrieval            Rebuild local retrieval index or run embed jobs
+  memory               Search / get / context-pack over local memory
+  help                 Show this help or help for a command
+
+COMMON OPTIONS (most store commands)
+  --home <path>        Runtime home (default: $CARPEOS_HOME or ~/.carpeos)
+  --project-id <id>    Override project id
+  --trust-zone <id>    Trust zone id (tz_…); required for memory/retrieval
+
+EXAMPLES
+  carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+  carpeos memory context-pack \\
+    --task "Summarize current work" \\
+    --trust-zone tz_local_default \\
+    --visible-trust-zone tz_local_default
+  carpeos outbox status --home "$HOME/.carpeos"
+  carpeos help memory
+
+OUTPUT
+  Successful command results are JSON on stdout.
+  Usage errors are JSON on stderr with exit code 2.
+  Help is plain text on stdout with exit code 0.
+
+Docs: https://github.com/innocarpe/carpeos#readme
+`;
+}
+
+export function formatCommandHelp(command: string): string {
+  switch (command) {
+    case "init":
+      return `carpeos init — create/open the local runtime store
+
+USAGE
+  carpeos init [--home <path>] [--project-id <id>] [--trust-zone <id>]
+
+OPTIONS
+  --home <path>        Runtime directory (default: $CARPEOS_HOME or ~/.carpeos)
+  --project-id <id>    Explicit project id (otherwise derived from cwd/git)
+  --trust-zone <id>    Trust zone id (tz_[a-z0-9][a-z0-9_-]{2,63})
+
+EXAMPLES
+  carpeos init --trust-zone tz_local_default
+  carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+`;
+    case "project":
+      return `carpeos project — project identity helpers
+
+USAGE
+  carpeos project identify [--home <path>] [--project-id <id>] [--trust-zone <id>]
+
+SUBCOMMANDS
+  identify             Print project_id, client_id, trust_zone_id for this runtime
+
+OPTIONS
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+`;
+    case "capture-hook":
+      return `carpeos capture-hook — ingest a provider session hook (no plaintext secrets in stdout)
+
+USAGE
+  carpeos capture-hook --provider <codex|claude|grok> [options]
+  # hook JSON on stdin by default
+
+OPTIONS
+  --provider <name>          codex | claude | grok (required)
+  --input stdin|argv         Default: stdin. argv expects one JSON positional
+  --fail-open                Exit 0 on capture failure (provider must continue)
+  --quiet                    Suppress success JSON on stdout
+  --idempotency-key <key>    idem_[A-Za-z0-9_-]{16,128}
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+
+EXAMPLES
+  cat hook.json | carpeos capture-hook --provider codex --fail-open
+  carpeos capture-hook --provider claude --input argv '{"hook_event_name":"Stop"}'
+`;
+    case "outbox":
+      return `carpeos outbox — durable local delivery queue
+
+USAGE
+  carpeos outbox <status|lease|ack|retry> [options]
+
+SUBCOMMANDS
+  status               Counts: pending / leased / delivered
+  lease                Lease pending items
+  ack                  Acknowledge a leased item
+  retry                Re-queue a leased item after failure
+
+OPTIONS
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+  --limit <n>          lease (default 10)
+  --lease-ms <n>       lease duration (default 30000)
+  --outbox-id <n>      ack / retry
+  --lease-id <id>      ack / retry
+  --delay-ms <n>       retry delay (default 1000)
+  --error <text>       retry error message
+
+EXAMPLES
+  carpeos outbox status
+  carpeos outbox lease --limit 5 --lease-ms 30000
+  carpeos outbox ack --outbox-id 1 --lease-id lease_…
+`;
+    case "sync":
+      return `carpeos sync — push/pull against a remote sync edge
+
+USAGE
+  carpeos sync <status|push|pull|once|credential-hash> [options]
+
+SUBCOMMANDS
+  status               Local outbox + cursor + whether credentials are configured
+  push                 Push leased outbox items
+  pull                 Pull remote pages into the local store
+  once                 push then pull
+  credential-hash      SHA-256 of the sync credential file (for operator checks)
+
+OPTIONS
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+  --url <url>          Or $CARPEOS_SYNC_URL
+  --credential-file <path>
+  --sync-key-file <path>
+  --limit <n>          push/once iterations (default 1)
+  --max-pages <n>      pull/once pages (default 1)
+  --lease-ms <n>
+  --retry-delay-ms <n>
+  --pull-limit <n>
+
+EXAMPLES
+  carpeos sync status
+  carpeos sync once --url https://… --credential-file … --sync-key-file …
+`;
+    case "retrieval":
+      return `carpeos retrieval — local retrieval index maintenance
+
+USAGE
+  carpeos retrieval <rebuild|embed> --trust-zone <id> [options]
+
+SUBCOMMANDS
+  rebuild              Rebuild retrieval chunks from the event store
+  embed                Deterministic local-dev embedding jobs only
+
+OPTIONS
+  --trust-zone <id>    Required
+  --home <path>
+  --project-id <id>
+  --provider <name>    embed: only deterministic-local-dev
+  --limit <n>
+  --lease-ms <n>
+
+EXAMPLES
+  carpeos retrieval rebuild --trust-zone tz_local_default
+  carpeos retrieval embed --trust-zone tz_local_default --provider deterministic-local-dev
+`;
+    case "memory":
+      return `carpeos memory — query local memory (search / get / context-pack)
+
+USAGE
+  carpeos memory <search|get|context-pack> --trust-zone <id> --visible-trust-zone <id> [options]
+
+SUBCOMMANDS
+  search               Ranked retrieval by --query
+  get                  Fetch one chunk by --chunk-id (visibility filtered)
+  context-pack         Sparse expert-slot context pack for a --task
+
+OPTIONS
+  --trust-zone <id>              Required (active zone)
+  --visible-trust-zone <id>      Required; repeatable; must include --trust-zone
+  --home <path>
+  --project-id <id>
+  --query <text>                 search
+  --chunk-id <id>                get
+  --task <text>                  context-pack
+  --limit <n>                    search (default 10)
+  --max-items <n>                context-pack (default 16)
+  --max-characters <n>           context-pack (default 8000)
+  --protected-value-policy <p>   metadata_only | allow_decrypt | deny
+                                 (default metadata_only)
+
+EXAMPLES
+  carpeos memory search \\
+    --query "release checklist" \\
+    --trust-zone tz_local_default \\
+    --visible-trust-zone tz_local_default
+  carpeos memory context-pack \\
+    --task "What should I do next?" \\
+    --trust-zone tz_local_default \\
+    --visible-trust-zone tz_local_default
+`;
+    case "setup":
+    case "doctor":
+      return `carpeos setup — machine install / MCP registration (package entrypoint)
+
+This command is handled by the npm package launcher (bin/carpeos.js), not the
+monorepo CLI bundle alone.
+
+USAGE
+  carpeos setup plan
+  carpeos setup run --apply
+  carpeos setup doctor
+  carpeos setup show
+  carpeos setup --help
+
+From a git checkout without the npm package:
+  node scripts/install-local.mjs plan
+  node scripts/install-local.mjs run --apply
+  node scripts/install-local.mjs doctor
+`;
+    case "help":
+      return formatRootHelp();
+    default:
+      return `Unknown help topic: ${command}
+
+Run: carpeos --help
+`;
+  }
 }
 
 type SyncParsedValues = {
