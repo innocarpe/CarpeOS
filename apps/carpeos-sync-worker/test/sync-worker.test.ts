@@ -1,7 +1,4 @@
 import { env, exports as workerExports } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
-import migrationSql from "../migrations/0001_initial.sql?raw";
-import localWorker from "../src/index.js";
 import type {
   CanonicalEvent,
   ErasureLedgerRecord,
@@ -12,6 +9,9 @@ import type {
   SyncPushRequest,
   SyncPushResult,
 } from "@carpeos/schema";
+import { beforeEach, describe, expect, it } from "vitest";
+import migrationSql from "../migrations/0001_initial.sql?raw";
+import localWorker from "../src/index.js";
 
 type TestEnv = {
   DB: D1Database;
@@ -178,6 +178,83 @@ describe("CarpeOS sync Worker", () => {
     );
     expect(linked.vault_ref).toBe(intent.vault_ref);
     expect(linked.linked_event_ids).toEqual([event.event_id]);
+  });
+
+  it("rebinds a stale wrong-zone protected_value_uploads row on re-upload", async () => {
+    // Dogfood failure mode: first upload under the wrong trust zone leaves a single
+    // PK row that blocked later correct-zone push when ON CONFLICT only refreshed
+    // the receipt id.
+    const { intent: wrongZoneIntent, bytes } = await buildProtectedUpload(
+      "pv_zone_rebind01",
+      OTHER_TRUST_ZONE_ID,
+    );
+    expect((await uploadProtectedValue(wrongZoneIntent, bytes)).status).toBe(200);
+
+    const stale = await DB.prepare(
+      `
+        SELECT trust_zone_id, object_key
+          FROM protected_value_uploads
+         WHERE protected_value_id = ?1
+      `,
+    )
+      .bind(wrongZoneIntent.protected_value_id)
+      .first<{ trust_zone_id: string; object_key: string }>();
+    expect(stale?.trust_zone_id).toBe(OTHER_TRUST_ZONE_ID);
+    expect(stale?.object_key).toBe(wrongZoneIntent.object_key);
+
+    const { intent: correctIntent } = await buildProtectedUpload("pv_zone_rebind01", TRUST_ZONE_ID);
+    const reupload = await uploadProtectedValue(correctIntent, bytes);
+    expect(reupload.status).toBe(200);
+    const receipt = (await reupload.json()) as ProtectedValueUploadReceipt;
+    expect(receipt.trust_zone_id).toBe(TRUST_ZONE_ID);
+    expect(receipt.object_key).toBe(correctIntent.object_key);
+
+    const rebound = await DB.prepare(
+      `
+        SELECT trust_zone_id, object_key, original_ciphertext_digest_value, status
+          FROM protected_value_uploads
+         WHERE protected_value_id = ?1
+      `,
+    )
+      .bind(correctIntent.protected_value_id)
+      .first<{
+        trust_zone_id: string;
+        object_key: string;
+        original_ciphertext_digest_value: string;
+        status: string;
+      }>();
+    expect(rebound?.trust_zone_id).toBe(TRUST_ZONE_ID);
+    expect(rebound?.object_key).toBe(correctIntent.object_key);
+    expect(rebound?.original_ciphertext_digest_value).toBe(
+      correctIntent.original_ciphertext_digest.value.toLowerCase(),
+    );
+    expect(rebound?.status).toBe("orphaned");
+    expect(await countRows("protected_value_uploads")).toBe(1);
+
+    const event = buildProtectedEvent("evt_zone_rebind01", 3, correctIntent);
+    const accepted = await postJson(
+      "/v1/sync/push",
+      buildPush({
+        event,
+        receipt,
+        idempotencyKey: "idem_zone_rebind_00000000000001",
+        requestId: "req_zone_rebind_1",
+      }),
+    );
+    expect(accepted.status).toBe(200);
+    expect(((await accepted.json()) as SyncPushResult).status).toBe("accepted");
+
+    const linked = await DB.prepare(
+      `
+        SELECT trust_zone_id, status
+          FROM protected_value_uploads
+         WHERE protected_value_id = ?1
+      `,
+    )
+      .bind(correctIntent.protected_value_id)
+      .first<{ trust_zone_id: string; status: string }>();
+    expect(linked?.trust_zone_id).toBe(TRUST_ZONE_ID);
+    expect(linked?.status).toBe("linked");
   });
 
   it("accepts a protected event after blob upload, replays without mutation, and conflicts without R2 rewrite", async () => {
@@ -542,7 +619,10 @@ function buildErasure(
   } as ErasureLedgerRecord;
 }
 
-async function buildProtectedUpload(protectedValueId: string): Promise<{
+async function buildProtectedUpload(
+  protectedValueId: string,
+  trustZoneId: string = TRUST_ZONE_ID,
+): Promise<{
   intent: ProtectedValueUploadIntent;
   bytes: Uint8Array;
 }> {
@@ -552,10 +632,10 @@ async function buildProtectedUpload(protectedValueId: string): Promise<{
     schema_version: "v1",
     intent_type: "protected_value_upload",
     protected_value_id: protectedValueId,
-    trust_zone_id: TRUST_ZONE_ID,
+    trust_zone_id: trustZoneId,
     vault_ref: "vault_test",
     key_ref: "key_test",
-    object_key: `protected-values/${TRUST_ZONE_ID}/${protectedValueId}/${digest}`,
+    object_key: `protected-values/${trustZoneId}/${protectedValueId}/${digest}`,
     encryption_algorithm: "aes-256-gcm",
     encoding: "base64url",
     ciphertext_nonce: "bm9uY2VfdGVzdA",
@@ -580,7 +660,7 @@ async function buildProtectedUpload(protectedValueId: string): Promise<{
       },
       wrapped_key_size_bytes: 24,
       aad: {
-        trust_zone_id: TRUST_ZONE_ID,
+        trust_zone_id: trustZoneId,
         protected_value_id: protectedValueId,
         key_ref: "key_test",
       },

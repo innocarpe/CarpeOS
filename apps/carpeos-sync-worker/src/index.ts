@@ -1,18 +1,18 @@
 import {
-  SCHEMA_VERSION,
-  validateConformance,
   type CanonicalEvent,
   type ErasureLedgerRecord,
   type ProtectedValueMetadata,
   type ProtectedValueRef,
   type ProtectedValueUploadIntent,
   type ProtectedValueUploadReceipt,
+  SCHEMA_VERSION,
   type SyncError,
   type SyncErrorItem,
   type SyncPullRequest,
   type SyncPullResult,
   type SyncPushRequest,
   type SyncPushResult,
+  validateConformance,
 } from "@carpeos/schema";
 
 export type Env = {
@@ -984,8 +984,40 @@ async function upsertProtectedValueReceipt(
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, 'orphaned')
       ON CONFLICT(protected_value_id)
       DO UPDATE SET
+        trust_zone_id = excluded.trust_zone_id,
+        object_key = excluded.object_key,
+        original_ciphertext_digest_algorithm = excluded.original_ciphertext_digest_algorithm,
+        original_ciphertext_digest_value = excluded.original_ciphertext_digest_value,
+        original_ciphertext_size_bytes = excluded.original_ciphertext_size_bytes,
+        encryption_algorithm = excluded.encryption_algorithm,
+        encoding = excluded.encoding,
+        ciphertext_nonce = excluded.ciphertext_nonce,
+        ciphertext_auth_tag = excluded.ciphertext_auth_tag,
+        nonce_ref = excluded.nonce_ref,
+        tag_ref = excluded.tag_ref,
+        vault_ref = excluded.vault_ref,
+        key_ref = excluded.key_ref,
+        wrapped_device_key_json = excluded.wrapped_device_key_json,
         upload_receipt_id = excluded.upload_receipt_id,
-        uploaded_at = protected_value_uploads.uploaded_at
+        uploaded_at = CASE
+          WHEN protected_value_uploads.trust_zone_id = excluded.trust_zone_id
+           AND protected_value_uploads.object_key = excluded.object_key
+           AND protected_value_uploads.original_ciphertext_digest_value =
+                 excluded.original_ciphertext_digest_value
+          THEN protected_value_uploads.uploaded_at
+          ELSE excluded.uploaded_at
+        END,
+        -- Re-upload may correct a stale wrong-zone orphan; keep linked only when
+        -- the stored binding already matches the new intent identity.
+        status = CASE
+          WHEN protected_value_uploads.status = 'linked'
+           AND protected_value_uploads.trust_zone_id = excluded.trust_zone_id
+           AND protected_value_uploads.object_key = excluded.object_key
+           AND protected_value_uploads.original_ciphertext_digest_value =
+                 excluded.original_ciphertext_digest_value
+          THEN protected_value_uploads.status
+          ELSE 'orphaned'
+        END
     `,
   )
     .bind(
