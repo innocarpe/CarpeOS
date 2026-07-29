@@ -71,9 +71,34 @@ All of the following should be true (or consciously waived in writing):
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
 | 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section) |
-| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | open (watch trust-zone defaulting feedback) |
+| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | open (use soak checklist below) |
 | 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | not yet |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
+
+### Soak checklist (criterion 4)
+
+Repeatable day-to-day checks on a **real maintainer home** (not only the clean
+temp G1 profile). Tick when true; leave open if untested.
+
+| # | Check | How | Status |
+| --- | --- | --- | --- |
+| S1 | Published package version in daily use | `carpeos version` → `0.2.1+` | open |
+| S2 | Trust zone comes from config after install | `carpeos project identify` → `trust_zone_source: config` (or env if intentionally set) | open |
+| S3 | Outbox/status diagnosis is usable | `carpeos sync status` shows zone, `outbox_errors`, no unexpected mismatch warning for normal capture | open |
+| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | open |
+| S5 | Optional private sync still works if enrolled | `sync once` against private edge; no sticky leased rows | open |
+| S6 | Clean recheck still green | `pnpm g1:recheck -- --version 0.2.1` (or later) | open |
+| S7 | No new “rename soon” items | [compatibility-and-deprecations.md](compatibility-and-deprecations.md) planned-breaks table still empty | open |
+
+When S1–S7 are done (or waived with notes), criterion **4** can flip to **done**.
+Then prepare CHANGELOG `1.0.0` Notes (criterion 5) and set Decision to **Approve**.
+
+Helper for S6 (from monorepo):
+
+```sh
+npm install -g @innocarpe/carpeos@0.2.1
+pnpm g1:recheck -- --version 0.2.1
+```
 
 ## Gate sign-off (at decision time)
 
