@@ -8,75 +8,73 @@
 
 **Capture context. Compound knowledge.**
 
-CarpeOS는 **AI-assisted work를 위한 개인 지식 운영체제**입니다.
+CarpeOS는 AI 에이전트와 같이 일하는 사람을 위한 개인 지식 시스템입니다.
 
-에이전트가 한 일을 캡처하고, provenance를 갖춘 지식으로 구조화한 뒤, **사람과
-LLM**이 세션·도구·기기 경계를 넘어 다시 꺼내 쓸 수 있게 만듭니다.
+에이전트 세션에서 일어난 일을 기록하고, 출처를 남긴 뒤, 나중에 사람이나 다른
+에이전트가 다시 찾아볼 수 있게 합니다. 채팅 창 하나에 전부 때려 넣는 방식은
+아닙니다.
 
 <p align="center">
-  <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 추상 네트워크 이미지" width="920" />
+  <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/architecture-flow.svg" alt="Capture, canonicalize, sync/retrieve, MCP·CLI·Obsidian 사용 흐름" width="920" />
+  <img src="docs/assets/architecture-flow.svg" alt="Capture, store, sync 후 MCP·CLI·Obsidian 사용" width="920" />
 </p>
 
 ---
 
-## 왜 CarpeOS인가
+## 왜 만들었나
 
-요즘 AI 작업의 잔여물 — 결정, 실패한 경로, 받아들여진 사실, 열린 질문 — 은 채팅
-로그·터미널·노트에 흩어지고, 다음 세션의 다음 에이전트는 다시 차갑게 시작합니다.
+에이전트랑 한참 작업하다 보면, 결정이 하나 남거나, 다시 밟기 싫은 실패
+경로가 남거나, 다음에도 쓸 메모가 생깁니다. 그런데 그게 채팅 기록, 터미널
+스크롤, 노트 파일에 제각각 흩어져 있고, 며칠 뒤 새 세션을 열면 그 맥락은
+거의 안 넘어갑니다.
 
-CarpeOS는 그 잔여물을 **내구성 있는 지식 평면**으로 다룹니다.
+CarpeOS는 그 맥락을 내가 통제하는 한곳에 모아 두되, “우리가 X로 정했다”와
+“모델이 X를 한 번 말했다”를 같은 취급하지 않게 구조를 둔 시도입니다.
 
-| 지금의 고통 | CarpeOS가 지향하는 것 |
+| 자주 겪는 일 | 이쪽 접근 |
 | --- | --- |
-| 채팅 기록은 휘발적이고 신뢰하기 어렵다 | Provenance가 있는 append-only 이벤트 |
-| “메모리”가 임베딩 가방에 가깝다 | Claim / acceptance / supersession을 분리 |
-| 에이전트마다 사일로 | Provider-neutral capture + 공유 MCP retrieval |
-| 노트·인덱스가 곧 진실이 된다 | Private canonical store 위의 rebuildable projection |
-| 기기 간 연속성이 지저분하다 | Local-first capture + private sync |
+| 채팅 기록이 날아가거나 믿기 어렵다 | 출처가 남는 append-only 이벤트 |
+| “메모리”가 사실상 임베딩 뭉치 | claim / 수락 / supersession을 다른 레코드로 둠 |
+| 도구마다 기억이 따로 논다 | 공통 capture + MCP 검색 (특정 벤더 종속 아님) |
+| 생성된 노트가 곧 원본이 된다 | 노트·인덱스는 다시 만들 수 있는 projection |
+| 기기 두 대면 연속성이 지저분하다 | 로컬 우선, 필요하면 private sync |
 
-> **Public implementation. Private knowledge.**  
-> 이 저장소는 설계·스펙·코드를 공개합니다. 실제 세션, 프로젝트, 자격 증명은
-> 절대 넣지 않습니다.
-
----
-
-## 이런 때 쓰면 좋습니다
-
-- **여러 AI 에이전트**(Codex, Claude Code, Grok Build 등)를 오가며 채팅 다섯
-  개가 아니라 **하나의 메모리 평면**이 필요할 때
-- 다음 세션에도 **결정이 살아남아야** 할 때 — “모델이 한 번 말했다” 수준이
-  아니라
-- **권위(authority)** 가 중요할 때 — draft / rejected / accepted가 retrieval에서
-  똑같이 보이면 안 될 때
-- **로컬 우선 프라이버시**를 원하면서, 직접 운영하는 private cloud sync 옵션이
-  필요할 때
-- 스키마·trust zone·erasure·테스트를 1급 시민으로 두는 **계약 중심** 접근을
-  선호할 때
-
-아직 **패키지형 최종 사용자 제품**, 호스티드 SaaS 메모리, 에디터 대체재는
-아닙니다. 매일 에이전트와 일하면서 지식이 쌓이기를 원하는 사람을 위한
-인프라에 가깝습니다.
+> **코드는 공개. 지식은 비공개.**  
+> 이 저장소에는 설계, 스펙, 구현이 있습니다. 실제 세션·프로젝트·자격 증명은
+> 넣지 않습니다.
 
 ---
 
-## 무엇을 얻나요
+## 이런 사람에게 맞음
 
-### 이미 쓰는 에이전트에서 캡처
+- Codex, Claude Code, Grok Build처럼 에이전트를 여러 개 쓰는데, 도구마다
+  기억을 따로 관리하기 싫을 때
+- 지난주 결정이 옛 채팅 속에만 있지 않고, 다시 꺼내 쓸 수 있어야 할 때
+- 검색 결과에 draft / 거절 / 수락이 구분돼 보여야 할 때
+- 데이터는 기본이 로컬이고, sync는 직접 돌리고 싶을 때
+- 스키마·테스트가 있는 쪽이, 잘 모르는 “메모리 제품”보다 나을 때
 
-Codex, Claude Code, Grok Build의 선택된 lifecycle 이벤트를 provider-neutral
-envelope로 정규화하는 hook 템플릿을 제공합니다. Raw payload는 encrypted
-protected-value에 두고, canonical 레이어에는 metadata와 reference만 남길 수
-있습니다.
+아직 소비자용으로 다듬인 앱이 아닙니다. 호스티드 SaaS도 아니고, 에디터
+대체재도 아닙니다. 에이전트 워크플로를 이미 쓰는 사람용 기반 코드에 가깝습니다.
 
-### 권위를 보존하는 지식 모델
+---
 
-Evidence는 claim이 아닙니다. Claim은 accepted fact가 아닙니다. Acceptance와
-supersession은 별도의 불변 기록입니다. 그래서 retrieval이 **알려진 것 / 제안된
-것 / 뒤집힌 것**을 한 덩어리 텍스트로 뭉개지 않고 드러낼 수 있습니다.
+## 구성
+
+### 쓰던 에이전트에서 캡처
+
+Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture 형태로
+넘기는 hook 템플릿이 있습니다. raw payload는 암호화 저장소에 두고, 이벤트
+로그에는 메타데이터와 참조만 둘 수 있습니다.
+
+### 상태를 뭉개지 않는 모델
+
+Evidence는 claim이 아닙니다. claim이 있다고 해서 바로 “맞다”가 아닙니다.
+수락과 supersession은 별도 기록입니다. 그래서 검색할 때 확정된 것, 제안만
+된 것, 나중에 바뀐 것을 한 덩어리 텍스트로 뭉개지 않고 구분할 수 있습니다.
 
 ```mermaid
 flowchart LR
@@ -84,23 +82,22 @@ flowchart LR
   O --> C[Claim]
   C --> A[AcceptanceDecision]
   C --> S[Supersession]
-  A --> F[Accepted fact<br/>query-time 파생]
+  A --> F[Accepted fact<br/>query 시점에 계산]
   S --> F
 ```
 
-### 사람과 에이전트가 공유하는 retrieval
+### 사람용 / 에이전트용 인터페이스
 
-- **CLI** — projection rebuild, (dev) embed, `memory search` / `memory get`
-- **MCP (stdio)** — `memory_context_pack`, `memory_trace`, `memory_capture`,
-  `memory_propose_claim` 등 로컬 도구 8개
-- **Obsidian projection** — 로컬 스토어 스냅샷에서 manifest-bounded Markdown
-  생성 (projection일 뿐, canonical 권위 아님)
+- **CLI** — rebuild, embed(개발용), `memory search` / `memory get`
+- **MCP (stdio)** — 로컬 도구 8개 (`memory_context_pack`, `memory_trace`,
+  `memory_capture`, `memory_propose_claim` 등)
+- **Obsidian projection** — 로컬 스토어에서 Markdown 생성 (원본 아님, projection)
 
-### Local-first, privately syncable
+### 로컬 우선, sync는 선택
 
-기기는 append-only outbox에 씁니다. Cloudflare Worker/D1/R2 경로는 private
-operator용 deployable 코드로 존재합니다. Projection은 언제든 canonical
-event에서 다시 만들 수 있습니다.
+기기는 로컬 outbox에 씁니다. 여러 기기가 필요하면 Cloudflare Worker/D1/R2용
+코드를 직접 띄울 수 있습니다. projection은 이벤트 로그에서 언제든 다시 만들 수
+있습니다.
 
 ```mermaid
 flowchart TB
@@ -111,15 +108,15 @@ flowchart TB
     OBS[Obsidian projection]
   end
 
-  subgraph local [로컬 private runtime]
-    OUT[Encrypted outbox + local store]
-    RET[Hybrid retrieval + recheck]
+  subgraph local [로컬 런타임]
+    OUT[암호화 outbox + local store]
+    RET[검색 + recheck]
   end
 
   subgraph private [선택적 private sync]
     W[Cloudflare Worker]
     D1[(D1 metadata)]
-    R2[(R2 protected blobs)]
+    R2[(R2 암호화 blob)]
   end
 
   H1 --> OUT
@@ -134,129 +131,121 @@ flowchart TB
 
 ---
 
-## 동작 방식
+## 전체 흐름
 
 ```mermaid
 flowchart LR
-  A[AI lifecycle hooks] --> B[Local capture]
-  B --> C[Canonical event store]
-  C --> D[Query-time accepted facts]
-  C --> E[Rebuildable projections]
+  A[Agent hooks] --> B[Local capture]
+  B --> C[Event store]
+  C --> D[Query 시점 accepted facts]
+  C --> E[Projections]
   E --> F[MCP / CLI / Obsidian]
   D --> F
 ```
 
-**사용자에게 중요한 불변 조건:**
+알아 둘 규칙:
 
-1. 수락 이후 canonical event는 append-only입니다.
-2. Accepted fact는 **query-time 파생**입니다 — claim을 “accepted”로 mutate하지
-   않습니다.
-3. Protected plaintext는 canonical event body 밖에 둡니다.
-4. Trust zone은 장식이 아니라 물리적 격리 경계입니다.
-5. 노트·벡터·context pack은 projection입니다 — rebuild 가능하고 그 자체로
-   권위가 아닙니다.
+1. 수락 이후 이벤트 로그는 append-only입니다.
+2. “accepted”는 query 시점에 계산합니다. claim 레코드를 덮어쓰지 않습니다.
+3. 민감한 plaintext는 이벤트 body 밖에 둡니다.
+4. Trust zone은 진짜 격리 경계입니다. 장식용 태그가 아닙니다.
+5. 노트·벡터·context pack은 지우고 다시 만들어도 됩니다. canonical store가
+   아닙니다.
 
-더 깊은 설계는
+더 자세한 내용:
 [Architecture overview](docs/architecture/overview.md),
 [ADRs](docs/adr/),
-[spec/v1](spec/v1/)을 보세요.
+[spec/v1](spec/v1/).
 
 ---
 
 ## Quick start
 
-**사전 요구:** Node.js ≥ 22.22, pnpm ≥ 11.16.
+Node.js ≥ 22.22, pnpm ≥ 11.16.
 
 ```sh
 pnpm install
 pnpm build
 
-# 로컬 런타임 초기화
 node apps/carpeos-cli/dist/index.js init
 node apps/carpeos-cli/dist/index.js project identify
 
-# synthetic hook payload 하나 캡처
+# synthetic capture 한 번
 node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
   '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
 
 node apps/carpeos-cli/dist/index.js outbox status
 ```
 
-가이드:
-
-| 경로 | 문서 |
+| 주제 | 가이드 |
 | --- | --- |
 | Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
-| Retrieval & memory CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
-| MCP server 설정 | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| Retrieval CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
+| MCP server | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
 
-Codex / Claude Code / Grok Build 어댑터 템플릿은 [`adapters/`](adapters/)에
-있습니다.
+Hook 템플릿: [`adapters/`](adapters/).
 
 ---
 
 ## 지금 구현된 것
 
-CarpeOS는 **pre-MVP**입니다. Capture → outbox → sync client → retrieval → MCP →
-Obsidian projection 로컬 경로는 이 monorepo에서 **synthetic test coverage**와
-함께 구현되어 있습니다.
+pre-MVP입니다. 로컬 경로(capture → outbox → sync client → retrieval → MCP →
+Obsidian projection)는 이 monorepo에 구현돼 있고, synthetic 테스트가 붙어
+있습니다.
 
 | 영역 | 상태 |
 | --- | --- |
-| Specs, ontology, ADRs | 존재 |
-| Local capture + durable outbox | 구현 (synthetic 테스트) |
-| Sync Worker/client (Cloudflare 경로) | Deployable 코드 + 로컬 테스트 — live deploy 주장 없음 |
-| Hybrid local retrieval | Deterministic dev embedding으로 구현 |
-| MCP stdio server (도구 8개) | 로컬 구현 |
-| Obsidian projection package | 로컬 구현 |
-| Hosted embeddings / GraphRAG / dashboard | 계획, active feature 아님 |
-| 패키지형 최종 사용자 배포 | 준비되지 않음 |
+| Specs, ontology, ADRs | 있음 |
+| Local capture + outbox | 구현 (synthetic 테스트) |
+| Sync Worker/client | 코드 + 로컬 테스트. production 배포 주장 없음 |
+| Local hybrid retrieval | 구현 (개발용 deterministic embedding) |
+| MCP stdio server (도구 8개) | 로컬만 |
+| Obsidian projection package | 로컬만 |
+| Hosted embeddings / GraphRAG / dashboard | 아직 없음 |
+| 패키지형 사용자 설치 | 아직 아님 |
 
-어댑터 설치, production Cloudflare provisioning, hosted MCP, production
-semantic quality를 “완료”로 취급하지 마세요. 여기서 테스트·문서화되기 전까지는
-아직입니다.
+어댑터 설치, 실제 Cloudflare 운영, hosted MCP, production 검색 품질을 “됐다”고
+보지 마세요. 이 저장소에 테스트와 문서가 생기기 전엔 미완입니다.
 
 ---
 
 ## 저장소 경계
 
-이 저장소는 public implementation입니다. Runtime knowledge는 private입니다.
+공개되는 건 구현뿐입니다. 런타임 지식은 비공개입니다.
 
-| 이 저장소에 OK | 절대 금지 |
+| 여기 OK | 여기 금지 |
 | --- | --- |
-| Synthetic fixture (`Example Alpha` 등) | 실제 프로젝트명·private URL |
-| Protocol example | 실제 session transcript |
-| 테스트·스키마 | Credential, token, production log |
-| Contributor docs | Runtime DB export / 로컬 사용자 경로 |
+| Synthetic fixture (`Example Alpha` 등) | 실제 프로젝트명, private URL |
+| 프로토콜 예시 | 실제 세션 transcript |
+| 테스트·스키마 | credential, token, production log |
+| 기여자 문서 | 런타임 DB dump, 개인 경로 |
 
 ---
 
 ## 디자인 영향
 
-[obsidian-mind](https://github.com/breferrari/obsidian-mind)의 durable agent
-memory, lifecycle hook, agent-facing semantic retrieval 비전에서 일부 영감을
-받았습니다.
-
-CarpeOS는 독립 설계입니다: Markdown vault가 권위가 아니라 append-only
-canonical event, 명시적 claim/acceptance/supersession, trust zone, protected
-value, provider-neutral MCP 접근.
+[obsidian-mind](https://github.com/breferrari/obsidian-mind)와 겹치는 문제의식
+(에이전트 메모리, hook, 에이전트용 검색)은 있습니다. 구현은 별개입니다.
+Markdown vault를 원본으로 두지 않고 append-only 이벤트를 쓰고,
+claim/수락/supersession·trust zone·protected value·벤더 중립 MCP를 전제로
+잡았습니다.
 
 ---
 
 ## 기여
 
 [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md),
-[AGENTS.md](AGENTS.md)를 참고하세요.
+[AGENTS.md](AGENTS.md) 참고.
 
 ```sh
 pnpm check   # format, lint, build, typecheck, test, public-boundary
 ```
 
 PR 레이블은 가볍게: kind 하나
-(`feat` / `fix` / `docs` / `spec` / `chore`) + 선택적 area.
-자세한 내용: [docs/maintainers/github-labels.md](docs/maintainers/github-labels.md).
+(`feat` / `fix` / `docs` / `spec` / `chore`) + 필요하면 area.
+[docs/maintainers/github-labels.md](docs/maintainers/github-labels.md)
 
 ---
 
