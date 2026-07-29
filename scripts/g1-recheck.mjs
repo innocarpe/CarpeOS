@@ -10,7 +10,7 @@
  * from a CarpeOS checkout with dependencies installed.
  *
  * Does not register MCP on agent hosts (register-mcp false) so the recheck
- * isolates install/home/wrappers/init.
+ * isolates runtime home creation, wrappers, and store init.
  */
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, rmSync } from "node:fs";
