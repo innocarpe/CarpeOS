@@ -253,7 +253,20 @@ describe("carpeos CLI", () => {
     // Without flags/env, identify/status use config.json trust zone.
     const identified = runJson(["project", "identify"], context);
     expect(identified.status).toBe(0);
-    expect(identified.stdout.trust_zone_id).toBe("tz_local_default");
+    expect(identified.stdout).toMatchObject({
+      trust_zone_id: "tz_local_default",
+      trust_zone_source: "config",
+    });
+
+    const identifiedFlag = runJson(
+      ["project", "identify", "--trust-zone", "tz_from_flag_zone"],
+      context,
+    );
+    expect(identifiedFlag.status).toBe(0);
+    expect(identifiedFlag.stdout).toMatchObject({
+      trust_zone_id: "tz_from_flag_zone",
+      trust_zone_source: "flag",
+    });
   });
 
   it("leases and acknowledges outbox items with the matching lease id", () => {
@@ -461,6 +474,7 @@ describe("carpeos CLI", () => {
         outbox: { pending: 0, leased: 0, delivered: 0 },
         outbox_trust_zone_ids: [],
         outbox_trust_zone_mismatch: false,
+        trust_zone_source: "device_default",
       },
     });
     expect(result.stdout.warnings).toBeUndefined();

@@ -363,6 +363,8 @@ function runProject(argv: readonly string[], env: NodeJS.ProcessEnv): number {
     throw new CliUsageError("project requires the identify subcommand (see: carpeos help project)");
   }
   const options = parseCommonOptions(rest);
+  const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+  const resolution = resolveTrustZoneResolution(options.trustZone, env, runtimeDir);
   const store = openStore(options, env);
   try {
     writeJson(process.stdout, {
@@ -371,6 +373,7 @@ function runProject(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       project_id: store.projectId,
       client_id: store.clientId,
       trust_zone_id: store.trustZone.trust_zone_id,
+      trust_zone_source: resolution.source,
     });
     return 0;
   } finally {
@@ -578,6 +581,11 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
         const config = resolveSyncConfig(parsed.values, env, store.runtimeDir, false);
         const cursor = store.getSyncCursor();
         const storeTrustZoneId = store.trustZone.trust_zone_id;
+        const trustZoneSource = resolveTrustZoneResolution(
+          parsed.values["trust-zone"],
+          env,
+          store.runtimeDir,
+        ).source;
         const outboxTrustZoneIds = store.listOutboxTrustZones();
         const outboxTrustZoneMismatch = outboxTrustZoneIds.some(
           (zoneId: string) => zoneId !== storeTrustZoneId,
@@ -612,6 +620,7 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
             outbox_errors: store.listOutboxErrors(),
             cursor,
             trust_zone_id: storeTrustZoneId,
+            trust_zone_source: trustZoneSource,
             client_id: store.clientId,
           },
           ...(warnings.length === 0 ? {} : { warnings }),
@@ -760,10 +769,18 @@ function compactCommonOptions(
   };
 }
 
+type TrustZoneSource = "flag" | "env" | "config" | "device_default";
+
+type TrustZoneResolution = {
+  /** Undefined means LocalCaptureStore will derive the device-local default. */
+  trustZoneId: string | undefined;
+  source: TrustZoneSource;
+};
+
 function openStore(options: CommonOptions, env: NodeJS.ProcessEnv): LocalCaptureStore {
   const runtimeDir = options.home ?? runtimeDirFromEnv(env);
-  const trustZoneId = resolveTrustZoneId(options.trustZone, env, runtimeDir);
-  if (trustZoneId !== undefined && !isTrustZoneId(trustZoneId)) {
+  const resolution = resolveTrustZoneResolution(options.trustZone, env, runtimeDir);
+  if (resolution.trustZoneId !== undefined && !isTrustZoneId(resolution.trustZoneId)) {
     throw new CliUsageError(
       "trust zone must match tz_[a-z0-9][a-z0-9_-]{2,63} (--trust-zone, CARPEOS_TRUST_ZONE / CARPEOS_MCP_TRUST_ZONE, or config.json trust_zone_id)",
     );
@@ -772,7 +789,7 @@ function openStore(options: CommonOptions, env: NodeJS.ProcessEnv): LocalCapture
     runtimeDir,
     workspaceRoot: process.cwd(),
     ...(options.projectId === undefined ? {} : { explicitProjectId: options.projectId }),
-    ...(trustZoneId === undefined ? {} : { trustZoneId }),
+    ...(resolution.trustZoneId === undefined ? {} : { trustZoneId: resolution.trustZoneId }),
   });
 }
 
@@ -785,19 +802,31 @@ function openStore(options: CommonOptions, env: NodeJS.ProcessEnv): LocalCapture
  * 3. `~/.carpeos/config.json` `trust_zone_id` (installer default `tz_local_default`)
  * 4. omit → LocalCaptureStore device-derived `tz_local_<client_suffix>`
  */
+function resolveTrustZoneResolution(
+  explicit: string | undefined,
+  env: NodeJS.ProcessEnv,
+  runtimeDir: string,
+): TrustZoneResolution {
+  if (explicit !== undefined) {
+    return { trustZoneId: explicit, source: "flag" };
+  }
+  const fromEnv = firstConfigured(env.CARPEOS_TRUST_ZONE, env.CARPEOS_MCP_TRUST_ZONE);
+  if (fromEnv !== undefined) {
+    return { trustZoneId: fromEnv, source: "env" };
+  }
+  const fromConfig = readTrustZoneFromHomeConfig(runtimeDir);
+  if (fromConfig !== undefined) {
+    return { trustZoneId: fromConfig, source: "config" };
+  }
+  return { trustZoneId: undefined, source: "device_default" };
+}
+
 function resolveTrustZoneId(
   explicit: string | undefined,
   env: NodeJS.ProcessEnv,
   runtimeDir: string,
 ): string | undefined {
-  if (explicit !== undefined) {
-    return explicit;
-  }
-  const fromEnv = firstConfigured(env.CARPEOS_TRUST_ZONE, env.CARPEOS_MCP_TRUST_ZONE);
-  if (fromEnv !== undefined) {
-    return fromEnv;
-  }
-  return readTrustZoneFromHomeConfig(runtimeDir);
+  return resolveTrustZoneResolution(explicit, env, runtimeDir).trustZoneId;
 }
 
 function readTrustZoneFromHomeConfig(runtimeDir: string): string | undefined {
