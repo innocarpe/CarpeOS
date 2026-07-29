@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" role="img" aria-label="CarpeOS architecture flow">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1120" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#151B33"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#4F7CFF"/>
+      <stop offset="1" stop-color="#22C1A8"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <style>
+      .title { font: 700 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; fill: #F4F7FF; }
+      .sub { font: 500 13px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; fill: #A9B4D0; }
+      .card-title { font: 700 15px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; fill: #F4F7FF; }
+      .card-body { font: 500 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; fill: #C2CBE3; }
+      .label { font: 600 11px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; fill: #8FA0C7; letter-spacing: 0.04em; }
+    </style>
+  </defs>
+  <rect width="1120" height="420" rx="24" fill="url(#bg)"/>
+  <text x="48" y="48" class="title">Capture once. Compound forever.</text>
+  <text x="48" y="74" class="sub">Provider hooks → private canonical store → agent + human interfaces</text>
+
+  <!-- cards -->
+  <g filter="url(#shadow)">
+    <rect x="48" y="120" width="190" height="150" rx="18" fill="#1A2340" stroke="#2C3A66"/>
+    <text x="68" y="152" class="card-title">1. Capture</text>
+    <text x="68" y="180" class="card-body">Codex / Claude / Grok</text>
+    <text x="68" y="200" class="card-body">lifecycle hooks</text>
+    <text x="68" y="220" class="card-body">encrypted local outbox</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="292" y="120" width="190" height="150" rx="18" fill="#1A2340" stroke="#2C3A66"/>
+    <text x="312" y="152" class="card-title">2. Canonicalize</text>
+    <text x="312" y="180" class="card-body">Evidence · Observation</text>
+    <text x="312" y="200" class="card-body">Claim · Decision</text>
+    <text x="312" y="220" class="card-body">append-only events</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="536" y="120" width="190" height="150" rx="18" fill="#1A2340" stroke="#2C3A66"/>
+    <text x="556" y="152" class="card-title">3. Sync &amp; retrieve</text>
+    <text x="556" y="180" class="card-body">private Cloudflare path</text>
+    <text x="556" y="200" class="card-body">hybrid search</text>
+    <text x="556" y="220" class="card-body">provenance recheck</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="780" y="120" width="290" height="150" rx="18" fill="#1A2340" stroke="#2C3A66"/>
+    <text x="800" y="152" class="card-title">4. Use everywhere</text>
+    <text x="800" y="180" class="card-body">MCP tools for agents</text>
+    <text x="800" y="200" class="card-body">CLI memory search</text>
+    <text x="800" y="220" class="card-body">Obsidian projections</text>
+  </g>
+
+  <!-- arrows -->
+  <path d="M238 195 H292" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M482 195 H536" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M726 195 H780" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="265" cy="195" r="5" fill="#4F7CFF"/>
+  <circle cx="509" cy="195" r="5" fill="#7C5CFF"/>
+  <circle cx="753" cy="195" r="5" fill="#22C1A8"/>
+
+  <!-- bottom principle bar -->
+  <rect x="48" y="310" width="1024" height="70" rx="16" fill="#121A31" stroke="#2C3A66"/>
+  <text x="72" y="340" class="label">CORE RULE</text>
+  <text x="72" y="364" class="card-body">Public implementation ships in this repo. Private knowledge never does. Agents read accepted facts with provenance — not a flattened chat dump.</text>
+</svg>

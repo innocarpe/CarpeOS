@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="CarpeOS">
+  <defs>
+    <linearGradient id="g" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F7CFF"/>
+      <stop offset="0.55" stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#22C1A8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="60%">
+      <stop stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#0B1020"/>
+  <rect width="128" height="128" rx="28" fill="url(#glow)"/>
+  <!-- outer orbit -->
+  <circle cx="64" cy="64" r="42" fill="none" stroke="url(#g)" stroke-width="3" opacity="0.9"/>
+  <!-- knowledge nodes -->
+  <circle cx="64" cy="30" r="7" fill="#4F7CFF"/>
+  <circle cx="94" cy="54" r="6" fill="#7C5CFF"/>
+  <circle cx="86" cy="90" r="6" fill="#22C1A8"/>
+  <circle cx="42" cy="90" r="6" fill="#4F7CFF"/>
+  <circle cx="34" cy="54" r="6" fill="#7C5CFF"/>
+  <!-- center core -->
+  <circle cx="64" cy="64" r="14" fill="url(#g)"/>
+  <circle cx="64" cy="64" r="7" fill="#0B1020" opacity="0.55"/>
+  <!-- edges -->
+  <path d="M64 37 L64 50 M78 56 L74 60 M78 80 L72 76 M50 80 L54 76 M50 56 L54 60"
+        stroke="#E8EEFF" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+</svg>

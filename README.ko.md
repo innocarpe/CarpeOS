@@ -1,494 +1,265 @@
-# CarpeOS
+# <img src="docs/assets/carpeos-mark.svg" alt="" width="36" height="36" align="left" />&nbsp; CarpeOS
 
-[English](README.md) | [한국어](README.ko.md)
+[English](README.md) · [한국어](README.ko.md)
+
+[![License](https://img.shields.io/badge/license-Apache%202.0-0e8a16?style=flat)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.22-0052cc?style=flat)](package.json)
+[![Status](https://img.shields.io/badge/status-pre--MVP-fbca04?style=flat)](#지금-구현된-것)
 
 **Capture context. Compound knowledge.**
 
-CarpeOS는 AI-assisted work를 위한 개인 지식 운영체제입니다.
+CarpeOS는 **AI-assisted work를 위한 개인 지식 운영체제**입니다.
 
-CarpeOS는 여러 AI agent에서 발생하는 작업 맥락을 수집하고,
-provenance-aware knowledge로 구조화하며, 여러 기기 사이에서 동기화하고, 사람과
-LLM이 모두 탐색할 수 있는 retrieval interface로 노출하도록 설계됩니다. 현재 G007
-구현 범위는 local capture, durable outbox storage, Cloudflare Worker/D1/R2 sync
-backend와 client, local rebuildable retrieval projection과 CLI search/get
-command, local stdio MCP server, deterministic MCP context pack,
-manifest-bounded Obsidian projection package입니다. 이 경로들은 synthetic data로
-test coverage를 갖고 있습니다. Live Cloudflare deployment나 hosted MCP/Obsidian
-service를 완료했다고 주장하지 않습니다. GraphRAG, hosted embedding job, hosted
-retrieval, dashboard deployment, production semantic retrieval quality는 계획된
-milestone이며 아직 active feature가 아닙니다.
+에이전트가 한 일을 캡처하고, provenance를 갖춘 지식으로 구조화한 뒤, **사람과
+LLM**이 세션·도구·기기 경계를 넘어 다시 꺼내 쓸 수 있게 만듭니다.
 
-이 저장소는 공개 설계, specification, 구현, roadmap의 canonical 위치입니다. 이
-저장소에는 사용자의 private knowledge store가 들어가지 않습니다.
+<p align="center">
+  <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 추상 네트워크 이미지" width="920" />
+</p>
 
-## 핵심 원칙
+<p align="center">
+  <img src="docs/assets/architecture-flow.svg" alt="Capture, canonicalize, sync/retrieve, MCP·CLI·Obsidian 사용 흐름" width="920" />
+</p>
 
-**Public implementation. Private knowledge.**
+---
 
-공개 CarpeOS 저장소에는 다음이 들어갑니다.
+## 왜 CarpeOS인가
 
-- ontology와 event specification;
-- sync와 retrieval protocol;
-- local collector, hook, CLI, MCP, projection code;
-- migration, test, synthetic fixture;
-- architecture record와 contributor documentation.
+요즘 AI 작업의 잔여물 — 결정, 실패한 경로, 받아들여진 사실, 열린 질문 — 은 채팅
+로그·터미널·노트에 흩어지고, 다음 세션의 다음 에이전트는 다시 차갑게 시작합니다.
 
-사용자의 private CarpeOS instance에는 다음이 들어갑니다.
+CarpeOS는 그 잔여물을 **내구성 있는 지식 평면**으로 다룹니다.
 
-- 실제 AI session transcript;
-- evidence artifact;
-- 개인 프로젝트 기록;
-- canonical event, claim, decision, supersession, derived fact;
-- open loop와 task history;
-- device key, zone key, credential, runtime database.
+| 지금의 고통 | CarpeOS가 지향하는 것 |
+| --- | --- |
+| 채팅 기록은 휘발적이고 신뢰하기 어렵다 | Provenance가 있는 append-only 이벤트 |
+| “메모리”가 임베딩 가방에 가깝다 | Claim / acceptance / supersession을 분리 |
+| 에이전트마다 사일로 | Provider-neutral capture + 공유 MCP retrieval |
+| 노트·인덱스가 곧 진실이 된다 | Private canonical store 위의 rebuildable projection |
+| 기기 간 연속성이 지저분하다 | Local-first capture + private sync |
 
-이 저장소에는 실제 사용자 프로젝트명, 실제 session data, credential,
-production log, private repository, exported runtime store가 들어가면 안 됩니다.
+> **Public implementation. Private knowledge.**  
+> 이 저장소는 설계·스펙·코드를 공개합니다. 실제 세션, 프로젝트, 자격 증명은
+> 절대 넣지 않습니다.
 
-## 현재 구현
+---
 
-G004는 local capture runtime을 추가합니다.
+## 이런 때 쓰면 좋습니다
 
-- provider-neutral raw `EvidenceArtifact` capture;
-- Codex, Claude Code, Grok Build hook template example;
-- raw hook JSON을 위한 AES-256-GCM protected-value store;
-- SQLite database 외부에 저장되는 local key material;
-- Node 22.22+ `node:sqlite` 기반 local store;
-- append-only `capture_requests`, `canonical_events` table;
-- `pending`, `leased`, `delivered` 상태를 가진 durable idempotent metadata
-  outbox;
-- explicit project ID, sanitized Git remote hash, device-local workspace hash에서
-  파생되는 project identity;
-- local init, project identity, hook capture, outbox inspection을 위한 CLI surface.
+- **여러 AI 에이전트**(Codex, Claude Code, Grok Build 등)를 오가며 채팅 다섯
+  개가 아니라 **하나의 메모리 평면**이 필요할 때
+- 다음 세션에도 **결정이 살아남아야** 할 때 — “모델이 한 번 말했다” 수준이
+  아니라
+- **권위(authority)** 가 중요할 때 — draft / rejected / accepted가 retrieval에서
+  똑같이 보이면 안 될 때
+- **로컬 우선 프라이버시**를 원하면서, 직접 운영하는 private cloud sync 옵션이
+  필요할 때
+- 스키마·trust zone·erasure·테스트를 1급 시민으로 두는 **계약 중심** 접근을
+  선호할 때
 
-Local store는 raw provider payload를 encrypted protected value로 기록하고,
-canonical event에는 metadata와 protected-value reference만 저장합니다. 하나의
-`protected_value_id`가 canonical reference, encrypted local row, leased outbox
-metadata, 향후 erasure target을 연결합니다. Local capture는 device ordering을
-위한 `local_sequence`를 부여합니다. Canonical `zone_sequence`는 부여하지 않으며,
-이는 G005 server-side 책임입니다.
+아직 **패키지형 최종 사용자 제품**, 호스티드 SaaS 메모리, 에디터 대체재는
+아닙니다. 매일 에이전트와 일하면서 지식이 쌓이기를 원하는 사람을 위한
+인프라에 가깝습니다.
 
-G005는 첫 sync boundary를 추가합니다.
+---
 
-- authenticated `sync push`, `sync pull`, `sync once`, `sync status` CLI command;
-- metadata acceptance 전에 수행되는 encrypted protected-value upload/download;
-- idempotency, replay, conflict, per-zone sequence, pull cursor state를 위한 D1;
-- encrypted protected-value ciphertext storage를 위한 R2;
-- MacBook/Mac mini sharing을 위한 out-of-band trust-zone sync key enrollment;
-- Worker, client, local store, CLI에 대한 synthetic local integration test.
+## 무엇을 얻나요
 
-Sync backend는 deployable code와 local test infrastructure로 구현되어 있습니다.
-이 저장소는 production Cloudflare Worker, D1 database, R2 bucket이 실제로
-provision되었다고 주장하지 않습니다.
+### 이미 쓰는 에이전트에서 캡처
 
-G006은 첫 local retrieval boundary를 추가합니다.
+Codex, Claude Code, Grok Build의 선택된 lifecycle 이벤트를 provider-neutral
+envelope로 정규화하는 hook 템플릿을 제공합니다. Raw payload는 encrypted
+protected-value에 두고, canonical 레이어에는 metadata와 reference만 남길 수
+있습니다.
 
-- canonical event와 erasure record에서 파생되는 rebuildable retrieval chunk;
-- raw hook JSON이 아니라 claim, observation, decision, selected evidence metadata
-  같은 meaningful-unit chunking;
-- FTS, structured metadata, recency, locally stored vector candidate path;
-- trust-zone visibility, lifecycle, authority, supersession, erasure,
-  projection freshness에 대한 모든 result의 canonical recheck;
-- test와 local smoke check를 위한 deterministic local development embedding;
-- `retrieval rebuild`, `retrieval embed`, `memory search`, `memory get` CLI
-  command.
+### 권위를 보존하는 지식 모델
 
-Deterministic embedding provider는 synthetic development-only provider입니다.
-Workers AI와 Vectorize binding은 adapter boundary로 코드에 있지만, 이 저장소는
-live Workers AI/Vectorize resource, hosted embedding execution, production
-semantic quality를 주장하지 않습니다.
+Evidence는 claim이 아닙니다. Claim은 accepted fact가 아닙니다. Acceptance와
+supersession은 별도의 불변 기록입니다. 그래서 retrieval이 **알려진 것 / 제안된
+것 / 뒤집힌 것**을 한 덩어리 텍스트로 뭉개지 않고 드러낼 수 있습니다.
 
-G007은 local agent와 human projection interface를 추가합니다.
+```mermaid
+flowchart LR
+  E[EvidenceArtifact] --> O[Observation]
+  O --> C[Claim]
+  C --> A[AcceptanceDecision]
+  C --> S[Supersession]
+  A --> F[Accepted fact<br/>query-time 파생]
+  S --> F
+```
 
-- typed local store 위에서 동작하는 local stdio MCP server인
-  `@carpeos/mcp-server`;
-- 정확히 8개 MCP tool: `memory_search`, `memory_get`,
-  `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
-  `memory_capture`, `memory_propose_claim`;
-- content가 local process를 떠나기 전에 수행되는 trust-zone fail-close check와
-  protected-value redaction;
-- `max_items`, `max_characters` 기준 deterministic `ContextBudget` limit과
-  `used`, `truncated`, `omitted` metadata. Token-exact budget이라고 주장하지
-  않습니다;
-- conflict, supersession, erasure, protected-value, trust-zone, lifecycle,
-  authority, valid-time, recorded-time check 이후 visible accepted
-  `AcceptanceDecision` lineage가 있을 때만 context pack의 accepted fact로 포함;
-- local outbox에 draft `Claim` event를 쓰지만 `AcceptanceDecision`은 쓰지 않는
-  `memory_propose_claim`;
-- closed category, path-safety check, manifest-bounded cleanup,
-  `canonical_effect: "none"`을 갖는 deterministic Markdown/manifest projection인
-  `@carpeos/obsidian-projection`.
+### 사람과 에이전트가 공유하는 retrieval
 
-MCP server는 local stdio 전용입니다. Obsidian package는 typed local-store
-snapshot에서 file을 생성하며, generated note는 canonical authority가 아닙니다.
+- **CLI** — projection rebuild, (dev) embed, `memory search` / `memory get`
+- **MCP (stdio)** — `memory_context_pack`, `memory_trace`, `memory_capture`,
+  `memory_propose_claim` 등 로컬 도구 8개
+- **Obsidian projection** — 로컬 스토어 스냅샷에서 manifest-bounded Markdown
+  생성 (projection일 뿐, canonical 권위 아님)
 
-## 빠른 시작
+### Local-first, privately syncable
 
-Prerequisite:
+기기는 append-only outbox에 씁니다. Cloudflare Worker/D1/R2 경로는 private
+operator용 deployable 코드로 존재합니다. Projection은 언제든 canonical
+event에서 다시 만들 수 있습니다.
 
-- Node.js 22.22 이상;
-- pnpm 11.16 이상.
+```mermaid
+flowchart TB
+  subgraph devices [내 기기]
+    H1[Agent hooks]
+    CLI[carpeos CLI]
+    MCP[MCP stdio server]
+    OBS[Obsidian projection]
+  end
 
-Workspace를 build하고 검증합니다.
+  subgraph local [로컬 private runtime]
+    OUT[Encrypted outbox + local store]
+    RET[Hybrid retrieval + recheck]
+  end
+
+  subgraph private [선택적 private sync]
+    W[Cloudflare Worker]
+    D1[(D1 metadata)]
+    R2[(R2 protected blobs)]
+  end
+
+  H1 --> OUT
+  CLI --> OUT
+  OUT --> RET
+  RET --> MCP
+  RET --> OBS
+  OUT <--> W
+  W --> D1
+  W --> R2
+```
+
+---
+
+## 동작 방식
+
+```mermaid
+flowchart LR
+  A[AI lifecycle hooks] --> B[Local capture]
+  B --> C[Canonical event store]
+  C --> D[Query-time accepted facts]
+  C --> E[Rebuildable projections]
+  E --> F[MCP / CLI / Obsidian]
+  D --> F
+```
+
+**사용자에게 중요한 불변 조건:**
+
+1. 수락 이후 canonical event는 append-only입니다.
+2. Accepted fact는 **query-time 파생**입니다 — claim을 “accepted”로 mutate하지
+   않습니다.
+3. Protected plaintext는 canonical event body 밖에 둡니다.
+4. Trust zone은 장식이 아니라 물리적 격리 경계입니다.
+5. 노트·벡터·context pack은 projection입니다 — rebuild 가능하고 그 자체로
+   권위가 아닙니다.
+
+더 깊은 설계는
+[Architecture overview](docs/architecture/overview.md),
+[ADRs](docs/adr/),
+[spec/v1](spec/v1/)을 보세요.
+
+---
+
+## Quick start
+
+**사전 요구:** Node.js ≥ 22.22, pnpm ≥ 11.16.
 
 ```sh
 pnpm install
 pnpm build
-```
 
-Local runtime을 초기화합니다.
-
-```sh
+# 로컬 런타임 초기화
 node apps/carpeos-cli/dist/index.js init
-```
-
-현재 project identity를 확인합니다.
-
-```sh
 node apps/carpeos-cli/dist/index.js project identify
-```
 
-Synthetic Codex hook payload 하나를 capture합니다.
-
-```sh
+# synthetic hook payload 하나 캡처
 node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
   '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
-```
 
-Local outbox를 확인합니다.
-
-```sh
 node apps/carpeos-cli/dist/index.js outbox status
 ```
 
-Secret을 노출하지 않고 sync readiness를 확인합니다.
+가이드:
+
+| 경로 | 문서 |
+| --- | --- |
+| Local capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
+| Private Cloudflare sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
+| Retrieval & memory CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
+| MCP server 설정 | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| Obsidian projection | [docs/guides/obsidian-projection.md](docs/guides/obsidian-projection.md) |
+
+Codex / Claude Code / Grok Build 어댑터 템플릿은 [`adapters/`](adapters/)에
+있습니다.
+
+---
+
+## 지금 구현된 것
+
+CarpeOS는 **pre-MVP**입니다. Capture → outbox → sync client → retrieval → MCP →
+Obsidian projection 로컬 경로는 이 monorepo에서 **synthetic test coverage**와
+함께 구현되어 있습니다.
+
+| 영역 | 상태 |
+| --- | --- |
+| Specs, ontology, ADRs | 존재 |
+| Local capture + durable outbox | 구현 (synthetic 테스트) |
+| Sync Worker/client (Cloudflare 경로) | Deployable 코드 + 로컬 테스트 — live deploy 주장 없음 |
+| Hybrid local retrieval | Deterministic dev embedding으로 구현 |
+| MCP stdio server (도구 8개) | 로컬 구현 |
+| Obsidian projection package | 로컬 구현 |
+| Hosted embeddings / GraphRAG / dashboard | 계획, active feature 아님 |
+| 패키지형 최종 사용자 배포 | 준비되지 않음 |
+
+어댑터 설치, production Cloudflare provisioning, hosted MCP, production
+semantic quality를 “완료”로 취급하지 마세요. 여기서 테스트·문서화되기 전까지는
+아직입니다.
+
+---
+
+## 저장소 경계
+
+이 저장소는 public implementation입니다. Runtime knowledge는 private입니다.
+
+| 이 저장소에 OK | 절대 금지 |
+| --- | --- |
+| Synthetic fixture (`Example Alpha` 등) | 실제 프로젝트명·private URL |
+| Protocol example | 실제 session transcript |
+| 테스트·스키마 | Credential, token, production log |
+| Contributor docs | Runtime DB export / 로컬 사용자 경로 |
+
+---
+
+## 디자인 영향
+
+[obsidian-mind](https://github.com/breferrari/obsidian-mind)의 durable agent
+memory, lifecycle hook, agent-facing semantic retrieval 비전에서 일부 영감을
+받았습니다.
+
+CarpeOS는 독립 설계입니다: Markdown vault가 권위가 아니라 append-only
+canonical event, 명시적 claim/acceptance/supersession, trust zone, protected
+value, provider-neutral MCP 접근.
+
+---
+
+## 기여
+
+[CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md),
+[AGENTS.md](AGENTS.md)를 참고하세요.
 
 ```sh
-node apps/carpeos-cli/dist/index.js sync status
+pnpm check   # format, lint, build, typecheck, test, public-boundary
 ```
 
-Private Worker URL과 local `0600` credential/trust-zone sync key file을 설정한
-뒤 bounded sync cycle을 한 번 실행합니다.
+PR 레이블은 가볍게: kind 하나
+(`feat` / `fix` / `docs` / `spec` / `chore`) + 선택적 area.
+자세한 내용: [docs/maintainers/github-labels.md](docs/maintainers/github-labels.md).
 
-```sh
-node apps/carpeos-cli/dist/index.js sync once \
-  --url https://carpeos-sync.example.workers.dev \
-  --credential-file "$HOME/.carpeos/sync-credential" \
-  --sync-key-file "$HOME/.carpeos/trust-zone-sync.key"
-```
+---
 
-`adapters/`의 provider template은 `PATH`에 `carpeos` binary가 있다고 가정합니다.
-이 저장소에서는 compiled CLI entrypoint인 `apps/carpeos-cli/dist/index.js`를 통해
-command behavior를 테스트합니다. Package installation과 binary distribution은
-별도의 packaging work입니다.
+## 라이선스
 
-전체 command surface와 hook template note는
-[Local Capture Guide](docs/guides/local-capture.md)를 참고하십시오. Local Worker,
-D1, R2, secret file, MacBook/Mac mini sync setup은
-[Cloudflare Sync Guide](docs/guides/cloudflare-sync.md)를 참고하십시오. Local
-projection rebuild, development embedding, search/get command는
-[Retrieval Guide](docs/guides/retrieval.md)를 참고하십시오. Local stdio MCP setup과
-client configuration example은 [MCP Server Guide](docs/guides/mcp-server.md)를
-참고하십시오. Manifest-bounded Markdown projection은
-[Obsidian Projection Guide](docs/guides/obsidian-projection.md)를 참고하십시오.
-
-## Architecture Model
-
-CarpeOS는 immutable capture와 derived retrieval view를 분리합니다.
-
-```text
-AI lifecycle hooks
-        |
-        v
-Local append-only outbox
-        |
-        v
-Private sync service
-        |
-        v
-Canonical event store
-        |
-        +--> query-time accepted fact view
-        +--> Obsidian projection
-        +--> vector projection
-        +--> graph projection
-        +--> search and MCP context packs
-```
-
-Append-only `CanonicalEvent` stream은 private knowledge의 source of truth입니다.
-Accepted fact는 immutable claim, acceptance decision, supersession에서 query
-time에 도출됩니다. CarpeOS는 claim record를 mutate해서 accepted 상태로 만들지
-않습니다.
-
-Obsidian note, vector index, graph index, dashboard, context pack,
-accepted-fact view는 rebuildable projection입니다. 이들은 유용한 interface이지만,
-그 자체로 authoritative하지 않습니다.
-
-Runtime data는 physical `TrustZone` boundary로 분리됩니다. Public,
-local-private, remote-private, shared, exported data는 하나의 storage 또는
-authority model로 합쳐지면 안 됩니다.
-
-## Knowledge Model
-
-Core ontology는 의도적으로 범용적이어야 합니다. 특정 사용자의 private domain을
-포함하지 않고도 software development, research, writing, operations, 기타
-AI-assisted workflow에서 사용할 수 있어야 합니다.
-
-Canonical record type은 다음과 같습니다.
-
-| Type | Purpose |
-| --- | --- |
-| `CanonicalEvent` | 무엇이 일어났는지, 언제 기록되었는지, 누가 만들었는지, 어떤 trust zone이 소유하는지를 기록하는 append-only envelope. |
-| `EvidenceArtifact` | 작업 중 생성되거나 외부에서 참조된 raw material. 크거나 민감한 값은 기본적으로 inline copy하지 않고 external encrypted blob을 가리키는 protected-value reference로 저장해야 합니다. |
-| `Observation` | evidence에서 추출되지만 accepted fact로 승격되지 않은 bounded statement. |
-| `Claim` | claim 자체를 변경하지 않고 별도의 acceptance decision으로 평가하며 supersession과 연결하는 immutable statement. |
-| `AcceptanceDecision` | stated authority, scope, rationale, evidence set 아래에서 claim에 대한 `accepted`, `rejected`, `needs_review`를 기록하는 immutable decision. |
-| `Supersession` | 이전 claim 또는 decision을 replace, narrow, invalidate, update하는 immutable record. |
-
-Derived/supporting concept는 다음을 포함할 수 있습니다.
-
-| Type | Purpose |
-| --- | --- |
-| `Entity` | project, repository, artifact, agent, device, person, concept에 대한 derived 또는 supporting reference. |
-| `Relation` | entity, claim, decision, evidence 사이의 derived 또는 supporting typed link. |
-| `OpenLoop` | 아직 해결되지 않은 task, risk, question, verification gap을 위한 derived work-management view. |
-| `SessionSummary` | 하나의 AI-assisted work session에 대한 projection-friendly compact summary. |
-
-이 모델은 evidence, observation, claim, acceptance, supersession을 분리합니다.
-Retrieval이 모든 것을 text로 평면화하지 않고 authority boundary를 유지하기
-위해서입니다.
-
-CarpeOS는 bitemporal time을 사용합니다.
-
-- `valid_time`은 modeled domain에서 statement가 언제 true인지를 설명합니다;
-- `recorded_time`은 CarpeOS가 event를 언제 기록했는지를 설명합니다.
-
-CarpeOS는 processing lifecycle과 epistemic authority도 분리합니다. Record는
-processing lifecycle 측면에서 captured, extracted, reviewed, projected, synced
-상태일 수 있습니다. Epistemic authority에는 warrant class인 `unverified`,
-`self_reported`, `observed`, `imported`, `derived`, `verified`를 사용합니다.
-`accepted`, `rejected`, `needs_review` 값은 `AcceptanceDecision`에만 존재하며,
-`superseded`, `erased`, `stale`은 query 또는 projection에서 도출되는 상태입니다.
-이 축들은 하나의 mutable status field로 합쳐지면 안 됩니다.
-
-## Retrieval Model
-
-CarpeOS에는 local hybrid retrieval MVP가 구현되어 있습니다.
-
-- project, bitemporal time, lifecycle, authority, trust-zone filter를 위한
-  structured query;
-- 정확한 용어 검색을 위한 full-text search;
-- stored embedding을 위한 vector candidate support;
-- provenance, supersession, erasure, projection freshness를 위한 lineage-aware
-  result metadata;
-- chunk를 visible하게 반환하기 전 수행되는 canonical result recheck.
-
-Vector search는 candidate-retrieval mechanism이며 authority model이 아닙니다.
-모든 result는 canonical source record로 추적 가능해야 하며, vector hit가 claim을
-accepted fact로 만들지 않습니다.
-
-현재 CLI command는 다음과 같습니다.
-
-- `carpeos retrieval rebuild`
-- `carpeos retrieval embed --provider deterministic-local-dev`
-- `carpeos memory search --query ... --visible-trust-zone ...`
-- `carpeos memory get --chunk-id ... --visible-trust-zone ...`
-
-구현된 local LLM-facing interface는 stdio 기반 MCP입니다. G007 tool은 다음과
-같습니다.
-
-- `memory_search`
-- `memory_get`
-- `memory_context_pack`
-- `memory_trace`
-- `memory_timeline`
-- `memory_related`
-- `memory_capture`
-- `memory_propose_claim`
-
-모든 MCP request는 visible trust zone과 protected-value policy를 선언해야 합니다.
-Active local trust zone은 visible이어야 하며, visibility가 없거나 configured
-allowlist 밖이면 content resolution 전에 fail closed됩니다.
-
-Context pack은 deterministic projection입니다. Accepted fact, draft claim,
-rejected claim, observation, evidence summary, conflict, supersession, erasure,
-verification gap, redaction을 분리합니다. Accepted fact에는 visible accepted
-`AcceptanceDecision` lineage가 필요합니다. Draft, rejected, conflicted,
-superseded, erased, hidden, protected-policy-denied record는 accepted fact가
-아닙니다.
-
-현재 Obsidian interface는 local package이며, hosted sync service나 end-user
-Obsidian plugin이 아닙니다. `accepted_fact`, `observation`, `evidence_summary`,
-`proposed_claim`, `rejected_claim`, `conflict`, `supersession`, `erasure`,
-`index`의 closed category를 가진 manifest-bounded Markdown note를 생성합니다.
-
-## Agent Integrations
-
-CarpeOS는 provider-neutral하게 설계됩니다. 현재 template은 selected Codex,
-Claude Code, Grok Build lifecycle event를 common capture envelope로 normalize합니다.
-
-References:
-
-- Codex hooks: <https://learn.chatgpt.com/docs/hooks>
-- Claude Code hooks: <https://code.claude.com/docs/en/hooks>
-- Grok Build hooks: <https://docs.x.ai/build/features/hooks>
-
-Agent는 canonical store를 하나의 provider에 묶지 않고 G007 stdio MCP server를
-통해 같은 local knowledge plane을 읽을 수 있습니다. Codex CLI, Claude Code, Grok
-Build, generic MCP client에 대한 public-safe setup example은 MCP guide에 있습니다.
-Client example은 verification status를 표시합니다. Grok syntax는 client
-session에서 별도로 확인되기 전까지 illustrative example입니다.
-
-## Local-First Sync
-
-CarpeOS는 local-first로 동작하도록 설계됩니다.
-
-- 각 device는 local append-only outbox에 기록합니다;
-- sync는 event를 private remote instance에 업로드합니다;
-- projection은 canonical event에서 다시 생성할 수 있습니다;
-- conflict는 generated note를 직접 수정하는 대신 event, decision, supersession,
-  erasure-ledger 계층에서 해결합니다.
-
-G005는 synthetic local integration test와 함께 첫 remote sync backend와 client
-path를 구현합니다. Cross-Mac sharing은 private operator가 Cloudflare D1/R2/Worker
-resource를 provision하고, authorization을 seed하고, 각 Mac을 같은 out-of-band
-trust-zone sync key로 enroll한 뒤에만 실제로 동작합니다.
-
-## Cloudflare Path
-
-G005 sync backend의 hosted path는 Cloudflare component를 사용합니다.
-
-- sync API를 위한 Workers;
-- canonical event metadata를 위한 D1;
-- encrypted protected-value blob을 위한 R2;
-- external operator/local credential custody. Authorization token hash는 D1에
-  저장하고 raw credential은 local에 두며 Git 밖에 유지합니다.
-
-향후 hosted component는 다음을 포함할 수 있습니다.
-
-- extraction job을 위한 Workers;
-- optional extraction과 embedding을 위한 Workers AI;
-- optional semantic search를 위한 Vectorize;
-- optional dashboard를 위한 Pages.
-
-Workers AI와 Vectorize는 optional adapter입니다. CarpeOS는 가능한 경우 local
-또는 self-hosted alternative도 지원해야 합니다.
-
-개인 MVP에서는 모든 raw hook event를 embedding하지 않고 session summary,
-decision, claim, selected evidence chunk 같은 의미 있는 knowledge unit만
-embedding한다면 free-tier path가 유용할 것으로 예상합니다.
-실제 운영 전에는 current Cloudflare limit을 official documentation 기준으로 다시
-확인해야 합니다. G006 design update 기준으로 Workers AI free usage는
-Neurons/day로, Vectorize free usage는 queried/stored vector dimensions로
-문서화되어 있습니다. 이 quota는 operational limit이며 correctness guarantee가
-아닙니다.
-
-## MVP Roadmap
-
-1. Public project contract 정의.
-   - README files
-   - governance and security boundaries
-   - contribution rules
-   - design influence notes
-
-2. Core specification 정의.
-   - ontology schema
-   - event schema
-   - claim, acceptance decision, supersession model
-   - temporal and provenance model
-   - trust zone and protected-value reference model
-   - MCP tool contracts
-
-3. Local runtime 구축.
-   - local SQLite store
-   - append-only outbox
-   - synthetic fixtures
-   - projection rebuild tests
-
-4. Agent capture adapter 추가.
-   - Codex CLI lifecycle hooks
-   - Claude Code lifecycle hooks
-   - Grok Build lifecycle hooks
-   - provider-neutral capture envelope
-
-5. Sync 추가.
-   - Cloudflare sync adapter
-   - encrypted protected-value upload/download
-   - cross-Mac private operator setup
-
-6. Retrieval 추가.
-   - structured search
-   - full-text search
-   - local vector projection
-   - canonical recheck
-
-7. Projection과 interface 추가.
-   - Obsidian projection generator: G007에서 local implementation 완료
-   - context pack generation: G007에서 local implementation 완료
-   - MCP server: G007에서 local stdio implementation 완료
-   - graph projection: planned
-   - optional dashboard: planned
-
-## Repository Boundary
-
-Synthetic example만 사용합니다.
-
-허용되는 예시:
-
-```text
-Example Alpha
-Example Repository
-Example Decision
-Synthetic Incident
-```
-
-허용되지 않는 예시:
-
-```text
-real project names
-real repository URLs
-real session transcripts
-real commit hashes from private work
-real production logs
-credentials or tokens
-local user paths
-```
-
-Private use 중 발견한 pattern은 public ontology rule, test, documentation으로
-일반화할 수 있습니다. 그 근거가 된 private fact는 사용자의 private CarpeOS
-instance 안에 남겨야 합니다.
-
-## Design Influences
-
-CarpeOS는 [obsidian-mind](https://github.com/breferrari/obsidian-mind)에서
-일부 영감을 받았습니다. 특히 AI agent를 위한 durable memory, lifecycle-hook
-integration, agent가 접근할 수 있는 interface를 통한 semantic retrieval이라는
-vision에서 영향을 받았습니다.
-
-CarpeOS는 다른 architecture model을 가진 독립적인 구현입니다.
-
-- Markdown vault를 authority로 삼지 않고 append-only canonical event log를
-  사용합니다;
-- CanonicalEvent, EvidenceArtifact, Observation, Claim, AcceptanceDecision,
-  Supersession semantics를 명시합니다;
-- temporal, authority, provenance-aware ontology를 사용합니다;
-- physical trust-zone isolation과 protected-value reference를 사용합니다;
-- local-first multi-device synchronization을 지향합니다;
-- Obsidian, vector, graph, context-pack projection을 rebuildable하게 다룹니다;
-- Codex, Grok, Claude, 기타 MCP-capable agent를 위한 provider-neutral
-  integration을 지향합니다.
-
-별도로 명시하지 않는 한 CarpeOS는 `obsidian-mind`의 source code를 포함하지
-않습니다. 재사용되는 third-party component는 원래의 copyright와 license notice를
-유지해야 합니다.
-
-## Project Status
-
-CarpeOS는 pre-MVP 단계입니다. G007 local capture, sync, retrieval, stdio MCP,
-context pack, Obsidian projection path는 구현되어 있고 repository 안에 synthetic
-test coverage가 있지만, packaged end-user release로 사용할 준비는 아직 되지
-않았고 live deployment도 주장하지 않습니다.
-
-Adapter installation, GraphRAG, hosted embedding, Vectorize operation, hosted
-MCP, hosted Obsidian sync, dashboard deployment, 기타 live deployment path는 이
-저장소에서 구현, 테스트, 문서화되기 전까지 stable한 것으로 간주하지 마십시오.
+[Apache License 2.0](LICENSE)
