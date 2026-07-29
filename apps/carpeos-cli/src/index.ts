@@ -781,10 +781,10 @@ function splitCommand(argv: readonly string[]): {
 }
 
 function runVersion(argv: readonly string[]): number {
-  for (const token of argv) {
+  for (const arg of argv) {
     // Output is always JSON; --json is accepted as a no-op for scripting symmetry.
-    if (token === "--json") continue;
-    throw new CliUsageError(`unexpected argument for version: ${token}\nRun: carpeos help version`);
+    if (arg === "--json") continue;
+    throw new CliUsageError(`unexpected argument for version: ${arg}\nRun: carpeos help version`);
   }
   writeJson(process.stdout, {
     ok: true,
