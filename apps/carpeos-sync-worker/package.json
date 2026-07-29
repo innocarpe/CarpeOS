@@ -15,10 +15,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "deploy": "wrangler deploy",
+    "cloudflare:validate": "node ../../scripts/cloudflare-operator.mjs validate",
+    "deploy": "node ../../scripts/cloudflare-operator.mjs deploy",
     "dev": "wrangler dev",
     "d1:migrations:local": "wrangler d1 migrations apply carpeos_sync --local",
-    "d1:migrations:remote": "wrangler d1 migrations apply carpeos_sync --remote",
+    "d1:migrations:remote": "node ../../scripts/cloudflare-operator.mjs migrate",
     "test": "vitest run --exclude test/g008-local-e2e.test.ts",
     "test:e2e": "G008_NODE_E2E=1 vitest run test/g008-local-e2e.test.ts --config /dev/null --pool threads --sequence.concurrent false",
     "typecheck": "tsc --noEmit --project tsconfig.typecheck.json"

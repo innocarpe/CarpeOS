@@ -1,7 +1,7 @@
 # Private Cloudflare Operator Config
 
-Status: Private operator configuration contract. Documentation only. Not
-deployed.
+Status: Private operator configuration and package-command contract. No
+Cloudflare migration, deployment, or hosted runtime is proven.
 
 This guide defines the private Cloudflare configuration boundary for one
 operator-owned CarpeOS instance. The public repository tracks only synthetic
@@ -10,8 +10,11 @@ contain real Cloudflare account IDs, D1 database IDs, R2 bucket names, Worker
 routes, tokens, credentials, private project names, or local operator paths.
 
 The ignored private file is a complete standalone Wrangler configuration. Do
-not treat it as a partial file. Every remote Wrangler command in this guide
-passes the private file with an explicit quoted `--config "$CARPEOS_CF_CONFIG"`.
+not treat it as a partial file. The package commands in this guide require the
+absolute `CARPEOS_CF_CONFIG` environment variable. The repository operator
+validates that path and passes it to Wrangler as an explicit `--config` value.
+Documenting or testing this wiring does not prove that any validation dry run,
+migration, deployment, resource lookup, or hosted sync has occurred.
 
 Official references:
 
@@ -33,6 +36,14 @@ raw output would expose a real identifier, keep that output under ignored
 `.carpeos` and redact it before copying evidence into an issue, pull request, or
 release note.
 
+The operator writes intentional validation bundle output to the ignored
+`.carpeos/cloudflare/dry-run` directory beside the validated private config.
+Wrangler may also create transient `.wrangler/` working directories. They are
+ignored at every repository depth, are not evidence, and must remain untracked.
+The public-boundary scanner rejects a `.wrangler/` path even if it is force-added.
+Repository formatting and lint inputs also exclude `.omx/`, `.carpeos/`, and
+generated `.wrangler/` directories at every depth.
+
 The tracked config is placeholder-only evidence for repository shape. It is not
 a deployment config. Do not edit tracked placeholders into real values. Create
 and maintain the ignored private file instead:
@@ -40,7 +51,7 @@ and maintain the ignored private file instead:
 ```sh
 CARPEOS_REPO_ROOT="$(git rev-parse --show-toplevel)"
 CARPEOS_CF_DIR="$CARPEOS_REPO_ROOT/.carpeos/cloudflare"
-CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
+export CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
 CARPEOS_CF_DRY_RUN_DIR="$CARPEOS_CF_DIR/dry-run"
 
 umask 077
@@ -81,12 +92,10 @@ bucket_name = "carpeos-protected-values-private-example"
 CARPEOS_ENV = "private-example"
 ```
 
-The private config path is absolute because
-`pnpm --filter @carpeos/sync-worker exec` runs Wrangler with the Worker package
-as its current working directory. Passing a relative `--config` path would make
-Wrangler search from `apps/carpeos-sync-worker`, not from the repository root.
-The `main` and `migrations_dir` values inside the private config remain relative
-to the private config file itself, so they point back from
+The operator requires an absolute private config path so its meaning does not
+depend on the caller's current working directory. The `main` and
+`migrations_dir` values inside the private config remain relative to the private
+config file itself, so they point back from
 `.carpeos/cloudflare/wrangler.toml` to the tracked Worker source and migrations.
 
 This initial private sync config intentionally excludes Workers AI and Vectorize
@@ -108,25 +117,26 @@ Run preflight from anywhere inside the repository before any remote operation:
 ```sh
 CARPEOS_REPO_ROOT="$(git rev-parse --show-toplevel)"
 CARPEOS_CF_DIR="$CARPEOS_REPO_ROOT/.carpeos/cloudflare"
-CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
-CARPEOS_CF_DRY_RUN_DIR="$CARPEOS_CF_DIR/dry-run"
+export CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
 
 test -f "$CARPEOS_CF_CONFIG"
 test "$(stat -f "%Lp" "$CARPEOS_CF_DIR")" = "700"
 test "$(stat -f "%Lp" "$CARPEOS_CF_CONFIG")" = "600"
 git check-ignore "$CARPEOS_CF_CONFIG"
-pnpm --filter @carpeos/sync-worker exec wrangler deploy \
-  --dry-run \
-  --outdir "$CARPEOS_CF_DRY_RUN_DIR" \
-  --config "$CARPEOS_CF_CONFIG"
+pnpm --filter @carpeos/sync-worker cloudflare:validate
 ```
 
-The dry run proves only that Wrangler can parse the private configuration and
-bundle the Worker entrypoint. It does not prove a hosted Worker exists, that D1
-or R2 resources are reachable, that migrations ran, that auth hashes were
-seeded, or that a sync client has completed a remote cycle. Raw dry-run output
-may include private identifiers; store it only under ignored `.carpeos` or a
-private evidence store and redact it before sharing.
+The validation command checks the exact ignored, untracked repository-local
+path, restrictive file modes, required resource values, and documented
+placeholders before it invokes `wrangler deploy --dry-run` with the explicit
+config and an explicit `.carpeos/cloudflare/dry-run` output directory. A
+successful dry run proves only that Wrangler can parse the private configuration
+and bundle the Worker entrypoint. It does not prove a hosted Worker exists, that
+D1 or R2 resources are reachable, that migrations ran, that auth hashes were
+seeded, or that a sync client completed a remote cycle. Raw dry-run output may
+include private identifiers; keep it only under ignored `.carpeos` or a private
+evidence store and redact it before sharing. Do not preserve transient
+`.wrangler/` directories as validation evidence.
 
 ## Future Mutation Gates
 
@@ -138,21 +148,17 @@ config:
 ```sh
 CARPEOS_REPO_ROOT="$(git rev-parse --show-toplevel)"
 CARPEOS_CF_DIR="$CARPEOS_REPO_ROOT/.carpeos/cloudflare"
-CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
-CARPEOS_D1_NAME="carpeos_sync_private_example"
+export CARPEOS_CF_CONFIG="$CARPEOS_CF_DIR/wrangler.toml"
 
-pnpm --filter @carpeos/sync-worker exec wrangler d1 migrations apply \
-  "$CARPEOS_D1_NAME" \
-  --remote \
-  --config "$CARPEOS_CF_CONFIG"
-
-pnpm --filter @carpeos/sync-worker exec wrangler deploy \
-  --config "$CARPEOS_CF_CONFIG"
+pnpm --filter @carpeos/sync-worker d1:migrations:remote
+pnpm --filter @carpeos/sync-worker deploy
 ```
 
-Do not run those commands from the tracked placeholder config. Do not use package
-scripts for private remote mutations unless the script accepts and passes the
-same explicit private config path.
+Do not run those commands from the tracked placeholder config. These package
+scripts fail closed unless `CARPEOS_CF_CONFIG` identifies the validated private
+config, and they pass that path explicitly to Wrangler. Their presence is not
+authorization to run a migration or deployment and is not evidence that either
+operation has occurred.
 
 ## Validation
 
@@ -162,8 +168,8 @@ separate:
 - Repository evidence: tracked config contains placeholders only; ignored
   private config path is proven by `git check-ignore`; docs show only synthetic
   placeholders.
-- Local parse evidence: `wrangler deploy --dry-run --outdir ... --config ...`
-  succeeds and stores raw output privately.
+- Local parse evidence: the `cloudflare:validate` package command succeeds and
+  its raw output is stored privately.
 - Resource evidence: the operator can identify the intended Worker, D1 database,
   and R2 bucket from Cloudflare-controlled state.
 - Mutation evidence: migrations and deploy commands use the quoted private
@@ -171,8 +177,9 @@ separate:
 - Runtime evidence: a later bounded sync command reaches the hosted Worker and
   proves D1/R2 behavior without leaking credentials or protected values.
 
-This guide can claim only repository evidence and local parse evidence.
-Resource, mutation, and runtime evidence belong to later rollout steps.
+This guide defines how to collect repository and local parse evidence; it does
+not claim that either command has been run for a private instance. Resource,
+mutation, and runtime evidence belong to later rollout steps.
 
 ## Stop Conditions
 
@@ -220,6 +227,10 @@ case "$CARPEOS_CF_DRY_RUN_DIR" in
     ;;
 esac
 ```
+
+Before removing a generated `.wrangler/` directory, verify that Git ignores it
+and that none of its files are tracked. Treat it as disposable generated state,
+not as bundle evidence or source.
 
 Remove the private config only when the operator has another copy of the
 Cloudflare resource mapping or intentionally wants to discard it. Do not copy the

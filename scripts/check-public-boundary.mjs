@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const protectedPathPatterns = [
   /(^|\/)\.omx(\/|$)/,
   /(^|\/)\.carpeos(\/|$)/,
+  /(^|\/)\.wrangler(\/|$)/,
   /\.(?:db|sqlite|sqlite3)(?:-(?:wal|shm))?$/i,
   /\.(?:jsonl|transcript|pem|key|p12|pfx)$/i,
   /(?:^|\/)(?:\.env(?:\..*)?|\.dev\.vars)$/i,
@@ -32,6 +33,43 @@ const protectedContentPatterns = [
     pattern: /(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*=\s*["']?[^"'\s]+/i,
   },
 ];
+
+const cloudflareIdentifierAssignment =
+  /^\s*(database_id|account_id|database_name|bucket_name)\s*=\s*(?:"((?:\\.|[^"])*)"|'([^']*)')\s*(?:#.*)?$/i;
+
+const approvedCloudflareIdentifierValues = new Set([
+  "00000000-0000-0000-0000-000000000000",
+  "00000000-0000-0000-0000-000000000001",
+  "carpeos-protected-values",
+  "carpeos_sync",
+  "d1-database-id-from-cloudflare",
+]);
+
+function isClearlySyntheticPlaceholder(value) {
+  const normalized = value.toLowerCase();
+  return (
+    approvedCloudflareIdentifierValues.has(normalized) ||
+    normalized.includes("${") ||
+    /(?:^|[-_])(?:example|unit[-_]?test|not[-_]?deployed|test)(?:[-_]|$)/.test(normalized)
+  );
+}
+
+function cloudflareIdentifierViolation(content) {
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(cloudflareIdentifierAssignment);
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1].toLowerCase();
+    const value = match[2] ?? match[3];
+    if (!isClearlySyntheticPlaceholder(value)) {
+      return `contains non-placeholder Cloudflare ${key} assignment`;
+    }
+  }
+
+  return undefined;
+}
 
 const binaryExtensions = new Set([
   ".gif",
@@ -91,6 +129,11 @@ for (const filePath of files) {
     if (pattern.test(content)) {
       violations.push(`${filePath}: contains ${label}`);
     }
+  }
+
+  const cloudflareViolation = cloudflareIdentifierViolation(content);
+  if (cloudflareViolation) {
+    violations.push(`${filePath}: ${cloudflareViolation}`);
   }
 }
 
