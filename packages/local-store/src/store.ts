@@ -155,6 +155,15 @@ export type OutboxStatus = {
   delivered: number;
 };
 
+export type OutboxErrorSummary = {
+  outbox_id: number;
+  event_id: string;
+  state: "pending" | "leased";
+  attempts: number;
+  last_error: string | null;
+  trust_zone_id: string | null;
+};
+
 export type LeasedOutboxItem = {
   outbox_id: number;
   event_id: string;
@@ -770,6 +779,56 @@ export class LocalCaptureStore {
       status[row.state] = Number(row.count);
     }
     return status;
+  }
+
+  /**
+   * Recent pending/leased outbox rows that have a last_error (operator diagnosis).
+   * Caps to a small bound so status stays readable.
+   */
+  listOutboxErrors(limit = 10): OutboxErrorSummary[] {
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("listOutboxErrors limit must be a positive integer");
+    }
+    const rows = this.db
+      .prepare(
+        `
+          SELECT outbox_id, event_id, state, attempts, last_error, push_request_json
+          FROM outbox
+          WHERE state IN ('pending', 'leased')
+            AND last_error IS NOT NULL
+            AND length(last_error) > 0
+          ORDER BY outbox_id
+          LIMIT ?
+        `,
+      )
+      .all(limit) as Array<{
+      outbox_id: number | bigint;
+      event_id: string;
+      state: "pending" | "leased";
+      attempts: number | bigint;
+      last_error: string | null;
+      push_request_json: string;
+    }>;
+
+    return rows.map((row) => {
+      let trustZoneId: string | null = null;
+      try {
+        const parsed = JSON.parse(row.push_request_json) as { trust_zone_id?: unknown };
+        if (typeof parsed.trust_zone_id === "string") {
+          trustZoneId = parsed.trust_zone_id;
+        }
+      } catch {
+        // ignore corrupt push_request_json
+      }
+      return {
+        outbox_id: Number(row.outbox_id),
+        event_id: row.event_id,
+        state: row.state,
+        attempts: Number(row.attempts),
+        last_error: row.last_error,
+        trust_zone_id: trustZoneId,
+      };
+    });
   }
 
   /**

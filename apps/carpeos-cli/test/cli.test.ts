@@ -131,6 +131,72 @@ describe("carpeos CLI", () => {
     expect(status.stdout).toMatchObject({
       ok: true,
       status: { pending: 1, leased: 0, delivered: 0 },
+      errors: [],
+    });
+  });
+
+  it("surfaces outbox last_error on outbox status and sync status", () => {
+    const context = makeContext();
+    const captured = runJson(
+      ["capture-hook", "--provider", "codex", "--trust-zone", "tz_error_surface"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_error_surface",
+        message: "needs error surface",
+      }),
+    );
+    expect(captured.status).toBe(0);
+    const outboxId = captured.stdout.outbox_id;
+    const leased = runJson(["outbox", "lease", "--limit", "1", "--lease-ms", "60000"], context);
+    expect(leased.status).toBe(0);
+    const lease = leased.stdout.lease as { lease_id?: string };
+    const leaseId = String(lease.lease_id);
+    const retried = runJson(
+      [
+        "outbox",
+        "retry",
+        "--outbox-id",
+        String(outboxId),
+        "--lease-id",
+        leaseId,
+        "--delay-ms",
+        "0",
+        "--error",
+        "synthetic_block_reason",
+      ],
+      context,
+    );
+    expect(retried.status).toBe(0);
+
+    const outboxStatus = runJson(["outbox", "status"], context);
+    expect(outboxStatus.status).toBe(0);
+    expect(outboxStatus.stdout).toMatchObject({
+      ok: true,
+      status: { pending: 1, leased: 0, delivered: 0 },
+      errors: [
+        {
+          outbox_id: outboxId,
+          state: "pending",
+          last_error: "synthetic_block_reason",
+          trust_zone_id: "tz_error_surface",
+        },
+      ],
+    });
+
+    const syncStatus = runJson(["sync", "status", "--trust-zone", "tz_error_surface"], context);
+    expect(syncStatus.status).toBe(0);
+    expect(syncStatus.stdout).toMatchObject({
+      ok: true,
+      local: {
+        outbox_errors: [
+          {
+            outbox_id: outboxId,
+            last_error: "synthetic_block_reason",
+            trust_zone_id: "tz_error_surface",
+          },
+        ],
+      },
     });
   });
 
