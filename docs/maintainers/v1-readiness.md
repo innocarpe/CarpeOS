@@ -88,6 +88,19 @@ carpeos setup doctor
 pnpm smoke:mcp   # from a git checkout of the same tag (monorepo gate)
 ```
 
+
+
+### Maintainer helper (optional)
+
+From a monorepo checkout (after `pnpm install` / build as needed):
+
+```sh
+npm install -g @innocarpe/carpeos@<version>
+pnpm g1:recheck -- --version <version>
+# or: node scripts/g1-recheck.mjs --version <version>
+# monorepo smoke is included; use --skip-smoke for install-only
+```
+
 Record version, OS, and pass/fail in the release PR or freeze decision.
 
 ## G2 doc sync checklist

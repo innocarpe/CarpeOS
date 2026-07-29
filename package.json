@@ -23,7 +23,8 @@
     "install:local": "node scripts/install-local.mjs",
     "pack:npm": "pnpm --filter @innocarpe/carpeos build && pnpm --filter @innocarpe/carpeos exec npm pack --pack-destination ../..",
     "release": "node scripts/release.mjs",
-    "release:dry": "node scripts/release.mjs patch --dry-run"
+    "release:dry": "node scripts/release.mjs patch --dry-run",
+    "g1:recheck": "node scripts/g1-recheck.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
