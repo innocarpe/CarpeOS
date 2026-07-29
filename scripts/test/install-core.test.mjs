@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -43,6 +43,37 @@ describe("install-core", () => {
     const mcp = renderWrapper(config, "mcp");
     assert.match(mcp, /mcp\.env/);
     assert.equal(shellQuote("a'b"), `'a'\\''b'`);
+  });
+
+  it("prefers npm package bin entrypoints so wrappers keep setup routing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "carpeos-npm-layout-"));
+    try {
+      const binDir = join(dir, "bin");
+      const distDir = join(dir, "dist");
+      mkdirSync(binDir, { recursive: true });
+      mkdirSync(distDir, { recursive: true });
+      writeFileSync(join(binDir, "carpeos.js"), "#!/usr/bin/env node\n");
+      writeFileSync(join(binDir, "carpeos-mcp-server.js"), "#!/usr/bin/env node\n");
+      writeFileSync(join(distDir, "cli.js"), "");
+      writeFileSync(join(distDir, "mcp-server.js"), "");
+      const config = buildConfig({
+        repoRoot: dir,
+        home: join(dir, "home"),
+        binDir: join(dir, "user-bin"),
+        trustZoneId: "tz_local_default",
+        workspaceRoot: dir,
+        nodePath: "/usr/bin/node",
+        updatedAt: "2026-01-01T00:00:00Z",
+      });
+      assert.equal(config.distribution, "npm");
+      assert.equal(config.cli_entry, join(dir, "bin/carpeos.js"));
+      assert.equal(config.mcp_entry, join(dir, "bin/carpeos-mcp-server.js"));
+      const cli = renderWrapper(config, "cli");
+      assert.match(cli, /bin\/carpeos\.js/);
+      assert.doesNotMatch(cli, /dist\/cli\.js/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("dry-run install records planned steps", () => {

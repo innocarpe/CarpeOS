@@ -107,8 +107,12 @@ export async function runSetup(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  const cliEntry = join(packageRoot, "dist/cli.js");
-  const mcpEntry = join(packageRoot, "dist/mcp-server.js");
+  // Wrappers must call package bin entrypoints (setup/doctor routing). dist/* is the
+  // bundled monorepo CLI and does not understand `carpeos setup`.
+  const cliEntry = join(packageRoot, "bin/carpeos.js");
+  const mcpEntry = join(packageRoot, "bin/carpeos-mcp-server.js");
+  const distCli = join(packageRoot, "dist/cli.js");
+  const distMcp = join(packageRoot, "dist/mcp-server.js");
 
   let plan;
   try {
@@ -136,8 +140,13 @@ export async function runSetup(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  if (!existsSync(cliEntry) || !existsSync(mcpEntry)) {
-    process.stderr.write("package dist missing; reinstall @innocarpe/carpeos\n");
+  if (
+    !existsSync(cliEntry) ||
+    !existsSync(mcpEntry) ||
+    !existsSync(distCli) ||
+    !existsSync(distMcp)
+  ) {
+    process.stderr.write("package install incomplete; reinstall @innocarpe/carpeos\n");
     return 1;
   }
 
@@ -175,7 +184,12 @@ export async function runSetup(argv = process.argv.slice(2)) {
       hosts: result.hostResults,
       doctor: result.doctor,
       path_hint: result.state.path_hint,
-      next: ["Open a new shell (or run: hash -r)", "carpeos setup doctor", "carpeos --help"],
+      next: [
+        "Open a new shell (or run: hash -r)",
+        "carpeos setup doctor",
+        "carpeos setup show",
+        "carpeos init --help",
+      ],
     };
 
     if (plan.json) {
