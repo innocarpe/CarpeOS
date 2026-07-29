@@ -118,9 +118,31 @@ Check local sync readiness without exposing secrets:
 
 ```sh
 carpeos sync status
+carpeos project identify
 ```
 
-Run one bounded push and pull cycle:
+`sync status` and `project identify` report the active `trust_zone_id` and how
+it was resolved (`trust_zone_source`: `flag` | `env` | `config` |
+`device_default`). Pending outbox zone mismatches surface as a structured
+warning. Rows with `last_error` appear under `outbox_errors` when that field is
+available in the installed CLI.
+
+### Trust zone resolution
+
+Without `--trust-zone`, the CLI picks a zone in this order:
+
+1. `--trust-zone` when provided
+2. `CARPEOS_TRUST_ZONE` or `CARPEOS_MCP_TRUST_ZONE` (installer writes the latter
+   into `mcp.env`)
+3. `~/.carpeos/config.json` `trust_zone_id` (installer default
+   `tz_local_default`)
+4. device-derived `tz_local_<client_suffix>`
+
+Capture and sync must use the **same** active zone as the outbox rows they are
+meant to process. Prefer relying on config/env after install rather than
+passing a different flag only on some commands.
+
+### Bounded cycle
 
 ```sh
 carpeos sync once \
@@ -135,6 +157,17 @@ carpeos sync once \
 acceptance or replay. `sync pull` imports bounded pages and advances the local
 cursor only after applying the page. `sync once` performs bounded push first and
 then bounded pull. There is no daemon or infinite loop in G005.
+
+### Same-device push then pull
+
+A single enrolled Mac can push local outbox events and pull them back. Remote
+accept assigns `zone_sequence`. Local captures omit that field (canonical
+events are append-only). Pull treats “same content, remote sequence only” as
+idempotent **replay**, not a divergent rewrite. True content divergence still
+fails closed.
+
+Clean cross-device import (second Mac, empty local store for those events) is a
+separate enrollment path; it is not required to prove single-Mac remote push.
 
 The sync URL must use HTTPS for any non-local endpoint. Plain HTTP is accepted
 only for loopback local development hosts: `localhost`, `127.0.0.1`, or `[::1]`.
