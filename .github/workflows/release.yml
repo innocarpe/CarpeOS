@@ -85,6 +85,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pkg.outputs.tag }}
-          name: @innocarpe/carpeos v${{ steps.pkg.outputs.version }}
+          name: "@innocarpe/carpeos v${{ steps.pkg.outputs.version }}"
           body_path: release-notes.md
           generate_release_notes: false
