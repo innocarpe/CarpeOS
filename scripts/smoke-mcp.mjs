@@ -212,7 +212,8 @@ function runCliSmoke() {
             hook_event_name: "SessionEnd",
             session_id: "session_smoke_g5",
             timestamp: "2026-01-01T00:00:00Z",
-            message: "synthetic g5 smoke alpha",
+            message:
+              "Decision: keep the synthetic alpha path as the default retrieval smoke fixture.",
           }),
         ],
         check: (body) =>
