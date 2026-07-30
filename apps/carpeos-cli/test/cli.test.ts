@@ -149,16 +149,20 @@ describe("carpeos CLI", () => {
       }),
     );
     expect(captured.status).toBe(0);
-    expect(captured.stdout.extraction?.status).toBe("extracted");
-    expect(captured.stdout.extraction?.observation_event_id).toMatch(/^evt_/);
+    const capturedOut = captured.stdout as {
+      event_id?: string;
+      extraction?: { status?: string; observation_event_id?: string };
+    };
+    expect(capturedOut.extraction?.status).toBe("extracted");
+    expect(capturedOut.extraction?.observation_event_id).toMatch(/^evt_/);
     expect(captured.rawStdout).not.toContain("SYNTHETIC_EXTRACT_SENTINEL");
 
-    const extract = runJson(["extract", "--event-id", String(captured.stdout.event_id)], context);
+    const extract = runJson(["extract", "--event-id", String(capturedOut.event_id)], context);
     expect(extract.status).toBe(0);
-    expect(extract.stdout.status).toBe("replay");
+    expect((extract.stdout as { status?: string }).status).toBe("replay");
 
     const status = runJson(["outbox", "status"], context);
-    expect(status.stdout.status.pending).toBe(2);
+    expect((status.stdout as { status?: { pending?: number } }).status?.pending).toBe(2);
   });
 
   it("surfaces outbox last_error on outbox status and sync status", () => {
