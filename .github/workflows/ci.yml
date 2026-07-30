@@ -40,5 +40,8 @@ jobs:
       - name: Run product loop smoke (1.0)
         run: pnpm smoke:product
 
+      - name: Run knowledge adjudication smoke (2.0 MVP)
+        run: pnpm smoke:knowledge
+
       - name: Run sync worker G008 E2E
         run: pnpm --filter @carpeos/sync-worker test:e2e

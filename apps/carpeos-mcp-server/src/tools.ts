@@ -493,7 +493,8 @@ function makeRetrievalQuery(input: {
     query_text: input.text,
     filters: {
       visible_trust_zone_ids: [...input.visibility.visible_trust_zone_ids],
-      lifecycle_status: ["active", "draft"],
+      // Product 2.0: promoted (active) meaning only by default; held drafts opt-in later.
+      lifecycle_status: ["active"],
       epistemic_authority: [
         "unverified",
         "self_reported",

@@ -45,6 +45,17 @@ export {
   type ObservationExtractionPlan,
 } from "./extract-observation.js";
 
+export {
+  ADJUDICATION_POLICY_VERSION,
+  adjudicateKnowledgeCandidate,
+  adjudicationIdempotencyKey,
+  buildCandidateStatement,
+  type AdjudicationResult,
+  type AdjudicationScores,
+  type KnowledgeCandidate,
+  type KnowledgeDisposition,
+} from "./adjudication.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 

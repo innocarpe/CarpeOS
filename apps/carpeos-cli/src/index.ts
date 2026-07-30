@@ -71,6 +71,8 @@ export async function runCli(
         return await runCaptureHook(rest, env);
       case "extract":
         return runExtract(rest, env);
+      case "adjudicate":
+        return runAdjudicate(rest, env);
       case "outbox":
         return runOutbox(rest, env);
       case "sync":
@@ -505,6 +507,80 @@ function runExtract(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       ok: result.status !== "failed",
       command: "extract",
       ...result,
+    });
+    return result.status === "failed" ? 1 : 0;
+  } finally {
+    store.close();
+  }
+}
+
+function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const parsed = parseArgs({
+    args: [...argv],
+    allowPositionals: false,
+    strict: true,
+    options: {
+      "event-id": { type: "string" },
+      "signal-text": { type: "string" },
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+      stats: { type: "boolean", default: false },
+    },
+  });
+
+  const store = openStore(
+    compactCommonOptions(
+      parsed.values.home,
+      parsed.values["project-id"],
+      parsed.values["trust-zone"],
+    ),
+    env,
+  );
+  try {
+    if (parsed.values.stats === true) {
+      writeJson(process.stdout, {
+        ok: true,
+        command: "adjudicate",
+        mode: "stats",
+        counts: store.listDispositionCounts(),
+      });
+      return 0;
+    }
+
+    const eventId = parsed.values["event-id"];
+    if (eventId === undefined || eventId.trim().length === 0) {
+      throw new CliUsageError(
+        "adjudicate requires --event-id <evt_…> or --stats (see: carpeos help adjudicate)",
+      );
+    }
+    const signalText = parsed.values["signal-text"];
+    const result = store.adjudicateFromEventId(eventId.trim(), {
+      ...(signalText === undefined || signalText.trim().length === 0
+        ? {}
+        : { signalText: signalText.trim() }),
+    });
+    writeJson(process.stdout, {
+      ok: result.status !== "failed",
+      command: "adjudicate",
+      ...result,
+      ...(result.status === "promoted" ||
+      result.status === "held" ||
+      (result.status === "replay" && result.extraction !== undefined)
+        ? {
+            extraction: {
+              status: result.extraction?.status,
+              ...(result.extraction !== undefined &&
+              (result.extraction.status === "extracted" || result.extraction.status === "replay")
+                ? {
+                    observation_event_id: result.extraction.event.event_id,
+                    observation_id: result.extraction.event.payload.observation_id,
+                    lifecycle_status: result.extraction.event.lifecycle_status,
+                  }
+                : {}),
+            },
+          }
+        : {}),
     });
     return result.status === "failed" ? 1 : 0;
   } finally {
@@ -971,7 +1047,8 @@ COMMANDS
   init                 Initialize local runtime store (~/.carpeos by default)
   project identify     Print resolved project_id / client_id / trust zone
   capture-hook         Ingest a provider hook envelope (codex|claude|grok)
-  extract              Extract Observation from an EvidenceArtifact event
+  extract              Extract Observation from an EvidenceArtifact event (via adjudicate)
+  adjudicate           Knowledge adjudication: promote | hold | reject (+ --stats)
   outbox               Local durable outbox (status|lease|ack|retry)
   sync                 Push/pull with a remote sync edge (status|push|pull|once)
   retrieval            Rebuild local retrieval index or run embed jobs
@@ -1067,7 +1144,7 @@ OPTIONS
   --trust-zone <id>
 `;
     case "extract":
-      return `carpeos extract — EvidenceArtifact → Observation (metadata heuristic)
+      return `carpeos extract — EvidenceArtifact → Observation (via adjudication)
 
 USAGE
   carpeos extract --event-id <evt_…> [options]
@@ -1079,9 +1156,29 @@ OPTIONS
   --trust-zone <id>         Trust zone
 
 NOTES
-  Uses product meaningful-unit policy (PostToolUse off by default).
+  Runs knowledge adjudication (promote|hold|reject). Reject skips meaning units.
   Statement text is metadata-only (no decrypted transcript).
-  Idempotent: re-running the same event_id replays the Observation.
+  Idempotent: re-running the same event_id replays disposition + Observation.
+`;
+    case "adjudicate":
+      return `carpeos adjudicate — promote | hold | reject evidence as knowledge
+
+USAGE
+  carpeos adjudicate --event-id <evt_…> [options]
+  carpeos adjudicate --stats [options]
+
+OPTIONS
+  --event-id <id>           EvidenceArtifact event_id to adjudicate
+  --signal-text <text>      Optional free-text signal for scoring only
+  --stats                   Print promote/hold/reject counts for trust zone
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+
+NOTES
+  Precision-first rule adjudicator (adj_v1). Promote → active Observation;
+  hold → draft Observation; reject → disposition only.
+  Prefer: carpeos adjudicate after capture sessions (hooks stay fail-open).
 `;
     case "capture-hook":
       return `carpeos capture-hook — ingest a provider session hook (no plaintext secrets in stdout)
@@ -1451,10 +1548,9 @@ function makeRetrievalQuery(input: {
     query_text: input.text,
     filters: {
       visible_trust_zone_ids: [...input.visibleTrustZones],
-      // Align with MCP memory_search (active + draft claims).
-      lifecycle_status: ["active", "draft"],
-      // Align with MCP memory_search: capture writes EvidenceArtifact as
-      // epistemic_authority "imported"; excluding it made day-to-day search empty.
+      // Product 2.0: default to promoted (active) meaning only; held draft is opt-in.
+      lifecycle_status: ["active"],
+      // Capture writes EvidenceArtifact as epistemic_authority "imported".
       epistemic_authority: [
         "unverified",
         "self_reported",
