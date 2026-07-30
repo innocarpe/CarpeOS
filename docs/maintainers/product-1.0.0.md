@@ -84,7 +84,7 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 | P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **done** | Kind priority + diversity (G005); smoke asserts Observation |
 | P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` / `scripts/smoke-product-loop.mjs` + CI (G006) |
 | P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **done** | doctor store probe + README product path (G007) |
-| P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **todo** | Ultragoal G008 |
+| P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **done** | S1–S5 automated/public-safe notes (G008) |
 | P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **todo** | Ultragoal G009 |
 | P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **partial** | G1–G8 done; G9 Defer |
 | P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **blocked** | Ultragoal G010 — only after explicit Approve |
@@ -110,7 +110,7 @@ host (Claude / Codex / Grok) when feasible — not a multi-day soak.
 | **Setup** | Clean or documented profile; install published or monorepo-built `carpeos` |
 | **Actions** | Official setup path that installs Claude/Codex/Grok capture hooks; doctor |
 | **Expect** | Hooks present; doctor reports hook status; no wipe of pre-existing user hooks |
-| **Status** | ☐ |
+| **Status** | ☑ **pass (automated)** — unit tests `install-hooks` (merge/uninstall/idempotent absolute path) + `setup hooks` product path (G002); doctor reports `*_hooks` status (G007). Live multi-host install on day-to-day home optional for operators. |
 
 ### S2 — Session lifecycle evidence is stored
 
@@ -119,7 +119,7 @@ host (Claude / Codex / Grok) when feasible — not a multi-day soak.
 | **Setup** | Hooks installed (S1) |
 | **Actions** | Start/stop a short host session (or synthetic capture fixture equivalent) |
 | **Expect** | Local store has capture/evidence rows (encrypted raw + EvidenceArtifact); counts increase |
-| **Status** | ☐ |
+| **Status** | ☑ **pass (automated)** — `pnpm smoke:product` capture-hook SessionEnd → EvidenceArtifact + encrypted protected value (temp home, synthetic payload only). |
 
 ### S3 — Meaningful units appear after extract
 
@@ -128,7 +128,7 @@ host (Claude / Codex / Grok) when feasible — not a multi-day soak.
 | **Setup** | Store with evidence from S2 or synthetic fixture |
 | **Actions** | Automatic post-capture extract and/or explicit extract CLI |
 | **Expect** | At least Observation and/or Claim events/chunks exist; re-run is idempotent |
-| **Status** | ☐ |
+| **Status** | ☑ **pass (automated)** — smoke: auto extract on SessionEnd; `extract --event-id` → `replay`; PostToolUse extract `skipped` (policy). |
 
 ### S4 — Search and context-pack return meaning first
 
@@ -137,7 +137,7 @@ host (Claude / Codex / Grok) when feasible — not a multi-day soak.
 | **Setup** | Rebuilt retrieval index over extracted units |
 | **Actions** | CLI search + context-pack; MCP equivalents if registered |
 | **Expect** | Query over synthetic extracted text returns those units; evidence metadata is secondary |
-| **Status** | ☐ |
+| **Status** | ☑ **pass (automated)** — smoke search `Captured SessionEnd` hits Observation/summary; context-pack `observations.length ≥ 1`; G005 kind ranking demotes evidence_excerpt. |
 
 ### S5 — Existing home upgrades safely
 
@@ -146,7 +146,15 @@ host (Claude / Codex / Grok) when feasible — not a multi-day soak.
 | **Setup** | Pre-1.0 local home (or fixture) with prior events |
 | **Actions** | Upgrade binary/schema; run doctor / open store |
 | **Expect** | Migrations apply; no silent wipe; prior events still readable under trust-zone rules |
-| **Status** | ☐ |
+| **Status** | ☑ **pass (existing tests)** — local-store migration/preserve-events coverage (G6 contract gate); doctor opens existing sqlite read-only without wipe (G007). |
+
+### Dogfood notes (2026-07-30, public-safe)
+
+| Gate | Result |
+| --- | --- |
+| `pnpm smoke:product` | **PASS** (monorepo at G008) |
+| Critical bugs found this cycle | **None** |
+| Host soak (Claude/Codex/Grok real sessions) | **Not required for G008 close** — synthetic CLI path covers S2–S4; optional operator follow-up |
 
 ---
 
