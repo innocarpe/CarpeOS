@@ -136,7 +136,8 @@ hooks → capture → EvidenceArtifact (encrypted raw)
 
 ## Product gates (living) — 2.0
 
-Status: `todo` until stories land.
+Status below reflects `main` after the adjudication MVP merged in PR #94. A gate
+moves to **done** only with linked implementation and verification evidence.
 
 | # | Criterion | Status |
 | --- | --- | --- |
@@ -152,33 +153,65 @@ Status: `todo` until stories land.
 | K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **todo** |
 | K10 | SemVer **2.0.0** release only after explicit Approve | **blocked** |
 
+## Known gaps and debt after the MVP
+
+The MVP proves the adjudication control flow, not calibrated knowledge quality.
+These gaps are first-class backlog for `carpeos-product-210`; a cold start should
+not infer that a **done** plumbing gate closes them.
+
+| Area | Current evidence on `main` | Required follow-up | Gate |
+| --- | --- | --- | --- |
+| Candidate text | `KnowledgeCandidate.signal_text` affects scoring, but `buildCandidateStatement` still emits a metadata-only Observation shell. | Extract bounded, sanitized decision / preference / constraint fragments with evidence references; never copy raw transcripts or protected dumps. | K1 |
+| Candidate structure | Signal recovery is best-effort `message` / `transcript` / `text`; there are no multi-span candidates, procedure-trace structure, or session de-noising. | Define candidate v1 spans and kind labels with empty, noise, decision, and preference fixtures. | K1 |
+| Calibration | `VALUE_TERMS`, signal length, and score thresholds have unit/smoke coverage but no golden precision corpus or maintainer calibration pass. | Add must-promote / must-hold / must-reject fixtures with reason-code assertions and public-safe dogfood notes. | K5, K8 |
+| Knowledge form | Promote and hold currently create Observations only. | Evaluate Claim drafting only after candidate precision is stable; Claims remain draft and never receive automatic AcceptanceDecision. | Deferred candidate for K3 |
+| Hold review | Held candidates become draft Observations, but the CLI cannot list, promote, or reject the held queue. | Add an explicit append-only operator review workflow. | Operator readiness |
+| Doctor | `carpeos adjudicate --stats` reports counts; setup/install doctor does not report policy version, rates, or the promoted-only search default. | Wire adjudication health into doctor and test the rendered output. | K6 |
+| Held retrieval | Retrieval correctly defaults to `active`, but operator-facing CLI/MCP held opt-in is not documented as a supported workflow. | Add and test an explicit draft/held filter while preserving the default. | K4 operator surface |
+| Policy replay | `knowledge_dispositions.source_event_id` is the primary key, so replay returns the existing row even if a later policy version should re-evaluate it. | Define append-only source-event + policy-version history and active-set migration semantics in an ADR and tests. | Audit durability |
+| Dogfood depth | `smoke:knowledge` covers decision-like SessionEnd versus PostToolUse noise. | Add noisy multi-hook sessions, UserPromptSubmit floods, secret-like candidates, and thanks/ok chatter. | K8 |
+| Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
+| Release language | The adjudication MVP is merged, but K1/K5/K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
+
+The review queue and policy replay work must preserve an append-only disposition
+audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
+the host-hook path.
+
 ---
 
-## Suggested story order (ultragoal-ready)
+## `carpeos-product-210` story order
 
-Use plan id e.g. `carpeos-product-200` when creating goals.
+The post-MVP plan is intentionally sequential so each operator or policy contract
+lands in a coherent PR.
 
 | Story | Title |
 | --- | --- |
-| K001 | Spec/ADR: knowledge adjudication model + dispositions |
-| K002 | Candidate extraction from evidence (better than metadata-only shell) |
-| K003 | Rule adjudicator MVP + fixtures |
-| K004 | Promote/hold/reject write path + idempotency |
-| K005 | Retrieval/pack adjudicated-first |
-| K006 | Optional LLM adjudicator adapter (off by default; same interface) |
-| K007 | Doctor + operator path + EN/KO honesty |
-| K008 | Knowledge smoke + CI |
-| K009 | Dogfood noise vs knowledge scenarios |
-| K010 | 2.0 freeze decision (Defer) |
-| K011 | 2.0.0 release (**only** after Approve) |
+| G001 | Inventory + living backlog (this document) |
+| G002 | Candidate model v1 beyond the metadata shell |
+| G003 | Golden adjudication precision suite |
+| G004 | Held queue operator workflow |
+| G005 | Policy-version re-adjudication |
+| G006 | Doctor + public honesty surfaces |
+| G007 | Explicit held-search opt-in |
+| G008 | Public-safe dogfood scenarios |
+| G009 | Optional Claim-form drafting, only after candidate precision is stable |
+| G010 | Freeze decision — Defer without explicit Approve |
+| G011 | 2.0.0 release — **blocked** without explicit Approve |
 
 ---
 
-## Relationship to 1.0 shipped code
+## Relationship to shipped code
 
-**Reuse:** capture, local-store, hooks install, policy hooks, retrieval ranking hooks, smoke harness.  
-**Replace/extend:** metadata-only “Observation for every Stop/SessionEnd” must become **candidate → adjudicate → maybe promote**.  
-**Do not:** pretend lifecycle allowlist alone is brain-worthy judgment.
+**Already merged in PR #94:** candidate scoring, `adj_v1`, disposition storage,
+promote→active / hold→draft / reject→evidence-only routing, promoted-only default
+retrieval, and `smoke:knowledge`.
+
+- **Reuse:** capture, local-store, fail-open hooks, policy guards, retrieval
+  ranking, and both smoke harnesses.
+- **Extend:** metadata-only candidate statements, disposition history, doctor,
+  operator review, and explicit held retrieval.
+- **Do not:** treat lifecycle allowlists, a disposition count, or a metadata shell
+  as proof that a unit is brain-worthy.
 
 ---
 
@@ -192,8 +225,11 @@ Use plan id e.g. `carpeos-product-200` when creating goals.
 
 ## Current recommendation
 
-1. Treat **1.0.0** as **infrastructure 1.0** (honest external language).  
-2. Make **adjudication** the only critical path for “CarpeOS product complete.”  
-3. Start ultragoal `carpeos-product-200` from this brief when ready to execute.
+1. Treat **1.0.0** as **infrastructure 1.0** (honest external language).
+2. Treat PR #94 as the **adjudication MVP**, not completion of the knowledge OS.
+3. Execute `carpeos-product-210` to close candidate quality, precision proof,
+   operator review, doctor, held retrieval, policy replay, and dogfood gaps.
+4. Keep the 2.0 freeze decision at **Defer** until its gates are green and a
+   maintainer records explicit Approve.
 
 **Do not cut `v2.0.0` without this DoD green + explicit Approve.**
