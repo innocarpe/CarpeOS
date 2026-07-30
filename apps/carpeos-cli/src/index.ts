@@ -519,7 +519,8 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
   const mode =
     requestedMode === "list-held" ||
     requestedMode === "promote-held" ||
-    requestedMode === "reject-held"
+    requestedMode === "reject-held" ||
+    requestedMode === "history"
       ? requestedMode
       : undefined;
   const parsed = parseArgs({
@@ -529,6 +530,7 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
     options: {
       "event-id": { type: "string" },
       "signal-text": { type: "string" },
+      "policy-version": { type: "string" },
       home: { type: "string" },
       "project-id": { type: "string" },
       "trust-zone": { type: "string" },
@@ -558,6 +560,23 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
         mode,
         count: held.length,
         held,
+      });
+      return 0;
+    }
+
+    if (mode === "history") {
+      const eventId = parsed.values["event-id"]?.trim();
+      if (eventId === undefined || eventId.length === 0) {
+        throw new CliUsageError("history requires --event-id <evt_…>");
+      }
+      const history = store.listDispositionHistory(eventId);
+      writeJson(process.stdout, {
+        ok: true,
+        command: "adjudicate",
+        mode,
+        source_event_id: eventId,
+        count: history.length,
+        history,
       });
       return 0;
     }
@@ -612,10 +631,14 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
       );
     }
     const signalText = parsed.values["signal-text"];
+    const policyVersion = parsed.values["policy-version"];
     const result = store.adjudicateFromEventId(eventId.trim(), {
       ...(signalText === undefined || signalText.trim().length === 0
         ? {}
         : { signalText: signalText.trim() }),
+      ...(policyVersion === undefined || policyVersion.trim().length === 0
+        ? {}
+        : { policyVersion: policyVersion.trim() }),
     });
     writeJson(process.stdout, {
       ok: result.status !== "failed",
@@ -1224,13 +1247,15 @@ USAGE
   carpeos adjudicate --event-id <evt_…> [options]
   carpeos adjudicate --stats [options]
   carpeos adjudicate list-held [--limit <n>] [options]
+  carpeos adjudicate history --event-id <evt_…> [options]
   carpeos adjudicate promote-held --event-id <evt_…> [options]
   carpeos adjudicate reject-held --event-id <evt_…> [options]
 
 OPTIONS
-  --event-id <id>           EvidenceArtifact event_id to adjudicate or review
+  --event-id <id>           EvidenceArtifact event_id to adjudicate, review, or history
   --signal-text <text>      Optional free-text signal for scoring only
-  --stats                   Print promote/hold/reject counts for trust zone
+  --policy-version <id>     Disposition policy identity (default: current adj_v1)
+  --stats                   Print promote/hold/reject counts for current policy
   --limit <n>               Held queue rows, 1–200 (default: 50)
   --home <path>
   --project-id <id>
@@ -1239,9 +1264,12 @@ OPTIONS
 NOTES
   Precision-first rule adjudicator (adj_v1). Promote → active Observation;
   hold → draft Observation; reject → disposition only.
-  Held review is terminal and append-only. promote-held appends a new active
-  Observation; reject-held records review only. Replays are idempotent, and an
-  opposite second decision fails. Neither path creates an AcceptanceDecision.
+  Same evidence + same policy_version is replay-safe. A new --policy-version
+  appends a new disposition without rewriting prior rows; active search uses
+  Observations produced by each promote path (default filter remains active).
+  Held review is terminal and append-only per source event + policy version.
+  promote-held appends a new active Observation; reject-held records review only.
+  Neither path creates an AcceptanceDecision.
   Prefer: carpeos adjudicate after capture sessions (hooks stay fail-open).
 `;
     case "capture-hook":

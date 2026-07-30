@@ -194,6 +194,9 @@ type StoredDisposition = {
   created_at: string;
 };
 
+/** Public disposition history row (same shape as internal storage view). */
+export type StoredDispositionPublic = StoredDisposition;
+
 type StoredHeldReview = {
   review_id: string;
   source_event_id: string;
@@ -450,6 +453,7 @@ export const LOCAL_STORE_MIGRATION_IDS = [
   "002_sync_transfer_imports",
   "003_knowledge_dispositions",
   "004_knowledge_disposition_reviews",
+  "005_knowledge_dispositions_policy_key",
 ] as const;
 
 export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
@@ -458,6 +462,8 @@ const MIGRATION_ID: LocalStoreMigrationId = "001_local_capture_store";
 const SYNC_MIGRATION_ID: LocalStoreMigrationId = "002_sync_transfer_imports";
 const DISPOSITION_MIGRATION_ID: LocalStoreMigrationId = "003_knowledge_dispositions";
 const DISPOSITION_REVIEW_MIGRATION_ID: LocalStoreMigrationId = "004_knowledge_disposition_reviews";
+const DISPOSITION_POLICY_KEY_MIGRATION_ID: LocalStoreMigrationId =
+  "005_knowledge_dispositions_policy_key";
 
 export type ProtectedValueTransferExport = {
   protected_value_id: string;
@@ -1242,6 +1248,11 @@ export class LocalCaptureStore {
     envelope?: CaptureEnvelope;
     policyOverrides?: Partial<MeaningfulUnitPolicyConfig>;
     signalText?: string;
+    /**
+     * Policy identity for disposition history. Defaults to the current adjudicator
+     * policy. A new value appends a new disposition row for the same evidence.
+     */
+    policyVersion?: string;
   }): AdjudicateResult {
     const evidence = input.event;
     if (evidence.event_type !== "EvidenceArtifact") {
@@ -1289,8 +1300,11 @@ export class LocalCaptureStore {
       input.policyOverrides,
     );
 
+    const policyVersion = normalizePolicyVersion(
+      input.policyVersion ?? adjudication.policy_version,
+    );
     const recordedAt = this.clock.now().toISOString();
-    const existingDisp = this.getDisposition(evidence.event_id);
+    const existingDisp = this.getDisposition(evidence.event_id, policyVersion);
     if (existingDisp !== undefined) {
       if (existingDisp.disposition === "reject") {
         return {
@@ -1310,7 +1324,10 @@ export class LocalCaptureStore {
         subjectRef: evidence.subject_ref,
         validTime: evidence.valid_time,
         observedAt: evidence.valid_time.start,
-        idempotencyKey: extractionObservationIdempotencyKey(evidence.event_id),
+        idempotencyKey: observationIdempotencyForPolicy(
+          evidence.event_id,
+          existingDisp.policy_version,
+        ),
         lifecycleStatus,
       });
       return {
@@ -1331,7 +1348,7 @@ export class LocalCaptureStore {
       disposition: adjudication.disposition,
       reasonCodes: adjudication.reason_codes,
       scores: adjudication.scores,
-      policyVersion: adjudication.policy_version,
+      policyVersion,
       statement: adjudication.statement,
       createdAt: recordedAt,
     });
@@ -1342,7 +1359,7 @@ export class LocalCaptureStore {
         disposition: "reject",
         reason_codes: adjudication.reason_codes,
         scores: adjudication.scores,
-        policy_version: adjudication.policy_version,
+        policy_version: policyVersion,
         source_event_id: evidence.event_id,
       };
     }
@@ -1354,7 +1371,7 @@ export class LocalCaptureStore {
       subjectRef: evidence.subject_ref,
       validTime: evidence.valid_time,
       observedAt: evidence.valid_time.start,
-      idempotencyKey: extractionObservationIdempotencyKey(evidence.event_id),
+      idempotencyKey: observationIdempotencyForPolicy(evidence.event_id, policyVersion),
       lifecycleStatus: adjudication.lifecycle_status,
     });
 
@@ -1363,7 +1380,7 @@ export class LocalCaptureStore {
       disposition: adjudication.disposition,
       reason_codes: adjudication.reason_codes,
       scores: adjudication.scores,
-      policy_version: adjudication.policy_version,
+      policy_version: policyVersion,
       extraction,
       source_event_id: evidence.event_id,
     };
@@ -1431,6 +1448,7 @@ export class LocalCaptureStore {
     options: {
       policyOverrides?: Partial<MeaningfulUnitPolicyConfig>;
       signalText?: string;
+      policyVersion?: string;
     } = {},
   ): AdjudicateResult {
     const row = this.db
@@ -1463,7 +1481,45 @@ export class LocalCaptureStore {
         ? {}
         : { policyOverrides: options.policyOverrides }),
       ...(options.signalText === undefined ? {} : { signalText: options.signalText }),
+      ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }),
     });
+  }
+
+  listDispositionHistory(sourceEventId: string): StoredDispositionPublic[] {
+    const normalized = sourceEventId.trim();
+    if (normalized.length === 0) {
+      throw new Error("source event id is required");
+    }
+    const rows = this.db
+      .prepare(
+        `
+          SELECT source_event_id, artifact_id, disposition, reason_codes_json, scores_json,
+                 policy_version, statement, created_at
+          FROM knowledge_dispositions
+          WHERE source_event_id = ? AND trust_zone_id = ?
+          ORDER BY created_at ASC, policy_version ASC
+        `,
+      )
+      .all(normalized, this.trustZone.trust_zone_id) as Array<{
+      source_event_id: string;
+      artifact_id: string;
+      disposition: KnowledgeDisposition;
+      reason_codes_json: string;
+      scores_json: string;
+      policy_version: string;
+      statement: string;
+      created_at: string;
+    }>;
+    return rows.map((row) => ({
+      source_event_id: row.source_event_id,
+      artifact_id: row.artifact_id,
+      disposition: row.disposition,
+      reason_codes: JSON.parse(row.reason_codes_json) as string[],
+      scores: JSON.parse(row.scores_json) as AdjudicationResult["scores"],
+      policy_version: row.policy_version,
+      statement: row.statement,
+      created_at: row.created_at,
+    }));
   }
 
   listDispositionCounts(): {
@@ -1477,11 +1533,14 @@ export class LocalCaptureStore {
         `
           SELECT disposition, COUNT(*) AS n
           FROM knowledge_dispositions
-          WHERE trust_zone_id = ?
+          WHERE trust_zone_id = ? AND policy_version = ?
           GROUP BY disposition
         `,
       )
-      .all(this.trustZone.trust_zone_id) as Array<{ disposition: string; n: number }>;
+      .all(this.trustZone.trust_zone_id, ADJUDICATION_POLICY_VERSION) as Array<{
+      disposition: string;
+      n: number;
+    }>;
     const counts = { promote: 0, hold: 0, reject: 0 };
     for (const row of rows) {
       if (
@@ -1510,13 +1569,14 @@ export class LocalCaptureStore {
            AND r.trust_zone_id = d.trust_zone_id
            AND r.policy_version = d.policy_version
           WHERE d.trust_zone_id = ?
+            AND d.policy_version = ?
             AND d.disposition = 'hold'
             AND r.review_id IS NULL
           ORDER BY d.created_at ASC, d.source_event_id ASC
           LIMIT ?
         `,
       )
-      .all(this.trustZone.trust_zone_id, limit) as Array<{
+      .all(this.trustZone.trust_zone_id, ADJUDICATION_POLICY_VERSION, limit) as Array<{
       source_event_id: string;
       artifact_id: string;
       statement: string;
@@ -1742,17 +1802,20 @@ export class LocalCaptureStore {
     }
   }
 
-  private getDisposition(sourceEventId: string): StoredDisposition | undefined {
+  private getDisposition(
+    sourceEventId: string,
+    policyVersion: string = ADJUDICATION_POLICY_VERSION,
+  ): StoredDisposition | undefined {
     const row = this.db
       .prepare(
         `
           SELECT source_event_id, artifact_id, disposition, reason_codes_json, scores_json,
                  policy_version, statement, created_at
           FROM knowledge_dispositions
-          WHERE source_event_id = ? AND trust_zone_id = ?
+          WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version = ?
         `,
       )
-      .get(sourceEventId, this.trustZone.trust_zone_id) as
+      .get(sourceEventId, this.trustZone.trust_zone_id, policyVersion) as
       | {
           source_event_id: string;
           artifact_id: string;
@@ -2911,6 +2974,58 @@ export class LocalCaptureStore {
           .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
           .run(DISPOSITION_REVIEW_MIGRATION_ID, this.clock.now().toISOString());
       }
+
+      const dispositionPolicyKeyExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(DISPOSITION_POLICY_KEY_MIGRATION_ID);
+      if (dispositionPolicyKeyExisting === undefined) {
+        this.db.exec(`
+          CREATE TABLE knowledge_dispositions_policy_key (
+            source_event_id TEXT NOT NULL,
+            artifact_id TEXT NOT NULL,
+            trust_zone_id TEXT NOT NULL,
+            disposition TEXT NOT NULL CHECK (disposition IN ('promote', 'hold', 'reject')),
+            reason_codes_json TEXT NOT NULL,
+            scores_json TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            statement TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (source_event_id, trust_zone_id, policy_version)
+          );
+
+          INSERT INTO knowledge_dispositions_policy_key (
+            source_event_id, artifact_id, trust_zone_id, disposition,
+            reason_codes_json, scores_json, policy_version, statement, created_at
+          )
+          SELECT
+            source_event_id, artifact_id, trust_zone_id, disposition,
+            reason_codes_json, scores_json, policy_version, statement, created_at
+          FROM knowledge_dispositions;
+
+          DROP TABLE knowledge_dispositions;
+          ALTER TABLE knowledge_dispositions_policy_key RENAME TO knowledge_dispositions;
+
+          CREATE INDEX IF NOT EXISTS idx_knowledge_dispositions_zone_disp
+            ON knowledge_dispositions (trust_zone_id, disposition);
+          CREATE INDEX IF NOT EXISTS idx_knowledge_dispositions_zone_policy
+            ON knowledge_dispositions (trust_zone_id, policy_version, created_at);
+
+          CREATE TRIGGER IF NOT EXISTS knowledge_dispositions_no_update
+          BEFORE UPDATE ON knowledge_dispositions
+          BEGIN
+            SELECT RAISE(ABORT, 'knowledge dispositions are append-only');
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS knowledge_dispositions_no_delete
+          BEFORE DELETE ON knowledge_dispositions
+          BEGIN
+            SELECT RAISE(ABORT, 'knowledge dispositions are append-only');
+          END;
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(DISPOSITION_POLICY_KEY_MIGRATION_ID, this.clock.now().toISOString());
+      }
     });
   }
 
@@ -2995,6 +3110,35 @@ export class LocalCaptureStore {
       throw error;
     }
   }
+}
+
+function normalizePolicyVersion(policyVersion: string): string {
+  const normalized = policyVersion.trim();
+  if (normalized.length === 0) {
+    throw new Error("policy version is required");
+  }
+  if (normalized.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(normalized)) {
+    throw new Error("policy version must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+  }
+  return normalized;
+}
+
+/**
+ * Observation idempotency for adjudicated meaning units.
+ * adj_v1 keeps the historical extract key so existing Observations replay.
+ * Later policy versions use a distinct key so re-adjudication can append.
+ */
+function observationIdempotencyForPolicy(sourceEventId: string, policyVersion: string): string {
+  if (policyVersion === ADJUDICATION_POLICY_VERSION) {
+    return extractionObservationIdempotencyKey(sourceEventId);
+  }
+  return `idem_${hashHex(
+    stableJson({
+      kind: "adjudicated_observation",
+      source_event_id: sourceEventId,
+      policy_version: policyVersion,
+    }),
+  ).slice(0, 32)}`;
 }
 
 function heldReviewId(
