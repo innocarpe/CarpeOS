@@ -254,7 +254,7 @@ For monorepo work without global install: `pnpm install && pnpm build`, then use
 carpeos setup run --apply
 # 2) Capture hooks (Claude / Codex / Grok user layers; does not wipe user hooks)
 carpeos setup hooks install --apply
-# 3) Doctor (wrappers, MCP, hook status, recent capture, Observation/Claim counts)
+# 3) Doctor (wrappers, MCP, hooks, store, adjudication health, promoted-only default search)
 carpeos setup doctor
 # 4) After a host session (or synthetic capture-hook), rebuild + search meaning
 carpeos retrieval rebuild --trust-zone tz_local_default
@@ -269,8 +269,10 @@ carpeos memory context-pack \
 ```
 
 `carpeos setup doctor` reports hook install status, recent `EvidenceArtifact`
-activity, and whether **Observation/Claim** units exist (empty store → warnings,
-not fail). Automated gate: `pnpm smoke:product`.
+activity, Observation/Claim counts, **adjudication policy version + promote/hold/reject
+counts**, and that **default search is promoted/active only** (empty store → warnings,
+not fail). 1.0 is pipeline infrastructure; 2.0 adjudication remains in progress beyond
+merged MVP surfaces. Automated gates: `pnpm smoke:product` · `pnpm smoke:knowledge`.
 
 Advanced/manual hook templates remain under [`adapters/`](adapters/). Full notes:
 [one-stop install](docs/guides/one-stop-install.md) ·
