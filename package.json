@@ -21,6 +21,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "smoke:mcp": "node scripts/smoke-mcp.mjs",
     "smoke:product": "node scripts/smoke-product-loop.mjs",
+    "smoke:knowledge": "node scripts/smoke-knowledge.mjs",
     "install:local": "node scripts/install-local.mjs",
     "pack:npm": "pnpm --filter @innocarpe/carpeos build && pnpm --filter @innocarpe/carpeos exec npm pack --pack-destination ../..",
     "release": "node scripts/release.mjs",

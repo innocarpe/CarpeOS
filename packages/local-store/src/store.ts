@@ -6,6 +6,8 @@ import {
   buildSyncPushRequest,
   type CaptureEnvelope,
   deriveIdempotencyKey,
+  adjudicateKnowledgeCandidate,
+  ADJUDICATION_POLICY_VERSION,
   extractionObservationIdempotencyKey,
   fingerprintEnvelope,
   fingerprintObject,
@@ -13,6 +15,8 @@ import {
   isIdempotencyKey,
   planObservationExtraction,
   stableJson,
+  type AdjudicationResult,
+  type KnowledgeDisposition,
   type MeaningfulUnitPolicyConfig,
 } from "@carpeos/capture";
 import type {
@@ -122,7 +126,66 @@ export type ProposeObservationDraftInput = {
   confidence?: number;
   idempotencyKey?: string;
   provenance?: readonly ProvenanceRef[];
+  /** promote → active; hold → draft. Default active. */
+  lifecycleStatus?: "active" | "draft";
 };
+
+export type AdjudicateResult =
+  | {
+      status: "promoted" | "held";
+      disposition: KnowledgeDisposition;
+      reason_codes: string[];
+      scores: AdjudicationResult["scores"];
+      policy_version: string;
+      extraction: ExtractionResult;
+      source_event_id: string;
+    }
+  | {
+      status: "rejected" | "replay";
+      disposition: KnowledgeDisposition;
+      reason_codes: string[];
+      scores: AdjudicationResult["scores"];
+      policy_version: string;
+      source_event_id: string;
+      extraction?: ExtractionResult;
+    }
+  | {
+      status: "skipped" | "failed";
+      reason?: string;
+      error?: string;
+      source_event_id?: string;
+    };
+
+type StoredDisposition = {
+  source_event_id: string;
+  disposition: KnowledgeDisposition;
+  reason_codes: string[];
+  scores: AdjudicationResult["scores"];
+  policy_version: string;
+  statement: string;
+};
+
+/** Pull a short free-text signal from capture envelope / decrypted payload shapes. */
+function signalFromUnknownPayload(payload: unknown): string | undefined {
+  if (payload === null || payload === undefined) {
+    return undefined;
+  }
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    return trimmed.length > 0 ? trimmed.slice(0, 400) : undefined;
+  }
+  if (typeof payload !== "object") {
+    return undefined;
+  }
+  const record = payload as Record<string, unknown>;
+  for (const key of ["message", "transcript", "text", "content", "summary", "prompt"] as const) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim().slice(0, 400);
+    }
+  }
+  return undefined;
+}
 
 export type ProposeClaimDraftInput = {
   statement: string;
@@ -285,12 +348,14 @@ type OutboxIdRow = {
 export const LOCAL_STORE_MIGRATION_IDS = [
   "001_local_capture_store",
   "002_sync_transfer_imports",
+  "003_knowledge_dispositions",
 ] as const;
 
 export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
 
 const MIGRATION_ID: LocalStoreMigrationId = "001_local_capture_store";
 const SYNC_MIGRATION_ID: LocalStoreMigrationId = "002_sync_transfer_imports";
+const DISPOSITION_MIGRATION_ID: LocalStoreMigrationId = "003_knowledge_dispositions";
 
 export type ProtectedValueTransferExport = {
   protected_value_id: string;
@@ -876,6 +941,7 @@ export class LocalCaptureStore {
     if (!isBitemporalInterval(validTime)) {
       throw new Error("valid_time.start must be before or equal to valid_time.end");
     }
+    const lifecycleStatus = input.lifecycleStatus ?? "active";
 
     const provenance: ProvenanceRef[] =
       input.provenance !== undefined
@@ -948,7 +1014,7 @@ export class LocalCaptureStore {
       subject_ref: normalizeIdentifier(normalizedInput.subject_ref),
       valid_time: validTime,
       recorded_time: { start: recordedAt, end: null },
-      lifecycle_status: "active",
+      lifecycle_status: lifecycleStatus,
       epistemic_authority: "observed",
       trust_zone: this.trustZone,
       provenance,
@@ -1066,13 +1132,15 @@ export class LocalCaptureStore {
   }
 
   /**
-   * Extract Observation from an EvidenceArtifact using product policy + metadata heuristic.
+   * Adjudicate evidence and optionally promote/hold an Observation.
+   * Reject: record disposition only (no meaning unit).
    */
-  extractFromEvidenceArtifact(input: {
+  adjudicateEvidenceArtifact(input: {
     event: CanonicalEvent<"EvidenceArtifact">;
     envelope?: CaptureEnvelope;
     policyOverrides?: Partial<MeaningfulUnitPolicyConfig>;
-  }): ExtractionResult {
+    signalText?: string;
+  }): AdjudicateResult {
     const evidence = input.event;
     if (evidence.event_type !== "EvidenceArtifact") {
       return {
@@ -1081,7 +1149,6 @@ export class LocalCaptureStore {
         source_event_id: evidence.event_id,
       };
     }
-
     const metaFromEnvelope = input.envelope;
     const metaFromRequest = this.getCaptureRequestMeta(evidence.event_id);
     const provider = metaFromEnvelope?.provider ?? metaFromRequest?.provider ?? "unknown";
@@ -1090,12 +1157,15 @@ export class LocalCaptureStore {
     if (!hookEventName) {
       return {
         status: "skipped",
-        reason: "missing hook_event_name for policy gate",
+        reason: "missing hook_event_name",
         source_event_id: evidence.event_id,
       };
     }
 
-    const plan = planObservationExtraction(
+    const signalText =
+      input.signalText ?? this.tryExtractSignalText(evidence, metaFromEnvelope) ?? "";
+
+    const adjudication = adjudicateKnowledgeCandidate(
       {
         provider,
         hook_event_name: hookEventName,
@@ -1104,28 +1174,215 @@ export class LocalCaptureStore {
         subject_ref: evidence.subject_ref,
         artifact_id: evidence.payload.artifact_id,
         source_event_id: evidence.event_id,
+        signal_text: signalText,
       },
       input.policyOverrides,
     );
 
-    if (plan.status === "skip") {
+    const recordedAt = this.clock.now().toISOString();
+    const existingDisp = this.getDisposition(evidence.event_id);
+    if (existingDisp !== undefined) {
+      if (existingDisp.disposition === "reject") {
+        return {
+          status: "replay",
+          disposition: "reject",
+          reason_codes: existingDisp.reason_codes,
+          scores: existingDisp.scores,
+          policy_version: existingDisp.policy_version,
+          source_event_id: evidence.event_id,
+        };
+      }
+      const lifecycleStatus = existingDisp.disposition === "promote" ? "active" : "draft";
+      const extraction = this.proposeObservationDraft({
+        statement: existingDisp.statement,
+        evidenceArtifactRefs: [evidence.payload.artifact_id],
+        sourceEventId: evidence.event_id,
+        subjectRef: evidence.subject_ref,
+        validTime: evidence.valid_time,
+        observedAt: evidence.valid_time.start,
+        idempotencyKey: extractionObservationIdempotencyKey(evidence.event_id),
+        lifecycleStatus,
+      });
       return {
-        status: "skipped",
-        reason: plan.reason,
+        status: "replay",
+        disposition: existingDisp.disposition,
+        reason_codes: existingDisp.reason_codes,
+        scores: existingDisp.scores,
+        policy_version: existingDisp.policy_version,
+        extraction,
         source_event_id: evidence.event_id,
-        hook_event_name: plan.hook_event_name,
       };
     }
 
-    return this.proposeObservationDraft({
-      statement: plan.statement,
+    this.insertDisposition({
+      sourceEventId: evidence.event_id,
+      artifactId: evidence.payload.artifact_id,
+      trustZoneId: this.trustZone.trust_zone_id,
+      disposition: adjudication.disposition,
+      reasonCodes: adjudication.reason_codes,
+      scores: adjudication.scores,
+      policyVersion: adjudication.policy_version,
+      statement: adjudication.statement,
+      createdAt: recordedAt,
+    });
+
+    if (adjudication.disposition === "reject") {
+      return {
+        status: "rejected",
+        disposition: "reject",
+        reason_codes: adjudication.reason_codes,
+        scores: adjudication.scores,
+        policy_version: adjudication.policy_version,
+        source_event_id: evidence.event_id,
+      };
+    }
+
+    const extraction = this.proposeObservationDraft({
+      statement: adjudication.statement,
       evidenceArtifactRefs: [evidence.payload.artifact_id],
       sourceEventId: evidence.event_id,
       subjectRef: evidence.subject_ref,
       validTime: evidence.valid_time,
       observedAt: evidence.valid_time.start,
       idempotencyKey: extractionObservationIdempotencyKey(evidence.event_id),
+      lifecycleStatus: adjudication.lifecycle_status,
     });
+
+    return {
+      status: adjudication.disposition === "promote" ? "promoted" : "held",
+      disposition: adjudication.disposition,
+      reason_codes: adjudication.reason_codes,
+      scores: adjudication.scores,
+      policy_version: adjudication.policy_version,
+      extraction,
+      source_event_id: evidence.event_id,
+    };
+  }
+
+  /**
+   * Extract path now runs adjudication (product 2.0). Reject → skipped extraction.
+   */
+  extractFromEvidenceArtifact(input: {
+    event: CanonicalEvent<"EvidenceArtifact">;
+    envelope?: CaptureEnvelope;
+    policyOverrides?: Partial<MeaningfulUnitPolicyConfig>;
+  }): ExtractionResult {
+    const adjudicated = this.adjudicateEvidenceArtifact(input);
+    if (adjudicated.status === "failed") {
+      return {
+        status: "failed",
+        error: adjudicated.error ?? "adjudication failed",
+        ...(adjudicated.source_event_id === undefined
+          ? {}
+          : { source_event_id: adjudicated.source_event_id }),
+      };
+    }
+    if (adjudicated.status === "skipped") {
+      return {
+        status: "skipped",
+        reason: adjudicated.reason ?? "adjudication skipped",
+        ...(adjudicated.source_event_id === undefined
+          ? {}
+          : { source_event_id: adjudicated.source_event_id }),
+      };
+    }
+    if (adjudicated.status === "rejected") {
+      return {
+        status: "skipped",
+        reason: `adjudication_reject:${adjudicated.reason_codes.join(",")}`,
+        source_event_id: adjudicated.source_event_id,
+      };
+    }
+    if (adjudicated.status === "replay") {
+      if (adjudicated.extraction !== undefined) {
+        return adjudicated.extraction;
+      }
+      return {
+        status: "skipped",
+        reason: `adjudication_reject:${adjudicated.reason_codes.join(",")}`,
+        source_event_id: adjudicated.source_event_id,
+      };
+    }
+    if (adjudicated.status === "promoted" || adjudicated.status === "held") {
+      return adjudicated.extraction;
+    }
+    return {
+      status: "skipped",
+      reason: "adjudication_unhandled",
+      source_event_id: input.event.event_id,
+    };
+  }
+
+  /**
+   * Adjudicate by evidence event id (CLI / backfill).
+   */
+  adjudicateFromEventId(
+    eventId: string,
+    options: {
+      policyOverrides?: Partial<MeaningfulUnitPolicyConfig>;
+      signalText?: string;
+    } = {},
+  ): AdjudicateResult {
+    const row = this.db
+      .prepare(
+        `
+          SELECT event_json
+          FROM canonical_events
+          WHERE event_id = ? AND trust_zone_id = ?
+        `,
+      )
+      .get(eventId, this.trustZone.trust_zone_id) as { event_json: string } | undefined;
+    if (row === undefined) {
+      return {
+        status: "failed",
+        error: `event not found in trust zone: ${eventId}`,
+        source_event_id: eventId,
+      };
+    }
+    const event = JSON.parse(row.event_json) as CanonicalEvent;
+    if (event.event_type !== "EvidenceArtifact") {
+      return {
+        status: "skipped",
+        reason: `event type is ${event.event_type}, expected EvidenceArtifact`,
+        source_event_id: eventId,
+      };
+    }
+    return this.adjudicateEvidenceArtifact({
+      event: event as CanonicalEvent<"EvidenceArtifact">,
+      ...(options.policyOverrides === undefined
+        ? {}
+        : { policyOverrides: options.policyOverrides }),
+      ...(options.signalText === undefined ? {} : { signalText: options.signalText }),
+    });
+  }
+
+  listDispositionCounts(): {
+    promote: number;
+    hold: number;
+    reject: number;
+    policy_version: string;
+  } {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT disposition, COUNT(*) AS n
+          FROM knowledge_dispositions
+          WHERE trust_zone_id = ?
+          GROUP BY disposition
+        `,
+      )
+      .all(this.trustZone.trust_zone_id) as Array<{ disposition: string; n: number }>;
+    const counts = { promote: 0, hold: 0, reject: 0 };
+    for (const row of rows) {
+      if (
+        row.disposition === "promote" ||
+        row.disposition === "hold" ||
+        row.disposition === "reject"
+      ) {
+        counts[row.disposition] = Number(row.n);
+      }
+    }
+    return { ...counts, policy_version: ADJUDICATION_POLICY_VERSION };
   }
 
   /**
@@ -1180,6 +1437,111 @@ export class LocalCaptureStore {
       )
       .get(eventId) as { provider: string; hook_event_name: string } | undefined;
     return row;
+  }
+
+  /**
+   * Best-effort short signal for rule scoring (never required).
+   * Prefers live envelope fields; may decrypt local protected payload for message/transcript text.
+   */
+  private tryExtractSignalText(
+    evidence: CanonicalEvent<"EvidenceArtifact">,
+    envelope?: CaptureEnvelope,
+  ): string | undefined {
+    const fromEnvelope = signalFromUnknownPayload(envelope?.payload);
+    if (fromEnvelope !== undefined) {
+      return fromEnvelope;
+    }
+    const contentRef = evidence.payload?.content_ref;
+    const pvId =
+      contentRef !== undefined &&
+      contentRef.ref_type === "protected_value" &&
+      typeof contentRef.protected_value_id === "string"
+        ? contentRef.protected_value_id
+        : undefined;
+    if (pvId === undefined) {
+      return undefined;
+    }
+    try {
+      const plaintext = this.decryptProtectedValue(pvId);
+      const parsed = JSON.parse(Buffer.from(plaintext).toString("utf8")) as unknown;
+      // Capture stores full envelope JSON as protected plaintext.
+      if (parsed !== null && typeof parsed === "object") {
+        const record = parsed as Record<string, unknown>;
+        return (
+          signalFromUnknownPayload(record.payload) ?? signalFromUnknownPayload(record) ?? undefined
+        );
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  private getDisposition(sourceEventId: string): StoredDisposition | undefined {
+    const row = this.db
+      .prepare(
+        `
+          SELECT source_event_id, disposition, reason_codes_json, scores_json,
+                 policy_version, statement
+          FROM knowledge_dispositions
+          WHERE source_event_id = ? AND trust_zone_id = ?
+        `,
+      )
+      .get(sourceEventId, this.trustZone.trust_zone_id) as
+      | {
+          source_event_id: string;
+          disposition: KnowledgeDisposition;
+          reason_codes_json: string;
+          scores_json: string;
+          policy_version: string;
+          statement: string;
+        }
+      | undefined;
+    if (row === undefined) {
+      return undefined;
+    }
+    return {
+      source_event_id: row.source_event_id,
+      disposition: row.disposition,
+      reason_codes: JSON.parse(row.reason_codes_json) as string[],
+      scores: JSON.parse(row.scores_json) as AdjudicationResult["scores"],
+      policy_version: row.policy_version,
+      statement: row.statement,
+    };
+  }
+
+  private insertDisposition(input: {
+    sourceEventId: string;
+    artifactId: string;
+    trustZoneId: string;
+    disposition: KnowledgeDisposition;
+    reasonCodes: readonly string[];
+    scores: AdjudicationResult["scores"];
+    policyVersion: string;
+    statement: string;
+    createdAt: string;
+  }): void {
+    this.db
+      .prepare(
+        `
+          INSERT INTO knowledge_dispositions (
+            source_event_id, artifact_id, trust_zone_id, disposition,
+            reason_codes_json, scores_json, policy_version, statement, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        input.sourceEventId,
+        input.artifactId,
+        input.trustZoneId,
+        input.disposition,
+        JSON.stringify([...input.reasonCodes]),
+        JSON.stringify(input.scores),
+        input.policyVersion,
+        input.statement,
+        input.createdAt,
+      );
   }
 
   private artifactExistsInZone(artifactId: string, trustZoneId: string): boolean {
@@ -2164,6 +2526,31 @@ export class LocalCaptureStore {
         this.db
           .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
           .run(SYNC_MIGRATION_ID, this.clock.now().toISOString());
+      }
+
+      const dispositionExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(DISPOSITION_MIGRATION_ID);
+      if (dispositionExisting === undefined) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS knowledge_dispositions (
+            source_event_id TEXT PRIMARY KEY,
+            artifact_id TEXT NOT NULL,
+            trust_zone_id TEXT NOT NULL,
+            disposition TEXT NOT NULL CHECK (disposition IN ('promote', 'hold', 'reject')),
+            reason_codes_json TEXT NOT NULL,
+            scores_json TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            statement TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_knowledge_dispositions_zone_disp
+            ON knowledge_dispositions (trust_zone_id, disposition);
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(DISPOSITION_MIGRATION_ID, this.clock.now().toISOString());
       }
     });
   }

@@ -140,15 +140,15 @@ Status: `todo` until stories land.
 
 | # | Criterion | Status |
 | --- | --- | --- |
-| K0 | Spec: this document + ADR for adjudication model | **todo** |
-| K1 | Candidate model + fixtures (synthetic sessions only) | **todo** |
-| K2 | Rule-based adjudicator MVP (value/durability/risk/disposition) | **todo** |
-| K3 | Wire promote → Observation/Claim draft; reject stays off meaning index | **todo** |
-| K4 | Retrieval/pack **default = adjudicated promoted only**; evidence secondary; held optional | **todo** |
-| K5 | Metrics + golden fixtures (precision-oriented; false-promote tests) | **todo** |
-| K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **todo** |
-| K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **todo** |
-| K8 | Scenario dogfood: “noise session” does not pollute meaning search | **todo** |
+| K0 | Spec: this document + ADR for adjudication model | **done** (ADR 0012) |
+| K1 | Candidate model + fixtures (synthetic sessions only) | **partial** (signal from envelope/payload; metadata statement) |
+| K2 | Rule-based adjudicator MVP (value/durability/risk/disposition) | **done** (`adj_v1`) |
+| K3 | Wire promote → Observation/Claim draft; reject stays off meaning index | **done** (promote→active, hold→draft, reject→disp only) |
+| K4 | Retrieval/pack **default = adjudicated promoted only**; evidence secondary; held optional | **done** (CLI/MCP search default `active` only) |
+| K5 | Metrics + golden fixtures (precision-oriented; false-promote tests) | **partial** (unit + smoke fixtures; no golden suite yet) |
+| K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **partial** (`carpeos adjudicate --stats`; doctor wiring later) |
+| K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **done** |
+| K8 | Scenario dogfood: “noise session” does not pollute meaning search | **partial** (smoke covers PostToolUse noise) |
 | K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **todo** |
 | K10 | SemVer **2.0.0** release only after explicit Approve | **blocked** |
 

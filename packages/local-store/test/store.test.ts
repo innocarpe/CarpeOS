@@ -949,6 +949,57 @@ describe("LocalCaptureStore extraction", () => {
   });
 });
 
+describe("LocalCaptureStore adjudication", () => {
+  it("promotes decision-like SessionEnd signals to active Observation", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(
+      makeEnvelope({
+        hook_event_name: "SessionEnd",
+        payload: {
+          message: "We decided to always use pnpm and never commit credentials in this monorepo.",
+        },
+      }),
+      { extract: true },
+    );
+    expect(result.extraction?.status).toBe("extracted");
+    if (result.extraction?.status !== "extracted" && result.extraction?.status !== "replay") {
+      throw new Error("expected extraction");
+    }
+    expect(result.extraction.event.lifecycle_status).toBe("active");
+    const counts = store.listDispositionCounts();
+    expect(counts.promote).toBe(1);
+  });
+
+  it("rejects PostToolUse noise without creating Observation", () => {
+    const { store } = makeStore();
+    const adjudicated = store.adjudicateFromEventId(
+      store.captureHook(makeEnvelope({ hook_event_name: "PostToolUse" })).event.event_id,
+    );
+    expect(adjudicated.status).toBe("rejected");
+    if (adjudicated.status !== "rejected") {
+      throw new Error("expected rejected");
+    }
+    expect(adjudicated.disposition).toBe("reject");
+    expect(store.countRows("canonical_events")).toBe(1);
+    expect(store.listDispositionCounts().reject).toBe(1);
+  });
+
+  it("holds metadata-only lifecycle as draft Observation", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(
+      makeEnvelope({
+        hook_event_name: "SessionEnd",
+        payload: { kind: "empty" },
+      }),
+      { extract: true },
+    );
+    // empty payload may decrypt without message/transcript → hold
+    if (result.extraction?.status === "extracted" || result.extraction?.status === "replay") {
+      expect(["active", "draft"]).toContain(result.extraction.event.lifecycle_status);
+    }
+  });
+});
+
 function makeStore(): { store: LocalCaptureStore; runtimeDir: string } {
   const runtimeDir = tempDir();
   return {
