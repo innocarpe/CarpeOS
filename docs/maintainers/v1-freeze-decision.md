@@ -71,7 +71,7 @@ All of the following should be true (or consciously waived in writing):
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
 | 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section) |
-| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **partial** — soak S1–S7 run 2026-07-30; S4 product gap filed as fix PR (see checklist) |
+| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **mostly done** — S1–S7 pass on monorepo after #75; published package still needs a patch/minor that includes #75 before freeze Approve |
 | 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | not yet |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
 
@@ -89,14 +89,14 @@ Recorded **2026-07-30** (UTC date of run) against **published**
 | S1 | Published package version in daily use | `carpeos version` → `0.2.1+` | **pass** — `0.2.1` |
 | S2 | Trust zone comes from config after install | `carpeos project identify` → `trust_zone_source: config` (or env if intentionally set) | **pass** — `trust_zone_id: tz_local_default`, `trust_zone_source: config` |
 | S3 | Outbox/status diagnosis is usable | `carpeos sync status` shows zone, `outbox_errors`, no unexpected mismatch warning for normal capture | **pass** — zone + source present; `outbox_trust_zone_mismatch: false`; `outbox_errors: []` |
-| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | **partial on 0.2.1** — capture ok; context-pack listed evidence summaries; rebuild produced **0** chunks and search stayed empty/`stale:behind_sync_cursor` because only `EvidenceArtifact` events were present and CLI search excluded `imported`. Product fix: PR **#75** (metadata-only `evidence_excerpt` + freshness scan + CLI filter align). Re-verify after merge/publish. |
+| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | **pass (monorepo unreleased / #75)** — published **0.2.1** still empty/stale on capture-only homes. After building monorepo at fix PR **#75**: rebuild `chunks: 6`, freshness `stale: false` (`last_indexed` = sync cursor), `memory search` returns `evidence_excerpt` hits with `imported` in default filters. Re-check once #75 is on a published package. |
 | S5 | Optional private sync still works if enrolled | `sync once` against private edge; no sticky leased rows | **pass** (operator-private edge) — after once: outbox `pending:0` `leased:0`, delivered count advanced, no zone mismatch / outbox errors |
 | S6 | Clean recheck still green | `node scripts/g1-recheck.mjs --version 0.2.1` (or later) | **pass** — install gates green with `--skip-smoke` (monorepo MCP smoke already covered by G1 table + CI) |
 | S7 | No new “rename soon” items | [compatibility-and-deprecations.md](compatibility-and-deprecations.md) planned-breaks table still empty | **pass** — planned breaks empty; only documented aliases |
 
-When S1–S7 are **pass** (or waived with notes), criterion **4** can flip to
-**done**. S4 remains the open product item until #75 lands and is re-checked on
-a day-to-day home (or a later published package that includes it). Then prepare
+When S1–S7 are **pass** on a **published** package line that includes the S4 fix
+(#75), criterion **4** can flip to **done**. Monorepo re-verify already green;
+publish/re-soak on the next `0.2.x` (or later) before Approve. Then prepare
 CHANGELOG `1.0.0` Notes (criterion 5) and set Decision to **Approve**.
 
 Helper for S6 (from monorepo):
@@ -166,7 +166,7 @@ These may remain incomplete at `1.0.0` and ship later as additive `1.x` MINOR:
 | npm `@innocarpe/carpeos@0.2.1` | published |
 | Git tag `v0.2.1` | published |
 | Local+private Worker dogfood after 0.2.1 (single-Mac push/pull, config trust zone) | private operator evidence only; not a public deploy claim |
-| Day-to-day soak S1–S7 on 0.2.1 (2026-07-30) | recorded above; S4 partial pending retrieval fix #75 |
+| Day-to-day soak S1–S7 on 0.2.1 (2026-07-30) | recorded above; S4 monorepo re-verify green with #75 |
 | Planned breaks before 1.0 | empty |
 
 ## Release actions after Approve (not now)
