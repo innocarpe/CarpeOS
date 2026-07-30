@@ -12,6 +12,8 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- CI/scripts: `pnpm smoke:product` (`scripts/smoke-product-loop.mjs`) product
+  E2E gate — capture → extract → rebuild → search/context-pack (wired in CI)
 - Retrieval: rank **Observation/Claim/decision** above `evidence_excerpt`
   (kind priority + meaningful-first diversity); CLI search lifecycle matches MCP
   (`active`+`draft`); context-pack slots favor observations
