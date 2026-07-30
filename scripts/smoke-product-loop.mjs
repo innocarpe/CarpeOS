@@ -181,7 +181,8 @@ function runProductLoop() {
       }
     }
 
-    // 2) capture fixture (auto extract ON for eligible SessionEnd)
+    // 2) Keep this 1.0 pipeline fixture explicitly promotable after adjudication.
+    // smoke:knowledge owns judgment-quality coverage.
     log("  · capture-hook (SessionEnd → extract)");
     {
       const result = runCli(home, [
@@ -195,7 +196,7 @@ function runProductLoop() {
           hook_event_name: "SessionEnd",
           session_id: "session_smoke_product",
           timestamp: "2026-01-01T00:00:00Z",
-          message: "synthetic product loop alpha",
+          message: "Decision: keep the synthetic product loop as the default pipeline fixture.",
         }),
       ]);
       if (result.status !== 0) {
