@@ -9,8 +9,11 @@ collapsed into one claim.
 For **npm + Git tag SemVer**, see
 [Versioning and Releases](versioning-and-releases.md).
 
-For the **first stable `1.0.0` contract freeze**, see
-[v1 Readiness](v1-readiness.md).
+For the **first stable `1.0.0` product + contract** milestone, see:
+
+- **[Product 1.0.0 DoD](product-1.0.0.md)** — core product loop (source of truth)
+- [v1 Readiness](v1-readiness.md) — public contract freeze packaging gates
+- [v1 Freeze Decision](v1-freeze-decision.md) — human Approve / Defer
 
 ## G008 Verified Evidence
 

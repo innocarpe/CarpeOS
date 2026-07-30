@@ -3,6 +3,10 @@
 Status: **recorded — Defer** (2026-07-30 UTC).  
 This is the G9 decision record. Cutting `1.0.0` is **not** approved yet.
 
+**Product definition of done (SSOT):** [product-1.0.0.md](product-1.0.0.md).
+Approve only when the product loop is green **and** contract packaging is ready.
+Contract-only G1–G8 completion is not sufficient.
+
 Do **not** treat `node scripts/release.mjs major` / `1.0.0` as automatic.
 Approve by updating this document (or a successor PR) and flipping the decision
 row to **Approve**, then cut the tag.
@@ -14,7 +18,7 @@ row to **Approve**, then cut the tag.
 | Decision | **Defer** `1.0.0` contract freeze (not Approve) |
 | Date (UTC) | 2026-07-30 |
 | Decider(s) | Maintainer (Innocarpe) — draft recorded via PR; final Approve requires explicit re-ack |
-| Package version to ship | n/a (stay on `0.y.z`; current public package `0.2.1`) |
+| Package version to ship | n/a (stay on `0.y.z`; current public package `0.2.2`) |
 | Git tag | n/a |
 | Based on commit SHA | `f78874e897f76602d1d50e3f23234720264e2929` (`origin/main` at decision draft) |
 
@@ -35,8 +39,11 @@ stable through `@innocarpe/carpeos@0.2.1`. Freeze is still deferred because:
    must not be mistaken for a freeze requirement *or* proof that the public npm
    contract alone is “production edge ready.”
 4. **G9 Approve is a deliberate product judgment**, not an automatic consequence of
-   green checklists. Prefer one more patch/minor cycle (or explicit soak notes)
-   over rushing `1.0.0` for momentum.
+   green contract checklists. Prefer completing the **product loop DoD**
+   ([product-1.0.0.md](product-1.0.0.md)) over rushing `1.0.0` for momentum.
+5. **Product loop still incomplete** as of this record’s baseline: setup does not
+   install capture hooks; Evidence→Observation/Claim extraction is not productized;
+   search is not yet meaningful-unit-first. Contract G1–G8 alone must not ship 1.0.
 
 ### G1 recheck evidence (`@innocarpe/carpeos@0.2.1`)
 
@@ -68,11 +75,12 @@ All of the following should be true (or consciously waived in writing):
 
 | # | Criterion | Status |
 | --- | --- | --- |
+| 0 | Product loop DoD green on [product-1.0.0.md](product-1.0.0.md) (P1–P9) | **open** (ultragoal carpeos-product-100) |
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
-| 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section) |
-| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **mostly done** — S1–S7 pass on monorepo after #75 (merged to `main`); published package still needs a patch/minor that includes #75 before freeze Approve |
-| 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | not yet |
+| 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section; re-run before ship if needed) |
+| 4 | No known “will rename soon” on freeze surfaces after 0.2.x soak | **mostly done** — S1–S7 pass on monorepo after #75 (merged to `main`); published package still needs a patch/minor that includes #75 before freeze Approve |
+| 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (product + first stable contract) | not yet |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
 
 ### Soak checklist (criterion 4)

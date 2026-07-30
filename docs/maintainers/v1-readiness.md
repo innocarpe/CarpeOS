@@ -1,19 +1,35 @@
 # v1.0.0 Readiness
 
-Status: **tracking checklist** for the first stable public contract (`1.0.0`).
-Not a product-completion roadmap.
+Status: **tracking checklist** for the first stable **public contract** freeze
+(`1.0.0` packaging layer).
+
+**Product completion** is defined separately. Contract freeze alone is **not**
+enough to ship `1.0.0`.
 
 Related:
 
+- **[Product 1.0.0 DoD](product-1.0.0.md)** — **source of truth** for the core
+  product loop (capture → evidence → meaningful units → search) before freeze
 - [Versioning and Releases](versioning-and-releases.md) — SemVer rules + freeze surfaces
 - [Release Readiness](release-readiness.md) — per-release CI/local evidence (G008, etc.)
+- [v1 Freeze Decision](v1-freeze-decision.md) — human Approve / Defer for the tag
 - Public package: `@innocarpe/carpeos`
 
 ## What 1.0.0 means
 
-`1.0.0` freezes the **public contract**. After that tag, breaking changes on frozen
-surfaces require a **MAJOR** bump. It does **not** require GraphRAG, multi-Mac
-sync polish, production embeddings, or full session-capture UX.
+**Product meaning (SSOT):** see **[product-1.0.0.md](product-1.0.0.md)**. In short:
+the core loop (setup installs capture, evidence lands, Observation/Claim are
+derived, search/context-pack return those units, migrations safe, product E2E +
+scenarios pass) must work **before** packaging freeze and tag.
+
+**Contract meaning (this doc):** once the product loop is green, `1.0.0` also
+freezes the **public contract**. After that tag, breaking changes on frozen
+surfaces require a **MAJOR** bump.
+
+Contract freeze is **necessary packaging at the end**, not sufficient product
+completion. GraphRAG, multi-Mac polish, hosted public edge, and production
+embeddings remain non-goals; **capture install + meaningful-unit extraction +
+retrieval of those units** are **in** the product DoD (not optional UX fluff).
 
 ## Contract surfaces (must freeze)
 
@@ -44,13 +60,20 @@ Update the **Status** column as work lands. Status values: `done` · `partial` �
 
 ## Explicit non-goals for 1.0
 
-These may remain incomplete at `1.0.0` and ship later as `1.x` MINOR:
+These may remain incomplete at `1.0.0` and ship later as `1.x` MINOR.
+Canonical list + rationale: **[product-1.0.0.md](product-1.0.0.md)**.
 
 - GraphRAG / multi-hop recall completeness
-- Hosted Cloudflare production edge
+- Hosted Cloudflare as a **public** product edge
 - Cross-Mac sync “just works” polish
 - Production embedding providers (beyond deterministic local-dev)
-- Full automatic session capture hooks UX
+- Logging every PostToolUse by default
+
+**Not** non-goals for product 1.0 (required by product DoD):
+
+- Capture hooks installable via official product setup path
+- Evidence → Observation/Claim extraction (MVP heuristics OK)
+- Search / context-pack returning meaningful units first-class
 
 ## Exit codes (public CLI)
 
@@ -72,8 +95,11 @@ capture fails, so the host agent can continue.
 1. Prefer small PRs that flip one row `todo` → `done` with linked tests/docs.
 2. When cutting any `0.y.z` release that improves a gate, update the Status column
    in the same PR (or the release PR).
-3. Tag `v1.0.0` only when **G1–G9** are `done` (or consciously `n/a` with
-   written rationale) **and** a maintainer records the freeze decision.
+3. Tag `v1.0.0` only when **product DoD** on
+   [product-1.0.0.md](product-1.0.0.md) is green (or consciously waived),
+   **G1–G9** here are `done` (or consciously `n/a` with written rationale),
+   **and** a maintainer records **Approve** in
+   [v1-freeze-decision.md](v1-freeze-decision.md).
 
 ## G1 recheck procedure (each public release)
 
@@ -125,8 +151,8 @@ When changing CLI/setup/MCP surfaces:
 
 ## Current recommendation
 
-Stay on **`0.y.z`** (current public line: **`0.2.1`**). G1–G8 checklist items are
-done; G1 clean-profile recheck on 0.2.1 is recorded; G9 is a recorded **Defer**
-with remaining soak / Approve judgment. Do not rush `1.0.0` for marketing.
-Watch trust-zone defaulting feedback, then update
-[v1-freeze-decision.md](v1-freeze-decision.md) to **Approve** and cut the tag.
+Stay on **`0.y.z`** (current public line: **`0.2.2`**). Contract gates G1–G8 are
+largely done; G9 remains **Defer**. **Product loop gates** on
+[product-1.0.0.md](product-1.0.0.md) are still open (capture-as-setup, extraction,
+meaningful retrieval, product E2E). Do **not** cut `1.0.0` until product DoD +
+contract freeze + explicit maintainer **Approve**.
