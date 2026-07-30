@@ -164,7 +164,7 @@ not infer that a **done** plumbing gate closes them.
 | Candidate text | Candidate v1 adds bounded decision / preference / constraint / procedure spans with evidence refs; promoted/held statements may include the primary sanitized fragment. | Keep fail-closed secret/dump and scoring-only transcript cases in the golden regression corpus. | K1, K5 **done** |
 | Candidate structure | Candidate v1 extracts up to three labeled spans from explicit message/procedure fields. Transcript/text may score but never enter statements directly. Session-level de-noising is not implemented. | Add de-noising only with precision evidence from golden fixtures and dogfood; do not widen raw-text ingestion for recall. | K1 **done (v1)**; K8 residual |
 | Calibration | The deterministic golden corpus has four must-promote, four must-hold, and four must-reject cases with reason, lifecycle, and statement-safety assertions. Maintainer dogfood calibration is still pending. | Extend thresholds/fixtures only from public-safe dogfood evidence; do not widen recall speculatively. | K5 **done**; K8 residual |
-| Knowledge form | Promote and hold currently create Observations only. | Evaluate Claim drafting only after candidate precision is stable; Claims remain draft and never receive automatic AcceptanceDecision. | Deferred candidate for K3 |
+| Knowledge form | Promote/hold still create **Observations only**. Explicit draft Claims remain available via MCP `memory_propose_claim` (never auto-accepted). | Keep adjudicated auto-Claim drafting **deferred** until claim-form precision fixtures exist; do not enable `allow_auto_claim` for recall. | G009 **defer (evidence-backed)** |
 | Hold review | `adjudicate list-held`, `promote-held`, and `reject-held` provide a terminal append-only review path. Promote appends active meaning; reject leaves draft off default search. | Keep review idempotency and no-auto-AcceptanceDecision behavior covered as policy versions evolve. | Operator readiness **done (v1)** |
 | Doctor | `setup doctor` reports policy version, promote/hold/reject counts, and promoted-only default search; `adjudicate --stats` remains available. | Keep EN/KO public wording honest as later gates land. | K6 **done** |
 | Held retrieval | CLI `--include-held` and MCP `include_held` include draft/held units only when requested; default remains active/promoted only. | Keep docs/tests current as retrieval surfaces expand. | K4 operator surface **done** |
@@ -255,3 +255,22 @@ retrieval, and `smoke:knowledge`.
    maintainer records explicit Approve.
 
 **Do not cut `v2.0.0` without this DoD green + explicit Approve.**
+
+
+## G009 Claim-form decision (2026-07-30)
+
+**Decision: Defer auto Claim drafting from adjudication.**
+
+Evidence reviewed:
+
+1. Candidate v1, golden adjudication suite, held review, policy history, doctor, held-search opt-in, and dogfood are green — Observation precision is stable enough for the MVP meaning loop.
+2. Current adjudicate path still materializes **Observation** on promote/hold only (`packages/local-store` + `adj_v1`). There is no claim-form selector with precision fixtures comparable to the Observation golden corpus.
+3. Product defaults keep `allow_auto_claim: false` (ADR 0011). Enabling it without claim-specific must-promote/must-hold/must-reject fixtures would be a recall-seeking classification change.
+4. Operators already have an explicit, non-auto path: MCP `memory_propose_claim` writes **draft** Claims only and never writes `AcceptanceDecision` (ADR 0002 / 0008).
+5. Dogfood/K8 pollution proof validates Observation promote vs noise; it does not prove assertive Claim quality.
+
+Therefore G009 does **not** wire adjudicated Claim drafts. Follow-up requires:
+
+- public-safe claim-form golden fixtures (must_draft_claim / must_observation_only / must_reject),
+- explicit provenance/support rules for auto drafts,
+- still **no** automatic `AcceptanceDecision`.
