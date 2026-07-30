@@ -264,8 +264,10 @@ describe("carpeos CLI", () => {
       ).status,
     ).toBe(0);
     expect(
-      (runJson(["adjudicate", "list-held", "--trust-zone", trustZone], context).stdout.held as unknown[])
-        .length,
+      (
+        runJson(["adjudicate", "list-held", "--trust-zone", trustZone], context).stdout
+          .held as unknown[]
+      ).length,
     ).toBeGreaterThan(0);
     expect(runJson(["retrieval", "rebuild", "--trust-zone", trustZone], context).status).toBe(0);
 
