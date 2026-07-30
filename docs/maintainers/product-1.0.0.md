@@ -85,12 +85,11 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 | P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` + CI (G006) |
 | P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **done** | doctor store probe + README product path (G007) |
 | P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **done** | S1–S5 notes (G008) |
-| P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **done** | [v1-freeze-decision.md](v1-freeze-decision.md) one-read gate (G009) — **still Defer** |
-| P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **partial** | G1–G8 done; G9 Decision **Defer** until Approve |
-| P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **blocked** | G010 — only after explicit **Approve** in chat/PR |
+| P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **done** | Gate doc + **Approve** 2026-07-30 (G009/G010) |
+| P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **done** | G1–G8 done; G9 **Approve** |
+| P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **in progress** | G010 after chat **Approve** |
 
-**Product loop (P1–P9): green for automation.** Remaining stop line: human **Approve**
-(criterion 6 / P11) before any `v1.0.0` tag or npm publish.
+**Product loop (P1–P9): green.** Decision **Approve** recorded — cut `1.0.0`.
 
 ---
 
