@@ -79,6 +79,71 @@ function ensureCliBuilt() {
   return true;
 }
 
+function sourceEventTypes(item) {
+  return (item?.lineage?.source_records ?? item?.source_records ?? [])
+    .map((record) => record?.event_type)
+    .filter(Boolean);
+}
+
+function describeSearchTopHit(home, results) {
+  const top = Array.isArray(results) ? results[0] : undefined;
+  return JSON.stringify({
+    result_count: Array.isArray(results) ? results.length : 0,
+    top_status: top?.status,
+    top_chunk_id: top?.chunk_id,
+    top_chunk_kind:
+      top?.chunk?.chunk_kind ?? top?.chunk_kind ?? indexedChunkKind(home, top?.chunk_id),
+    top_text: String(top?.text ?? top?.chunk?.text ?? "").slice(0, 180),
+    top_source_event_types: sourceEventTypes(top),
+  });
+}
+
+function indexedChunkKind(home, chunkId) {
+  if (typeof chunkId !== "string" || chunkId.length === 0) {
+    return undefined;
+  }
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--disable-warning=ExperimentalWarning",
+      "-e",
+      `
+        const { DatabaseSync } = await import("node:sqlite");
+        const db = new DatabaseSync(process.argv[1], { readOnly: true });
+        try {
+          const row = db.prepare("SELECT chunk_kind FROM retrieval_chunks WHERE chunk_id = ?").get(process.argv[2]);
+          if (typeof row?.chunk_kind === "string") process.stdout.write(row.chunk_kind);
+        } finally {
+          db.close();
+        }
+      `,
+      join(home, "carpeos.sqlite"),
+      chunkId,
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim() || undefined;
+}
+
+function isExpectedObservationTopHit(home, results) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return false;
+  }
+  const top = results[0];
+  const kind = top?.chunk?.chunk_kind ?? top?.chunk_kind ?? indexedChunkKind(home, top?.chunk_id);
+  const text = String(top?.text ?? top?.chunk?.text ?? "");
+  const eventTypes = sourceEventTypes(top);
+  return (
+    top?.status === "visible" &&
+    kind === "summary" &&
+    eventTypes.includes("Observation") &&
+    /Captured codex SessionEnd evidence/i.test(text)
+  );
+}
+
 function runUnitSmokes() {
   log("— Unit / MCP application smokes —");
   const suites = [
@@ -180,20 +245,8 @@ function runCliSmoke() {
           if (!Array.isArray(results) || results.length === 0) {
             return false;
           }
-          // Top hit should be Observation (summary), not only evidence_excerpt.
-          const top = results[0];
-          const kind = top?.chunk?.chunk_kind ?? top?.chunk_kind;
-          const text = top?.chunk?.text ?? "";
-          if (kind === "summary" && /SessionEnd|Captured/i.test(text)) {
-            return true;
-          }
-          // Fallback: any active result carries Observation lineage.
-          return results.some((item) => {
-            const eventTypes = (item?.lineage?.source_records ?? item?.source_records ?? [])
-              .map((r) => r?.event_type)
-              .filter(Boolean);
-            return eventTypes.includes("Observation") || item?.chunk?.chunk_kind === "summary";
-          });
+          // Top hit must be the extracted Observation summary, not EvidenceArtifact metadata.
+          return isExpectedObservationTopHit(home, results);
         },
       },
       {
@@ -255,7 +308,11 @@ function runCliSmoke() {
         return false;
       }
       if (!step.check(body)) {
-        fail(`${step.name}: unexpected payload ${JSON.stringify(body).slice(0, 400)}`);
+        const detail =
+          step.name === "memory search (meaningful unit)"
+            ? describeSearchTopHit(home, body.result?.results)
+            : JSON.stringify(body).slice(0, 400);
+        fail(`${step.name}: unexpected payload ${detail}`);
         return false;
       }
     }
