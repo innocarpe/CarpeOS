@@ -314,9 +314,7 @@ function runProductLoop() {
         return false;
       }
       if (!Array.isArray(pack.observations) || pack.observations.length < 1) {
-        fail(
-          `context-pack observations empty: ${JSON.stringify(pack.observations).slice(0, 200)}`,
-        );
+        fail(`context-pack observations empty: ${JSON.stringify(pack.observations).slice(0, 200)}`);
         return false;
       }
     }
