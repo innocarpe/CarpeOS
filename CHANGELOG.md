@@ -10,8 +10,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
+### Notes (draft for 1.0.0 — do not date/publish until Approve)
+
+Ready copy lives in [v1-freeze-decision.md](docs/maintainers/v1-freeze-decision.md)
+(criterion 5). Product loop + first stable contract; Decision still **Defer**.
+
 ### Added
 
+- Docs: product gate one-read checklist; Decision remains Defer until Approve (G009)
 - Docs: product 1.0 scenario checklist S1–S5 dogfood notes (public-safe,
   automation-backed)
 - Setup doctor: reports recent capture + Observation/Claim counts (warnings by
