@@ -50,13 +50,13 @@ Update the **Status** column as work lands. Status values: `done` · `partial` �
 | --- | --- | --- | --- |
 | G1 | Clean-machine install: `npm i -g @innocarpe/carpeos` + `carpeos setup plan` + `run --apply` + `doctor` | **done** | Clean-profile recheck on **0.2.1** recorded in [v1-freeze-decision.md](v1-freeze-decision.md) (2026-07-30) |
 | G2 | CLI + setup expose complete `--help`; README matches reality | **done** | Root/command help (0.1.2+), setup help, README install paths aligned |
-| G3 | `carpeos version` reports published package version | **done** | `carpeos version` / `-V`; npm build embeds package version (`0.2.1` verified) |
+| G3 | `carpeos version` reports published package version | **done** | `carpeos version` / `-V`; npm build embeds package version (`0.2.2` verified) |
 | G4 | Exit codes documented (help + this doc) | **done** | Root `--help` + table below |
 | G5 | MCP smoke (list / search / context-pack) documented + CI or scripted gate | **done** | `pnpm smoke:mcp` (`scripts/smoke-mcp.mjs`) + CI step “Run MCP smoke (G5)” |
 | G6 | Local store migration story written; no silent wipe of existing homes | **done** | [`docs/architecture/local-store-migrations.md`](../architecture/local-store-migrations.md) + preserve-events test |
 | G7 | MCP tool contract inventory (names + schema versions) frozen in docs | **done** | [`docs/contracts/mcp-tools-v1.md`](../contracts/mcp-tools-v1.md) + JSON + `tool-inventory.test.ts` |
 | G8 | No open “will rename soon” breaks in CHANGELOG / known issues | **done** | [`compatibility-and-deprecations.md`](compatibility-and-deprecations.md) — planned breaks empty |
-| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **partial** | [v1-freeze-decision.md](v1-freeze-decision.md): **Defer** recorded 2026-07-30; Approve when soak criteria met |
+| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **partial** | [v1-freeze-decision.md](v1-freeze-decision.md): **Defer**; criteria 1–5 ready; waiting on explicit **Approve** (criterion 6) |
 
 ## Explicit non-goals for 1.0
 
@@ -140,19 +140,25 @@ When changing CLI/setup/MCP surfaces:
 
 ## Suggested 1.0 CHANGELOG shape
 
+Canonical draft lives in
+[v1-freeze-decision.md](v1-freeze-decision.md) (criterion 5). Summary:
+
 ```markdown
 ## [1.0.0] - YYYY-MM-DD
 
 ### Notes
 
-- First stable public contract for CLI, setup, MCP tools, and local store layout.
+- First stable public contract for CLI, setup, MCP tools, local store layout,
+  and trust-zone / visibility semantics.
 - Breaking changes after this release require a MAJOR bump.
+- Hosted Cloudflare / GraphRAG / multi-Mac polish remain post-1.0 additive work.
 ```
 
 ## Current recommendation
 
 Stay on **`0.y.z`** (current public line: **`0.2.2`**). Contract gates G1–G8 are
-largely done; G9 remains **Defer**. **Product loop gates** on
-[product-1.0.0.md](product-1.0.0.md) are still open (capture-as-setup, extraction,
-meaningful retrieval, product E2E). Do **not** cut `1.0.0` until product DoD +
-contract freeze + explicit maintainer **Approve**.
+done; soak criterion 4 is **done** on published 0.2.2; criterion 5 Notes are
+**drafted**. G9 remains **Defer** until explicit **Approve** (criterion 6).
+**Product loop gates** on [product-1.0.0.md](product-1.0.0.md) are still open
+(capture-as-setup, extraction, meaningful retrieval, product E2E). Do **not** cut
+`1.0.0` until product DoD + contract freeze + explicit maintainer **Approve**.
