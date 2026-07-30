@@ -149,7 +149,7 @@ moves to **done** only with linked implementation and verification evidence.
 | K5 | Metrics + golden fixtures (precision-oriented; false-promote tests) | **done** (12-case must-promote / hold / reject golden suite in capture tests) |
 | K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **done** (`setup doctor` + `adjudicate --stats`; default search = promoted only) |
 | K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **done** |
-| K8 | Scenario dogfood: “noise session” does not pollute meaning search | **partial** (smoke covers PostToolUse noise) |
+| K8 | Scenario dogfood: “noise session” does not pollute meaning search | **done** (`pnpm smoke:dogfood` multi-hook public-safe scenarios) |
 | K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **todo** |
 | K10 | SemVer **2.0.0** release only after explicit Approve | **blocked** |
 
@@ -169,9 +169,9 @@ not infer that a **done** plumbing gate closes them.
 | Doctor | `setup doctor` reports policy version, promote/hold/reject counts, and promoted-only default search; `adjudicate --stats` remains available. | Keep EN/KO public wording honest as later gates land. | K6 **done** |
 | Held retrieval | CLI `--include-held` and MCP `include_held` include draft/held units only when requested; default remains active/promoted only. | Keep docs/tests current as retrieval surfaces expand. | K4 operator surface **done** |
 | Policy replay | Dispositions are keyed by `(source_event_id, trust_zone_id, policy_version)`; same policy replays, new policy appends. Active search remains lifecycle `active` only. | Optional operator migration/cleanup of superseded active Observations from older policies. | Audit durability **done (v1)** |
-| Dogfood depth | `smoke:knowledge` covers decision-like SessionEnd versus PostToolUse noise. | Add noisy multi-hook sessions, UserPromptSubmit floods, secret-like candidates, and thanks/ok chatter. | K8 |
+| Dogfood depth | `smoke:dogfood` covers decision/preference promote, PostToolUse noise floods, UserPromptSubmit floods, secret-like rejects, and thanks/ok chatter without default-search pollution. | Keep extending only with public-safe fixtures when new pollution classes appear. | K8 **done** |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
-| Release language | Candidate v1, golden suite, and doctor close K1/K5/K6, but K8 remains partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
+| Release language | Candidate v1, golden suite, doctor, held opt-in, and dogfood close K1/K4/K5/K6/K8, but K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
 
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
