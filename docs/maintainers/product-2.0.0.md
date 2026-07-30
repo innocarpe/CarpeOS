@@ -165,7 +165,7 @@ not infer that a **done** plumbing gate closes them.
 | Candidate structure | Candidate v1 extracts up to three labeled spans from explicit message/procedure fields. Transcript/text may score but never enter statements directly. Session-level de-noising is not implemented. | Add de-noising only with precision evidence from golden fixtures and dogfood; do not widen raw-text ingestion for recall. | K1 **done (v1)**; K8 residual |
 | Calibration | The deterministic golden corpus has four must-promote, four must-hold, and four must-reject cases with reason, lifecycle, and statement-safety assertions. Maintainer dogfood calibration is still pending. | Extend thresholds/fixtures only from public-safe dogfood evidence; do not widen recall speculatively. | K5 **done**; K8 residual |
 | Knowledge form | Promote and hold currently create Observations only. | Evaluate Claim drafting only after candidate precision is stable; Claims remain draft and never receive automatic AcceptanceDecision. | Deferred candidate for K3 |
-| Hold review | Held candidates become draft Observations, but the CLI cannot list, promote, or reject the held queue. | Add an explicit append-only operator review workflow. | Operator readiness |
+| Hold review | `adjudicate list-held`, `promote-held`, and `reject-held` provide a terminal append-only review path. Promote appends active meaning; reject leaves draft off default search. | Keep review idempotency and no-auto-AcceptanceDecision behavior covered as policy versions evolve. | Operator readiness **done (v1)** |
 | Doctor | `carpeos adjudicate --stats` reports counts; setup/install doctor does not report policy version, rates, or the promoted-only search default. | Wire adjudication health into doctor and test the rendered output. | K6 |
 | Held retrieval | Retrieval correctly defaults to `active`, but operator-facing CLI/MCP held opt-in is not documented as a supported workflow. | Add and test an explicit draft/held filter while preserving the default. | K4 operator surface |
 | Policy replay | `knowledge_dispositions.source_event_id` is the primary key, so replay returns the existing row even if a later policy version should re-evaluate it. | Define append-only source-event + policy-version history and active-set migration semantics in an ADR and tests. | Audit durability |
@@ -176,6 +176,28 @@ not infer that a **done** plumbing gate closes them.
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
 the host-hook path.
+
+## Held review workflow (operator v1)
+
+```sh
+# Capture remains fail-open; adjudication runs post-capture.
+carpeos adjudicate --event-id "$EVENT_ID"
+
+# Review only unresolved hold dispositions.
+carpeos adjudicate list-held --limit 50
+carpeos adjudicate promote-held --event-id "$EVENT_ID"
+# or: carpeos adjudicate reject-held --event-id "$EVENT_ID"
+
+# Rebuild/search keeps the default promoted-only meaning surface.
+carpeos retrieval rebuild
+carpeos memory search --query "synthetic durable decision"
+```
+
+The initial hold disposition and draft Observation are immutable. `promote-held`
+records an append-only review before appending a distinct active Observation;
+`reject-held` records review only. Repeating the same decision replays safely,
+while an opposite second decision for the same policy version fails. Neither path creates an
+`AcceptanceDecision`, and held/draft units remain excluded from default search.
 
 ---
 
@@ -208,8 +230,8 @@ retrieval, and `smoke:knowledge`.
 
 - **Reuse:** capture, local-store, fail-open hooks, policy guards, retrieval
   ranking, and both smoke harnesses.
-- **Extend:** candidate calibration and session de-noising, disposition history,
-  doctor, operator review, and explicit held retrieval.
+- **Extend:** candidate calibration and session de-noising, policy-version
+  disposition history, doctor, and explicit held retrieval.
 - **Do not:** treat lifecycle allowlists, a disposition count, or a metadata shell
   as proof that a unit is brain-worthy.
 

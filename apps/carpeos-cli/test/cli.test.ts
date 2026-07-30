@@ -93,6 +93,13 @@ describe("carpeos CLI", () => {
     const setupTopic = await captureHelp(["help", "setup"]);
     expect(setupTopic.status).toBe(0);
     expect(setupTopic.stdout).toContain("run --apply");
+
+    const adjudicateTopic = await captureHelp(["help", "adjudicate"]);
+    expect(adjudicateTopic.status).toBe(0);
+    expect(adjudicateTopic.stdout).toContain("list-held");
+    expect(adjudicateTopic.stdout).toContain("promote-held");
+    expect(adjudicateTopic.stdout).toContain("reject-held");
+    expect(adjudicateTopic.stdout).toContain("Neither path creates an AcceptanceDecision");
   });
 
   it("initializes, identifies a project, captures without plaintext output, and replays", () => {
@@ -163,6 +170,80 @@ describe("carpeos CLI", () => {
 
     const status = runJson(["outbox", "status"], context);
     expect((status.stdout as { status?: { pending?: number } }).status?.pending).toBe(2);
+  });
+
+  it("lists and terminally reviews held dispositions", () => {
+    const context = makeContext();
+    runJson(["init"], context);
+    const captureHeld = (sessionId: string, message: string) =>
+      runJson(
+        ["capture-hook", "--provider", "codex"],
+        context,
+        JSON.stringify({
+          hook_event_name: "SessionEnd",
+          session_id: sessionId,
+          timestamp: "2026-01-01T00:00:00Z",
+          message,
+        }),
+      );
+
+    const promoteCandidate = captureHeld(
+      "session_cli_held_promote",
+      "Synthetic held candidate alpha without durable markers.",
+    );
+    const rejectCandidate = captureHeld(
+      "session_cli_held_reject",
+      "Synthetic held candidate beta without durable markers.",
+    );
+    expect(promoteCandidate.status).toBe(0);
+    expect(rejectCandidate.status).toBe(0);
+    const promoteEventId = String(promoteCandidate.stdout.event_id);
+    const rejectEventId = String(rejectCandidate.stdout.event_id);
+
+    const listed = runJson(["adjudicate", "list-held", "--limit", "10"], context);
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toMatchObject({
+      ok: true,
+      command: "adjudicate",
+      mode: "list-held",
+      count: 2,
+    });
+    const held = listed.stdout.held as Array<{ source_event_id: string; statement: string }>;
+    expect(held.map((item) => item.source_event_id).sort()).toEqual(
+      [promoteEventId, rejectEventId].sort(),
+    );
+    expect(held.every((item) => item.statement.includes("SessionEnd"))).toBe(true);
+
+    const promoted = runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context);
+    expect(promoted.status).toBe(0);
+    expect(promoted.stdout).toMatchObject({
+      ok: true,
+      mode: "promote-held",
+      status: "reviewed",
+      decision: "promote",
+      extraction: { status: "extracted", lifecycle_status: "active" },
+    });
+
+    const rejected = runJson(["adjudicate", "reject-held", "--event-id", rejectEventId], context);
+    expect(rejected.status).toBe(0);
+    expect(rejected.stdout).toMatchObject({
+      ok: true,
+      mode: "reject-held",
+      status: "reviewed",
+      decision: "reject",
+    });
+    expect(runJson(["adjudicate", "list-held"], context).stdout).toMatchObject({ count: 0 });
+
+    expect(
+      runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context).stdout,
+    ).toMatchObject({ status: "replay", decision: "promote" });
+    const conflict = runJson(["adjudicate", "reject-held", "--event-id", promoteEventId], context);
+    expect(conflict.status).toBe(1);
+    expect(conflict.stdout).toMatchObject({ ok: false, status: "failed" });
+
+    const invalidLimit = runJson(["adjudicate", "list-held", "--limit", "201"], context);
+    expect(invalidLimit.status).toBe(2);
+    expect(invalidLimit.stderr).toMatchObject({ ok: false, error: { code: "invalid_usage" } });
   });
 
   it("surfaces outbox last_error on outbox status and sync status", () => {
