@@ -14,7 +14,7 @@ row to **Approve**, then cut the tag.
 | Decision | **Defer** `1.0.0` contract freeze (not Approve) |
 | Date (UTC) | 2026-07-30 |
 | Decider(s) | Maintainer (Innocarpe) — draft recorded via PR; final Approve requires explicit re-ack |
-| Package version to ship | n/a (stay on `0.y.z`; current public package `0.2.1`) |
+| Package version to ship | n/a (stay on `0.y.z`; current public package `0.2.2`) |
 | Git tag | n/a |
 | Based on commit SHA | `f78874e897f76602d1d50e3f23234720264e2929` (`origin/main` at decision draft) |
 
@@ -70,8 +70,8 @@ All of the following should be true (or consciously waived in writing):
 | --- | --- | --- |
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
-| 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section) |
-| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **mostly done** — S1–S7 pass on monorepo after #75 (merged to `main`); published package still needs a patch/minor that includes #75 before freeze Approve |
+| 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (0.2.1 section + 0.2.2 recheck) |
+| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **done** — S1–S7 pass on published **0.2.2** (includes #75 retrieval fix) |
 | 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | not yet |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
 
@@ -81,30 +81,30 @@ Repeatable day-to-day checks on a **real maintainer home** (not only the clean
 temp G1 profile). Public-safe summary only — no private URLs, credentials, or
 runtime dumps.
 
-Recorded **2026-07-30** (UTC date of run) against **published**
-`@innocarpe/carpeos@0.2.1` on a day-to-day home (not the clean-profile G1 temp).
+Initial run **2026-07-30** against published `@innocarpe/carpeos@0.2.1`.
+**Re-verified 2026-07-30** against published **`@innocarpe/carpeos@0.2.2`**
+(after tag `v0.2.2` / npm publish; day-to-day home, not clean-profile G1 temp).
 
 | # | Check | How | Status |
 | --- | --- | --- | --- |
-| S1 | Published package version in daily use | `carpeos version` → `0.2.1+` | **pass** — `0.2.1` |
+| S1 | Published package version in daily use | `carpeos version` → `0.2.1+` | **pass** — `0.2.2` |
 | S2 | Trust zone comes from config after install | `carpeos project identify` → `trust_zone_source: config` (or env if intentionally set) | **pass** — `trust_zone_id: tz_local_default`, `trust_zone_source: config` |
 | S3 | Outbox/status diagnosis is usable | `carpeos sync status` shows zone, `outbox_errors`, no unexpected mismatch warning for normal capture | **pass** — zone + source present; `outbox_trust_zone_mismatch: false`; `outbox_errors: []` |
-| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | **pass (monorepo / #75 on main, unreleased)** — published **0.2.1** still empty/stale on capture-only homes. After building monorepo with #75: rebuild `chunks: 6`, freshness `stale: false` (`last_indexed` = sync cursor), `memory search` returns `evidence_excerpt` hits with `imported` in default filters. Re-check once #75 is on a published package. |
+| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | **pass on 0.2.2** — rebuild `chunks: 6`, freshness `stale: false`, `memory search` returns `evidence_excerpt` hits; default epistemic filter includes `imported`. (0.2.1 had been empty/stale on capture-only homes; fixed by #75 and shipped in 0.2.2.) |
 | S5 | Optional private sync still works if enrolled | `sync once` against private edge; no sticky leased rows | **pass** (operator-private edge) — after once: outbox `pending:0` `leased:0`, delivered count advanced, no zone mismatch / outbox errors |
-| S6 | Clean recheck still green | `node scripts/g1-recheck.mjs --version 0.2.1` (or later) | **pass** — install gates green with `--skip-smoke` (monorepo MCP smoke already covered by G1 table + CI) |
+| S6 | Clean recheck still green | `node scripts/g1-recheck.mjs --version 0.2.2` (or later) | **pass** — install gates green with `--skip-smoke` on **0.2.2** |
 | S7 | No new “rename soon” items | [compatibility-and-deprecations.md](compatibility-and-deprecations.md) planned-breaks table still empty | **pass** — planned breaks empty; only documented aliases |
 
-When S1–S7 are **pass** on a **published** package line that includes the S4 fix
-(#75), criterion **4** can flip to **done**. Monorepo re-verify already green;
-publish/re-soak on the next `0.2.x` (or later) before Approve. Then prepare
-CHANGELOG `1.0.0` Notes (criterion 5) and set Decision to **Approve**.
+Criterion **4** is **done** on published **0.2.2**. Remaining freeze steps are
+CHANGELOG `1.0.0` Notes (criterion 5) and explicit Decision **Approve**
+(criterion 6). G9 stays **Defer** until those land.
 
 Helper for S6 (from monorepo):
 
 ```sh
-npm install -g @innocarpe/carpeos@0.2.1
-node scripts/g1-recheck.mjs --version 0.2.1
-# or: pnpm g1:recheck --version 0.2.1
+npm install -g @innocarpe/carpeos@0.2.2
+node scripts/g1-recheck.mjs --version 0.2.2
+# or: pnpm g1:recheck --version 0.2.2
 # monorepo smoke is included; use --skip-smoke for install-only
 ```
 
@@ -165,8 +165,10 @@ These may remain incomplete at `1.0.0` and ship later as additive `1.x` MINOR:
 | --- | --- |
 | npm `@innocarpe/carpeos@0.2.1` | published |
 | Git tag `v0.2.1` | published |
+| npm `@innocarpe/carpeos@0.2.2` | published |
+| Git tag `v0.2.2` | published |
 | Local+private Worker dogfood after 0.2.1 (single-Mac push/pull, config trust zone) | private operator evidence only; not a public deploy claim |
-| Day-to-day soak S1–S7 on 0.2.1 (2026-07-30) | recorded above; S4 monorepo re-verify green with #75 |
+| Day-to-day soak S1–S7 on 0.2.1 then re-verify on **0.2.2** (2026-07-30) | recorded above; criterion 4 **done** on published 0.2.2 |
 | Planned breaks before 1.0 | empty |
 
 ## Release actions after Approve (not now)
