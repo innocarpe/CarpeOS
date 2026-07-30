@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-0e8a16?style=flat)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.22-0052cc?style=flat)](package.json)
 [![Status](https://img.shields.io/badge/status-pre--MVP-fbca04?style=flat)](#지금-구현된-것)
+[![Website](https://img.shields.io/badge/website-open-4f7cff?style=flat)](https://innocarpe.github.io/carpeos-website/)
 
 **Capture context. Compound knowledge.**
 
