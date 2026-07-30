@@ -3,6 +3,10 @@
 Status: **recorded — Defer** (2026-07-30 UTC).  
 This is the G9 decision record. Cutting `1.0.0` is **not** approved yet.
 
+**Product definition of done (SSOT):** [product-1.0.0.md](product-1.0.0.md).
+Approve only when the product loop is green **and** contract packaging is ready.
+Contract-only G1–G8 completion is not sufficient.
+
 Do **not** treat `node scripts/release.mjs major` / `1.0.0` as automatic.
 Approve by updating this document (or a successor PR) and flipping the decision
 row to **Approve**, then cut the tag.
@@ -24,13 +28,16 @@ G1–G8 are **done**, G1 recheck is recorded (0.2.1 + 0.2.2), soak criterion **4
 is **done** on published **0.2.2**, and criterion **5** CHANGELOG Notes are
 **drafted** below. Freeze is still deferred because:
 
-1. **Criterion 6** — explicit maintainer **Approve** has not been recorded yet.
+1. **Criterion 0 (product loop)** — [product-1.0.0.md](product-1.0.0.md) is not
+   green yet (capture install as setup, Evidence→Observation/Claim, meaningful
+   retrieval, product E2E). Contract G1–G8 alone must not ship 1.0.
+2. **Criterion 6** — explicit maintainer **Approve** has not been recorded yet.
    G9 Approve is a deliberate product judgment, not an automatic consequence of
-   green checklists or a published patch line.
-2. **Trust-zone defaulting (0.2.1)** and **capture→search (0.2.2)** soaked cleanly
-   on a day-to-day home, but the freeze still waits for a conscious “lock the
-   public contract now” ack rather than momentum alone.
-3. **Hosted Cloudflare** remains an explicit **1.0 non-goal** and must not be
+   green contract checklists or a published patch line.
+3. **Trust-zone defaulting (0.2.1)** and **capture→search (0.2.2)** soaked cleanly
+   on a day-to-day home, but the freeze still waits for product DoD + a conscious
+   “lock the public contract now” ack rather than momentum alone.
+4. **Hosted Cloudflare** remains an explicit **1.0 non-goal** and must not be
    mistaken for a freeze requirement *or* proof that the public npm contract is
    “production edge ready.”
 
@@ -64,11 +71,12 @@ All of the following should be true (or consciously waived in writing):
 
 | # | Criterion | Status |
 | --- | --- | --- |
+| 0 | Product loop DoD green on [product-1.0.0.md](product-1.0.0.md) (P1–P9) | **open** (ultragoal carpeos-product-100) |
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
 | 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (0.2.1 section + 0.2.2 recheck) |
-| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **done** — S1–S7 pass on published **0.2.2** (includes #75 retrieval fix) |
-| 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | **done** (draft staged below; paste into CHANGELOG only when cutting 1.0.0) |
+| 4 | No known “will rename soon” on freeze surfaces after 0.2.x soak | **done** — S1–S7 pass on published **0.2.2** (includes #75 retrieval fix) |
+| 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (product + first stable contract) | **done** (draft staged below; paste into CHANGELOG only when cutting 1.0.0 — extend Notes for product loop when G009 lands) |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
 
 ### Soak checklist (criterion 4)
@@ -106,21 +114,21 @@ is intentionally run. This block is the ready copy for that cut.
 
 ### Notes
 
-- First stable public contract for `@innocarpe/carpeos`: CLI commands/flags,
-  setup/env/`~/.carpeos` layout, MCP tool names + JSON shapes
-  ([mcp-tools-v1](docs/contracts/mcp-tools-v1.md)), local store migration policy,
-  and trust-zone / visibility semantics (including documented default resolution
-  order: flag → env → config → device default).
+- First stable **product** release for `@innocarpe/carpeos`: capture install →
+  evidence → meaningful units (Observation/Claim) → search/context-pack on the
+  local path (see [product-1.0.0.md](product-1.0.0.md)).
+- First stable **public contract**: CLI commands/flags, setup/env/`~/.carpeos`
+  layout, MCP tool names + JSON shapes ([mcp-tools-v1](docs/contracts/mcp-tools-v1.md)),
+  local store migration policy, and trust-zone / visibility semantics (including
+  documented default resolution order: flag → env → config → device default).
 - Breaking changes on those surfaces after this release require a **MAJOR** bump
   (see [versioning-and-releases](docs/maintainers/versioning-and-releases.md)).
-- Hosted Cloudflare edge, GraphRAG, multi-Mac polish, production embeddings, and
-  full session-capture UX remain **non-goals** of the 1.0 contract and may ship
-  later as additive `1.x` MINOR work.
+- Hosted Cloudflare edge, GraphRAG, multi-Mac polish, and production embeddings
+  remain **non-goals** of 1.0 and may ship later as additive `1.x` MINOR work.
 ```
 
 Optional `### Changed` / `### Added` bullets for the 1.0 cut should summarize
-only what lands between the last `0.y.z` and the freeze commit (often empty if
-1.0 is a pure contract freeze on top of `0.2.2`).
+what lands between the last `0.y.z` and the product+contract freeze.
 
 Helper for S6 (from monorepo):
 
@@ -173,14 +181,19 @@ From [compatibility-and-deprecations.md](compatibility-and-deprecations.md):
 
 ## Explicit non-goals still open after 1.0 (when frozen)
 
-These may remain incomplete at `1.0.0` and ship later as additive `1.x` MINOR:
+Canonical list: [product-1.0.0.md](product-1.0.0.md). These may remain incomplete
+at `1.0.0` and ship later as additive `1.x` MINOR:
 
 - GraphRAG / multi-hop recall completeness
 - Hosted Cloudflare production edge as a public product
 - Cross-Mac sync “just works” polish
 - Production embedding providers (beyond deterministic local-dev)
-- Full automatic session capture hooks UX
+- Logging every PostToolUse by default
 - `memory_open_loops` MCP tool (not implemented; must not appear in listTools until contracted)
+
+**Not** non-goals for product 1.0 (required by product DoD): capture hooks via
+official setup path, Evidence→Observation/Claim extraction MVP, search returning
+meaningful units first-class.
 
 ## Related evidence (public-safe)
 

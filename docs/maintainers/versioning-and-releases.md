@@ -35,9 +35,17 @@ out in the changelog under `### Breaking`.
 
 ### When is `1.0.0` allowed?
 
-`1.0.0` is a **contract freeze**, not a feature-complete product milestone.
-Ship it only when maintainers are willing to treat the following as stable
-under SemVer **after** 1.0 (breaking changes require MAJOR):
+`1.0.0` is a **product + contract** milestone:
+
+1. **Product:** the core loop works end-to-end — setup installs capture, evidence
+   lands, meaningful units (Observation/Claim) are derived, search/context-pack
+   return those units, homes migrate safely, product E2E + scenarios pass.
+   SSOT: **[Product 1.0.0 DoD](product-1.0.0.md)**.
+2. **Contract freeze (packaging):** maintainers are willing to treat the surfaces
+   below as stable under SemVer **after** 1.0 (breaking changes require MAJOR).
+   Tracker: **[v1 Readiness](v1-readiness.md)**.
+
+Contract freeze is **necessary packaging**, not sufficient product completion.
 
 | Contract surface | Freeze means |
 | --- | --- |
@@ -48,23 +56,18 @@ under SemVer **after** 1.0 (breaking changes require MAJOR):
 | Trust-zone + visibility model | Same semantics for zone ids and `--visible-trust-zone` |
 
 **Not required for 1.0.0:** GraphRAG completeness, multi-Mac sync polish,
-production embedding providers, or full session capture UX. Those can land as
-`1.x` MINOR features after the contract freeze.
+production embedding providers, or hosted Cloudflare as a public product.
+**Required for product 1.0** (not deferred UX): capture install via product setup,
+Evidence→Observation/Claim extraction MVP, and retrieval of those units.
+Canonical non-goals: [product-1.0.0.md](product-1.0.0.md).
 
 **Practical gate (checklist before tagging `v1.0.0`):**
 
-See the living tracker: **[v1 Readiness](v1-readiness.md)** (gates G1–G9, exit codes,
-non-goals, and how to flip status).
-
-Summary:
-
-1. Public install path (`npm i -g` + `carpeos setup`) is green on a clean machine
-2. CLI + setup expose complete `--help`; README matches reality
-3. MCP smoke (search / context-pack) documented and CI-covered
-4. CHANGELOG lists a deliberate “v1 contract” section; no open “will rename soon”
-   known breaks — see [Compatibility and Deprecations](compatibility-and-deprecations.md)
-5. Maintainer decision recorded via [v1 freeze decision](v1-freeze-decision.md)
-   (or equivalent release notes) — not an automatic version bump
+1. Product loop DoD green — **[product-1.0.0.md](product-1.0.0.md)**
+2. Contract gates G1–G9 on **[v1 Readiness](v1-readiness.md)** (exit codes, smoke, migrations)
+3. CHANGELOG draft `## [1.0.0]` Notes; no open “will rename soon” on freeze surfaces —
+   [Compatibility and Deprecations](compatibility-and-deprecations.md)
+4. Maintainer **Approve** in [v1 freeze decision](v1-freeze-decision.md) — never automatic
 
 ### After `1.0.0`
 
