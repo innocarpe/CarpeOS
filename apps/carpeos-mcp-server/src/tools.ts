@@ -340,21 +340,37 @@ export class CarpeosMcpApplication {
       visibility.visible_trust_zone_ids,
       this.store.trustZone.trust_zone_id,
     );
-    const result = this.store.captureHook({
-      provider: requireString(input.provider, "provider"),
-      hook_event_name: requireString(input.hook_event_name, "hook_event_name"),
-      captured_at: requireString(input.captured_at, "captured_at"),
-      media_type: requireString(input.media_type, "media_type"),
-      subject_ref: requireString(input.subject_ref, "subject_ref"),
-      payload: input.payload,
-      ...(input.idempotency_key === undefined ? {} : { idempotency_key: input.idempotency_key }),
-    });
+    const result = this.store.captureHook(
+      {
+        provider: requireString(input.provider, "provider"),
+        hook_event_name: requireString(input.hook_event_name, "hook_event_name"),
+        captured_at: requireString(input.captured_at, "captured_at"),
+        media_type: requireString(input.media_type, "media_type"),
+        subject_ref: requireString(input.subject_ref, "subject_ref"),
+        payload: input.payload,
+        ...(input.idempotency_key === undefined ? {} : { idempotency_key: input.idempotency_key }),
+      },
+      { extract: true },
+    );
     return {
       schema_version: "v1",
       tool: "memory_capture",
       status: result.status,
       event_id: result.event.event_id,
       recorded_time: result.event.recorded_time,
+      ...(result.extraction === undefined
+        ? {}
+        : {
+            extraction: {
+              status: result.extraction.status,
+              ...(result.extraction.status === "extracted" || result.extraction.status === "replay"
+                ? { observation_event_id: result.extraction.event.event_id }
+                : {}),
+              ...(result.extraction.status === "skipped"
+                ? { reason: result.extraction.reason }
+                : {}),
+            },
+          }),
     };
   }
 

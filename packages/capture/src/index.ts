@@ -37,6 +37,14 @@ export {
   type PostToolUseExtractionMode,
 } from "./meaningful-unit-policy.js";
 
+export {
+  buildMetadataObservationStatement,
+  extractionObservationIdempotencyKey,
+  planObservationExtraction,
+  type ExtractionMetadataInput,
+  type ObservationExtractionPlan,
+} from "./extract-observation.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 
