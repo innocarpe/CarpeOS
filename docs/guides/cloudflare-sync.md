@@ -148,7 +148,7 @@ Capture and sync must use the **same** active zone as the outbox rows they are
 meant to process. Prefer relying on config/env after install rather than
 passing a different flag only on some commands.
 
-### Bounded cycle
+### Bounded single run
 
 ```sh
 carpeos sync once \
@@ -162,7 +162,39 @@ carpeos sync once \
 `sync push` leases one outbox row by default and ACKs it only after remote
 acceptance or replay. `sync pull` imports bounded pages and advances the local
 cursor only after applying the page. `sync once` performs bounded push first and
-then bounded pull. There is no daemon or infinite loop in G005.
+then bounded pull.
+
+For operator-safe foreground orchestration, use `sync cycle`:
+
+```sh
+carpeos sync cycle \
+  --url https://carpeos-sync.example.workers.dev \
+  --credential-file "$HOME/.carpeos/sync-credential" \
+  --sync-key-file "$HOME/.carpeos/trust-zone-sync.key" \
+  --limit 1 \
+  --max-pages 1 \
+  --json
+```
+
+`sync cycle` is a single bounded run, not a daemon. It resolves the same sync
+URL, credential file, sync key file, project, home, and trust-zone settings as
+the other sync commands. It fails closed on invalid config, unsafe secrets,
+active cycle locks, manifest-write failure, bounded sync failure, retrieval
+rebuild failure, health-write failure, or lock-release failure.
+
+Cycle runtime state is private under `<home>/cycles`: lock, health, and
+manifest artifacts are written with private modes and redact secrets, raw
+endpoint values, and private payload text. Each run creates an immutable
+pre-run manifest before the first outbound transport call, then performs one
+bounded push/pull attempt. Local retrieval rebuild runs only after bounded sync
+succeeds. Latest health is replaced atomically at `<home>/cycles/health.json`
+while the exclusive cycle lock is still held; the lock is released only after
+that health write. If lock release fails, the command exits nonzero and rewrites
+failed health while the lock still fences competing cycle runs. Health reports
+only whether a pull cursor is present, never the raw cursor value.
+
+Launch scheduling is not part of this command. Launchd setup and lifecycle
+management are planned for a later PR.
 
 ### Same-device push then pull
 
