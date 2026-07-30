@@ -221,6 +221,7 @@
             "visibility": { "$ref": "#/$defs/visibility" },
             "context_budget": { "$ref": "#/$defs/contextBudget" },
             "query": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "include_held": { "type": "boolean", "default": false, "description": "When true, include draft/held knowledge units. Default false keeps promoted/active-only results." },
             "valid_time": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
             },
@@ -263,6 +264,7 @@
             "visibility": { "$ref": "#/$defs/visibility" },
             "context_budget": { "$ref": "#/$defs/contextBudget" },
             "task": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "include_held": { "type": "boolean", "default": false, "description": "When true, include draft/held knowledge units. Default false keeps promoted/active-only results." },
             "valid_time": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
             },

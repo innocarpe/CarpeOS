@@ -662,6 +662,8 @@ export type McpRecordRef = {
 export type MemorySearchInput = McpCommonInput<"memory_search"> & {
   query: string;
   context_budget: ContextBudget;
+  /** When true, include draft/held units. Default false = active/promoted only. */
+  include_held?: boolean;
 };
 
 export type MemoryGetInput = McpCommonInput<"memory_get"> & {
@@ -671,6 +673,8 @@ export type MemoryGetInput = McpCommonInput<"memory_get"> & {
 export type MemoryContextPackInput = McpCommonInput<"memory_context_pack"> & {
   task: string;
   context_budget: ContextBudget;
+  /** When true, include draft/held units. Default false = active/promoted only. */
+  include_held?: boolean;
 };
 
 export type MemoryTraceInput = McpCommonInput<"memory_trace"> & {

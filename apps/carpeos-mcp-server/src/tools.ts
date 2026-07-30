@@ -194,6 +194,7 @@ export class CarpeosMcpApplication {
           text: requireString(input.query, "query"),
           visibility,
           budget: input.context_budget,
+          includeHeld: input.include_held === true,
           ...(input.valid_time === undefined ? {} : { validTime: input.valid_time }),
           ...(input.recorded_time === undefined ? {} : { recordedTime: input.recorded_time }),
         }),
@@ -243,7 +244,7 @@ export class CarpeosMcpApplication {
       ...(input.valid_time === undefined ? {} : { validTime: input.valid_time }),
       ...(input.recorded_time === undefined ? {} : { recordedTime: input.recorded_time }),
     });
-    const classified = classifyContext(snapshot, visibility);
+    const classified = classifyContext(snapshot, visibility, input.include_held === true);
     const budgeted = budgetContextPackWithExpertSlots(classified, input.context_budget);
     // Cache-friendly key insertion order: durable accepted knowledge first.
     return {
@@ -483,6 +484,7 @@ function makeRetrievalQuery(input: {
   text: string;
   visibility: McpVisibility;
   budget: ContextBudget;
+  includeHeld?: boolean;
   validTime?: BitemporalInterval;
   recordedTime?: BitemporalInterval;
 }): RetrievalQuery {
@@ -493,8 +495,8 @@ function makeRetrievalQuery(input: {
     query_text: input.text,
     filters: {
       visible_trust_zone_ids: [...input.visibility.visible_trust_zone_ids],
-      // Product 2.0: promoted (active) meaning only by default; held drafts opt-in later.
-      lifecycle_status: ["active"],
+      // Product 2.0: promoted (active) meaning only by default; draft/held requires include_held.
+      lifecycle_status: input.includeHeld === true ? ["active", "draft"] : ["active"],
       epistemic_authority: [
         "unverified",
         "self_reported",
@@ -517,6 +519,7 @@ function stableQueryIdentity(input: {
   text: string;
   visibility: McpVisibility;
   budget: ContextBudget;
+  includeHeld?: boolean;
   validTime?: BitemporalInterval;
   recordedTime?: BitemporalInterval;
 }): string {
@@ -524,6 +527,7 @@ function stableQueryIdentity(input: {
     text: input.text,
     visibility: input.visibility,
     budget: input.budget,
+    include_held: input.includeHeld === true,
     valid_time: input.validTime ?? null,
     recorded_time: input.recordedTime ?? null,
   });
@@ -611,6 +615,7 @@ function erasureToRecordRef(snapshot: LocalErasureSnapshot): McpRecordRef {
 function classifyContext(
   snapshot: LocalRetrievalInputSnapshot,
   visibility: McpVisibility,
+  includeHeld = false,
 ): ClassifiedPackSections {
   const events = snapshot.events.map((item) => item.event);
   const context = buildEligibilityContext(snapshot, visibility);
@@ -693,6 +698,7 @@ function classifyContext(
     rejected_claims,
     observations: snapshot.events
       .filter((item) => item.event_type === "Observation")
+      .filter((item) => includeHeld || item.event.lifecycle_status === "active")
       .map((item) => ({
         diversity_key: item.event.subject_ref,
         value: snapshotToRecordRef(item, visibility.protected_value_policy),

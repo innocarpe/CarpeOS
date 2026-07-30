@@ -100,6 +100,9 @@ describe("carpeos CLI", () => {
     expect(adjudicateTopic.stdout).toContain("promote-held");
     expect(adjudicateTopic.stdout).toContain("reject-held");
     expect(adjudicateTopic.stdout).toContain("history");
+    const memoryTopic = await captureHelp(["help", "memory"]);
+    expect(memoryTopic.status).toBe(0);
+    expect(memoryTopic.stdout).toContain("--include-held");
     expect(adjudicateTopic.stdout).toContain("--policy-version");
     expect(adjudicateTopic.stdout).toContain("Neither path creates an AcceptanceDecision");
   });
@@ -227,6 +230,87 @@ describe("carpeos CLI", () => {
     });
     const rows = history.stdout.history as Array<{ policy_version: string }>;
     expect(rows.map((row) => row.policy_version).sort()).toEqual(["adj_test_v2", "adj_v1"]);
+  });
+
+  it("defaults memory search to active-only and opts into draft/held with --include-held", () => {
+    const context = makeContext();
+    const initialized = runJson(["init"], context);
+    expect(initialized.status).toBe(0);
+    const trustZone = String(initialized.stdout.trust_zone_id);
+    // Ensure the local index has at least one meaning unit.
+    expect(
+      runJson(
+        ["capture-hook", "--provider", "codex", "--trust-zone", trustZone],
+        context,
+        JSON.stringify({
+          hook_event_name: "SessionEnd",
+          session_id: "session_held_search_promote",
+          timestamp: "2026-01-01T00:00:00Z",
+          message: "We decided to always use pnpm and never commit credentials in this monorepo.",
+        }),
+      ).status,
+    ).toBe(0);
+    // Also create a held draft so the operator queue is non-empty.
+    expect(
+      runJson(
+        ["capture-hook", "--provider", "codex", "--trust-zone", trustZone],
+        context,
+        JSON.stringify({
+          hook_event_name: "SessionEnd",
+          session_id: "session_held_search_hold",
+          timestamp: "2026-01-01T00:00:00Z",
+          payload: { kind: "empty" },
+        }),
+      ).status,
+    ).toBe(0);
+    expect(
+      (runJson(["adjudicate", "list-held", "--trust-zone", trustZone], context).stdout.held as unknown[])
+        .length,
+    ).toBeGreaterThan(0);
+    expect(runJson(["retrieval", "rebuild", "--trust-zone", trustZone], context).status).toBe(0);
+
+    const defaultSearch = runJson(
+      [
+        "memory",
+        "search",
+        "--query",
+        "pnpm",
+        "--limit",
+        "20",
+        "--trust-zone",
+        trustZone,
+        "--visible-trust-zone",
+        trustZone,
+      ],
+      context,
+    );
+    expect(defaultSearch.status).toBe(0);
+    expect(
+      (defaultSearch.stdout.result as { filters_applied?: { lifecycle_status?: string[] } })
+        .filters_applied?.lifecycle_status,
+    ).toEqual(["active"]);
+
+    const heldSearch = runJson(
+      [
+        "memory",
+        "search",
+        "--query",
+        "pnpm",
+        "--include-held",
+        "--limit",
+        "20",
+        "--trust-zone",
+        trustZone,
+        "--visible-trust-zone",
+        trustZone,
+      ],
+      context,
+    );
+    expect(heldSearch.status).toBe(0);
+    expect(
+      (heldSearch.stdout.result as { filters_applied?: { lifecycle_status?: string[] } })
+        .filters_applied?.lifecycle_status,
+    ).toEqual(["active", "draft"]);
   });
 
   it("lists and terminally reviews held dispositions", () => {
