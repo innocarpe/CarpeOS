@@ -150,8 +150,8 @@ moves to **done** only with linked implementation and verification evidence.
 | K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **done** (`setup doctor` + `adjudicate --stats`; default search = promoted only) |
 | K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **done** |
 | K8 | Scenario dogfood: “noise session” does not pollute meaning search | **done** (`pnpm smoke:dogfood` multi-hook public-safe scenarios) |
-| K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **done (Defer)** — one-read decision recorded; freeze not approved |
-| K10 | SemVer **2.0.0** release only after explicit Approve | **blocked** |
+| K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **done (Approve)** — maintainer chat Approve after freeze packet |
+| K10 | SemVer **2.0.0** release only after explicit Approve | **done** (`@innocarpe/carpeos@2.0.0` / `v2.0.0`; does not claim finished knowledge product) |
 
 ## Known gaps and debt after the MVP
 
@@ -171,7 +171,7 @@ not infer that a **done** plumbing gate closes them.
 | Policy replay | Dispositions are keyed by `(source_event_id, trust_zone_id, policy_version)`; same policy replays, new policy appends. Active search remains lifecycle `active` only. | Optional operator migration/cleanup of superseded active Observations from older policies. | Audit durability **done (v1)** |
 | Dogfood depth | `smoke:dogfood` covers decision/preference promote, PostToolUse noise floods, UserPromptSubmit floods, secret-like rejects, and thanks/ok chatter without default-search pollution. | Keep extending only with public-safe fixtures when new pollution classes appear. | K8 **done** |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
-| Release language | K0–K8 green with evidence; K9 is **Defer** (this decision); K10 remains blocked without chat **Approve**. | Do not tag, publish, deploy, or claim product 2.0 complete. | K9 **Defer**, K10 **blocked** |
+| Release language | K0–K9 green; K10 ships package **2.0.0** after chat Approve. Residual calibration/Claim-form debt remains. | Describe 2.0 as operator-real adjudication MVP on npm; do not claim finished brain-level knowledge product. | K9 **Approve**, K10 **done** |
 
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
@@ -218,16 +218,18 @@ lands in a coherent PR.
 | G008 | Public-safe dogfood scenarios |
 | G009 | Optional Claim-form drafting, only after candidate precision is stable |
 | G010 | Freeze decision — Defer without explicit Approve |
-| G011 | 2.0.0 release — **blocked** without explicit Approve |
+| G011 | 2.0.0 release — **approved** (maintainer chat Approve) |
 
 ---
 
 
-## G010 Freeze decision (2026-07-30) — **Defer**
+## G010 Freeze decision (2026-07-30) — **Approve** (after Defer packet)
 
-**Decision: Defer freezing product-2.0 public contracts. Do not tag, publish, deploy, or claim product 2.0 complete.**
+**Initial freeze packet decision was Defer.** Maintainer chat later recorded **Approve**, unlocking K10/G011 package release packaging only.
 
-This is a one-read freeze packet for maintainers. It is **not** approval to release.
+**Release decision: cut `@innocarpe/carpeos@2.0.0` / `v2.0.0`.** This ships the operator-real adjudication MVP. It does **not** claim a finished brain-level knowledge product; residual risks below still apply.
+
+Do **not** retag or unpublish `v1.0.0` / `@innocarpe/carpeos@1.0.0`.
 
 ### Green gates (evidence on `main`)
 
@@ -257,7 +259,7 @@ pnpm smoke:product
 pnpm public-boundary
 ```
 
-### Residual risk (why freeze stays Defer)
+### Residual risk (still true after package 2.0.0)
 
 1. **Calibration depth** — golden + dogfood are synthetic; no maintainer-signed real-session calibration pack is claimed.
 2. **Session de-noising** — candidate v1 does not implement multi-turn session de-noising.
@@ -270,17 +272,16 @@ pnpm public-boundary
 - Claim-form precision suite before any `allow_auto_claim` / adjudicated Claim drafts
 - Optional cleanup of superseded actives across policy versions
 - Further de-noising only with precision evidence
-- K10 release packaging **only** after explicit maintainer chat **Approve**
+- Post-2.0.0: claim-form precision suite, optional older-policy active cleanup, deeper de-noising
 
-### Hard non-actions without Approve
+### Hard non-actions (still)
 
-- Do **not** cut or retag `v2.0.0`
-- Do **not** publish `@innocarpe/carpeos@2.0.0`
-- Do **not** unpublish or retag `v1.0.0` / `@innocarpe/carpeos@1.0.0`
-- Do **not** claim product 2.0 complete in README or release notes
+- Do **not** retag or unpublish `v1.0.0` / `@innocarpe/carpeos@1.0.0`
+- Do **not** force-push or reuse an existing npm version
+- Do **not** claim a finished brain-level knowledge product; 2.0.0 is adjudication MVP packaging
 
-**Freeze status:** Defer.
-**Release status (K10/G011):** blocked until a maintainer says **Approve** in chat after reading this packet.
+**Freeze status:** Approve (chat).
+**Release status (K10/G011):** approved for `@innocarpe/carpeos@2.0.0` packaging.
 
 
 ## Relationship to shipped code
