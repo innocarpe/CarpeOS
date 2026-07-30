@@ -213,17 +213,20 @@ Grok Build** when those tools are on `PATH`.
 ```sh
 carpeos setup --help            # full parameter interface
 carpeos setup plan              # resolved plan only
-carpeos setup run --apply       # apply the plan
-carpeos setup doctor            # verify install
+carpeos setup run --apply       # apply the plan (home, wrappers, MCP)
+carpeos setup hooks install --apply   # capture hooks (merge-safe; product path)
+carpeos setup doctor            # verify install + hooks + store signals
 carpeos setup show              # print config.json
 ```
 
 Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
-`--register-mcp auto|none|claude,codex,grok`. Setup never mutates the machine
-without `--apply`.
+`--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
+Setup never mutates the machine without `--apply`.
 
-Pin a version when you care about reproducibility: `npm i -g @innocarpe/carpeos@0.1.0`.
-Changelog: [CHANGELOG.md](CHANGELOG.md).
+Pin a version when you care about reproducibility:
+`npm i -g @innocarpe/carpeos@0.2.2`. Changelog: [CHANGELOG.md](CHANGELOG.md).
+**SemVer `1.0.0` is not shipped yet** — see
+[product 1.0 DoD](docs/maintainers/product-1.0.0.md).
 
 ### Developers (git checkout)
 
@@ -231,6 +234,7 @@ Changelog: [CHANGELOG.md](CHANGELOG.md).
 git clone https://github.com/innocarpe/carpeos.git && cd carpeos
 node scripts/install-local.mjs plan
 node scripts/install-local.mjs run --apply   # build, wrappers, MCP registration
+node scripts/install-local.mjs hooks install --apply
 export PATH="$HOME/.local/bin:$PATH"
 node scripts/install-local.mjs doctor
 ```
@@ -238,23 +242,36 @@ node scripts/install-local.mjs doctor
 For monorepo work without global install: `pnpm install && pnpm build`, then use
 `node apps/carpeos-cli/dist/index.js …` (see [local capture](docs/guides/local-capture.md)).
 
-### After install (smoke)
+### Product path: install → session → search
 
 ```sh
-carpeos --help
-carpeos version
-carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+# 1) Runtime + MCP
+carpeos setup run --apply
+# 2) Capture hooks (Claude / Codex / Grok user layers; does not wipe user hooks)
+carpeos setup hooks install --apply
+# 3) Doctor (wrappers, MCP, hook status, recent capture, Observation/Claim counts)
+carpeos setup doctor
+# 4) After a host session (or synthetic capture-hook), rebuild + search meaning
+carpeos retrieval rebuild --trust-zone tz_local_default
+carpeos memory search \
+  --query "Captured SessionEnd" \
+  --trust-zone tz_local_default \
+  --visible-trust-zone tz_local_default
 carpeos memory context-pack \
-  --task "Smoke: list what I know" \
+  --task "What did we decide?" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
 ```
 
-Optional session **capture** still uses host hooks under [`adapters/`](adapters/)
-(separate from MCP). Full notes:
+`carpeos setup doctor` reports hook install status, recent `EvidenceArtifact`
+activity, and whether **Observation/Claim** units exist (empty store → warnings,
+not fail). Automated gate: `pnpm smoke:product`.
+
+Advanced/manual hook templates remain under [`adapters/`](adapters/). Full notes:
 [one-stop install](docs/guides/one-stop-install.md) ·
 [MCP](docs/guides/mcp-server.md) ·
-[context-pack smoke](docs/guides/mcp-context-pack-smoke.md).
+[product smoke](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` ·
+`pnpm smoke:product`.
 
 ### For agents installing this repo
 
@@ -262,12 +279,14 @@ Keep install **idempotent** and **out of the git tree** for private data.
 
 1. Prefer `npm i -g @innocarpe/carpeos` + `carpeos setup plan` then
    `carpeos setup run --apply` (or `install.sh`).
-2. If working from source: `node scripts/install-local.mjs run --apply` from the checkout.
-3. Never commit `~/.carpeos`, credentials, or real session data.
-4. Do not invent alternate install paths; setup registers MCP for Claude/Codex/Grok.
-5. Releases use SemVer + `vX.Y.Z` tags only — see
+2. Install capture hooks: `carpeos setup hooks install --apply`.
+3. If working from source: `node scripts/install-local.mjs run --apply` from the checkout.
+4. Never commit `~/.carpeos`, credentials, or real session data.
+5. Do not invent alternate install paths; setup registers MCP and (optionally) hooks.
+6. Releases use SemVer + `vX.Y.Z` tags only — see
    [versioning](docs/maintainers/versioning-and-releases.md) and skill
    `skills/carpeos-release/SKILL.md` (`./scripts/install-release-skill.sh`).
+   Do not claim `1.0.0` until product gate Approve.
 
 | Guide | Link |
 | --- | --- |
@@ -275,11 +294,13 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | Capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
-| MCP tool contract (G7) | [docs/contracts/mcp-tools-v1.md](docs/contracts/mcp-tools-v1.md) |
-| MCP smoke (G5) | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` |
+| MCP tool contract | [docs/contracts/mcp-tools-v1.md](docs/contracts/mcp-tools-v1.md) |
+| MCP smoke | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` |
+| Product loop smoke | `pnpm smoke:product` |
+| Product 1.0 DoD | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | v1.0 contract readiness | [docs/maintainers/v1-readiness.md](docs/maintainers/v1-readiness.md) |
-| Compatibility / deprecations (G8) | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
+| Compatibility / deprecations | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
 | v1 freeze decision (G9) | [docs/maintainers/v1-freeze-decision.md](docs/maintainers/v1-freeze-decision.md) |
 | Local store migrations (G6) | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |

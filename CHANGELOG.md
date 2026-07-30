@@ -12,6 +12,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- Setup doctor: reports recent capture + Observation/Claim counts (warnings by
+  default; `--require-capture` / `--require-units` for hard fail); README EN/KO
+  product path install → hooks → doctor → search
 - CI/scripts: `pnpm smoke:product` (`scripts/smoke-product-loop.mjs`) product
   E2E gate — capture → extract → rebuild → search/context-pack (wired in CI)
 - Retrieval: rank **Observation/Claim/decision** above `evidence_excerpt`

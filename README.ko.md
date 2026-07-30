@@ -206,16 +206,20 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 ```sh
 carpeos setup --help            # 전체 파라미터
 carpeos setup plan              # 해석된 plan만
-carpeos setup run --apply       # 적용
-carpeos setup doctor            # 설치 검증
+carpeos setup run --apply       # 적용 (home, wrapper, MCP)
+carpeos setup hooks install --apply   # 캡처 훅 (머지 안전; 제품 경로)
+carpeos setup doctor            # 설치 + 훅 + 스토어 신호 검증
 carpeos setup show              # config.json 출력
 ```
 
 주요 옵션: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
-`--register-mcp auto|none|claude,codex,grok`. `--apply` 없이는 기계를 바꾸지 않습니다.
+`--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
+`--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@0.1.0`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@0.2.2`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
+**SemVer `1.0.0` 은 아직 출시되지 않았습니다** —
+[product 1.0 DoD](docs/maintainers/product-1.0.0.md) 참고.
 
 ### 개발자 (git checkout)
 
@@ -223,6 +227,7 @@ carpeos setup show              # config.json 출력
 git clone https://github.com/innocarpe/carpeos.git && cd carpeos
 node scripts/install-local.mjs plan
 node scripts/install-local.mjs run --apply   # 빌드, wrapper, MCP 등록
+node scripts/install-local.mjs hooks install --apply
 export PATH="$HOME/.local/bin:$PATH"
 node scripts/install-local.mjs doctor
 ```
@@ -231,21 +236,35 @@ node scripts/install-local.mjs doctor
 `node apps/carpeos-cli/dist/index.js …`
 ([local capture](docs/guides/local-capture.md)).
 
-### 설치 후 스모크
+### 제품 경로: 설치 → 세션 → 검색
 
 ```sh
-carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+# 1) 런타임 + MCP
+carpeos setup run --apply
+# 2) 캡처 훅 (사용자 훅을 지우지 않음)
+carpeos setup hooks install --apply
+# 3) doctor (wrapper, MCP, 훅 상태, 최근 capture, Observation/Claim 유무)
+carpeos setup doctor
+# 4) 호스트 세션(또는 capture-hook) 후 rebuild + 의미 단위 검색
+carpeos retrieval rebuild --trust-zone tz_local_default
+carpeos memory search \
+  --query "Captured SessionEnd" \
+  --trust-zone tz_local_default \
+  --visible-trust-zone tz_local_default
 carpeos memory context-pack \
-  --task "Smoke: list what I know" \
+  --task "무엇을 결정했나?" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
 ```
 
-세션 **자동 capture** 는 MCP와 별개로 [`adapters/`](adapters/) hook 이 필요합니다.
-자세한 문서:
+`carpeos setup doctor` 는 훅 설치 상태, 최근 `EvidenceArtifact`,
+**Observation/Claim** 존재 여부를 보고합니다 (빈 스토어는 warning, fail 아님).
+자동 게이트: `pnpm smoke:product`.
+
+수동/고급 템플릿은 [`adapters/`](adapters/) 에 있습니다. 자세한 문서:
 [one-stop install](docs/guides/one-stop-install.md) ·
 [MCP](docs/guides/mcp-server.md) ·
-[context-pack smoke](docs/guides/mcp-context-pack-smoke.md).
+`pnpm smoke:mcp` · `pnpm smoke:product`.
 
 ### 에이전트가 이 저장소를 설치할 때
 
@@ -253,13 +272,15 @@ carpeos memory context-pack \
 
 1. 우선 `npm i -g @innocarpe/carpeos` + `carpeos setup plan` 후
    `carpeos setup run --apply` (또는 `install.sh`).
-2. 소스 작업이면 checkout에서 `node scripts/install-local.mjs run --apply`.
-3. `~/.carpeos`, credential, 실제 세션 데이터를 커밋하지 말 것.
-4. 설치 경로를 새로 만들지 말 것. setup이 Claude/Codex/Grok MCP를 등록함.
-5. 릴리스는 SemVer + `vX.Y.Z` 태그만 —
+2. 캡처 훅: `carpeos setup hooks install --apply`.
+3. 소스 작업이면 checkout에서 `node scripts/install-local.mjs run --apply`.
+4. `~/.carpeos`, credential, 실제 세션 데이터를 커밋하지 말 것.
+5. 설치 경로를 새로 만들지 말 것. setup이 MCP(및 선택적 훅)를 등록함.
+6. 릴리스는 SemVer + `vX.Y.Z` 태그만 —
    [versioning](docs/maintainers/versioning-and-releases.md),
    스킬 `skills/carpeos-release/SKILL.md`
    (`./scripts/install-release-skill.sh`).
+   product gate Approve 전에는 `1.0.0` 을 주장하지 말 것.
 
 | 가이드 | 링크 |
 | --- | --- |
@@ -267,6 +288,8 @@ carpeos memory context-pack \
 | Capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
+| Product 1.0 DoD | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
+| 제품 루프 smoke | `pnpm smoke:product` |
 | 버전·릴리스 | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 
