@@ -61,6 +61,31 @@ Evidence metadata stays secondary.
 - Operators need a local adjudicate step (CLI / future background worker).
 - Tests must include **noise sessions** that must not flood meaning search.
 
+
+## Policy-version re-adjudication
+
+Disposition identity is **`(source_event_id, trust_zone_id, policy_version)`**.
+
+- Same evidence + same `policy_version` → replay the stored disposition and any
+  already-materialized Observation for that policy (idempotent).
+- Same evidence + a **new** `policy_version` → append a new disposition row and,
+  on promote/hold, append a new Observation with a policy-scoped idempotency key.
+- Prior disposition rows and Observations are never rewritten or deleted.
+- Held reviews remain unique per `(source_event_id, trust_zone_id, policy_version)`.
+- Default retrieval still surfaces `lifecycle_status: active` only. When a new
+  policy promotes meaning that an older policy held/rejected, both Observations
+  may exist; operators should treat the newest policy’s active units as the
+  intended product meaning and may leave older actives as historical until an
+  explicit migration/cleanup story is approved.
+
+CLI:
+
+```sh
+carpeos adjudicate --event-id "$EVENT_ID"                 # current policy
+carpeos adjudicate --event-id "$EVENT_ID" --policy-version adj_v2
+carpeos adjudicate history --event-id "$EVENT_ID"
+```
+
 ## Related
 
 - [product-2.0.0.md](../maintainers/product-2.0.0.md)

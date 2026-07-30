@@ -99,6 +99,8 @@ describe("carpeos CLI", () => {
     expect(adjudicateTopic.stdout).toContain("list-held");
     expect(adjudicateTopic.stdout).toContain("promote-held");
     expect(adjudicateTopic.stdout).toContain("reject-held");
+    expect(adjudicateTopic.stdout).toContain("history");
+    expect(adjudicateTopic.stdout).toContain("--policy-version");
     expect(adjudicateTopic.stdout).toContain("Neither path creates an AcceptanceDecision");
   });
 
@@ -170,6 +172,61 @@ describe("carpeos CLI", () => {
 
     const status = runJson(["outbox", "status"], context);
     expect((status.stdout as { status?: { pending?: number } }).status?.pending).toBe(2);
+  });
+
+  it("records disposition history across policy versions", () => {
+    const context = makeContext();
+    runJson(["init"], context);
+    const captured = runJson(
+      ["capture-hook", "--provider", "codex"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_cli_policy_history",
+        timestamp: "2026-01-01T00:00:00Z",
+        message: "We decided to always use pnpm and never commit credentials in this monorepo.",
+      }),
+    );
+    expect(captured.status).toBe(0);
+    const eventId = String(captured.stdout.event_id);
+
+    const first = runJson(["adjudicate", "--event-id", eventId], context);
+    expect(first.status).toBe(0);
+    expect(first.stdout).toMatchObject({
+      ok: true,
+      command: "adjudicate",
+      policy_version: "adj_v1",
+    });
+
+    const second = runJson(
+      [
+        "adjudicate",
+        "--event-id",
+        eventId,
+        "--policy-version",
+        "adj_test_v2",
+        "--signal-text",
+        "thanks",
+      ],
+      context,
+    );
+    expect(second.status).toBe(0);
+    expect(second.stdout).toMatchObject({
+      ok: true,
+      policy_version: "adj_test_v2",
+    });
+
+    const history = runJson(["adjudicate", "history", "--event-id", eventId], context);
+    expect(history.status).toBe(0);
+    expect(history.stdout).toMatchObject({
+      ok: true,
+      command: "adjudicate",
+      mode: "history",
+      source_event_id: eventId,
+      count: 2,
+    });
+    const rows = history.stdout.history as Array<{ policy_version: string }>;
+    expect(rows.map((row) => row.policy_version).sort()).toEqual(["adj_test_v2", "adj_v1"]);
   });
 
   it("lists and terminally reviews held dispositions", () => {

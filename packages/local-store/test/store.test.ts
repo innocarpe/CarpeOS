@@ -1212,6 +1212,79 @@ describe("LocalCaptureStore adjudication", () => {
     expect(store.countRows("canonical_events")).toBe(3);
   });
 
+  it("appends a new disposition when policy_version changes and replays the same policy", () => {
+    const { store } = makeStore();
+    const captured = store.captureHook(
+      makeEnvelope({
+        session_id: "session_policy_history",
+        payload: {
+          message: "We decided to always use pnpm and never commit credentials in this monorepo.",
+        },
+      }),
+    );
+    const first = store.adjudicateFromEventId(captured.event.event_id);
+    expect(first.status).toBe("promoted");
+    if (first.status !== "promoted" && first.status !== "held" && first.status !== "replay") {
+      throw new Error("expected first promote");
+    }
+    expect(first.policy_version).toBe("adj_v1");
+    expect(first.extraction?.status).toBe("extracted");
+    const firstObservationId =
+      first.extraction &&
+      (first.extraction.status === "extracted" || first.extraction.status === "replay")
+        ? first.extraction.event.event_id
+        : undefined;
+    expect(firstObservationId).toMatch(/^evt_/);
+
+    const replay = store.adjudicateFromEventId(captured.event.event_id);
+    expect(replay.status).toBe("replay");
+    if (replay.status !== "replay") {
+      throw new Error("expected adj_v1 replay");
+    }
+    expect(replay.policy_version).toBe("adj_v1");
+    if (replay.extraction !== undefined) {
+      expect(replay.extraction.status).toBe("replay");
+      if (replay.extraction.status === "extracted" || replay.extraction.status === "replay") {
+        expect(replay.extraction.event.event_id).toBe(firstObservationId);
+      }
+    }
+    expect(store.countRows("knowledge_dispositions")).toBe(1);
+
+    // Force a second disposition under a synthetic later policy without changing adj_v1 code.
+    const second = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_test_v2",
+      signalText: "thanks",
+    });
+    // thanks is noise-only → reject under rules, but still appends a new disposition row.
+    expect(second.status).toBe("rejected");
+    if (second.status !== "rejected") {
+      throw new Error("expected adj_test_v2 reject");
+    }
+    expect(second.policy_version).toBe("adj_test_v2");
+    expect(store.countRows("knowledge_dispositions")).toBe(2);
+
+    const history = store.listDispositionHistory(captured.event.event_id);
+    expect(history).toHaveLength(2);
+    expect(history.map((row) => row.policy_version).sort()).toEqual(["adj_test_v2", "adj_v1"]);
+    expect(history.every((row) => row.source_event_id === captured.event.event_id)).toBe(true);
+
+    const secondReplay = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_test_v2",
+      signalText: "thanks",
+    });
+    expect(secondReplay.status).toBe("replay");
+    if (secondReplay.status !== "replay") {
+      throw new Error("expected adj_test_v2 replay");
+    }
+    expect(secondReplay.policy_version).toBe("adj_test_v2");
+    expect(store.countRows("knowledge_dispositions")).toBe(2);
+
+    // Current-policy stats remain scoped to adj_v1.
+    const counts = store.listDispositionCounts();
+    expect(counts.policy_version).toBe("adj_v1");
+    expect(counts.promote + counts.hold + counts.reject).toBe(1);
+  });
+
   it("refuses held review for a non-held disposition", () => {
     const { store } = makeStore();
     const captured = store.captureHook(
