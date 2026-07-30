@@ -181,7 +181,40 @@ export function buildMeaningfulChunks(input: MeaningfulChunkInput): RetrievalChu
     );
   }
 
+  // Metadata-only evidence units (not raw hook/protected payloads). Aligns with
+  // docs/guides/retrieval.md: claims, observations, decisions, selected evidence metadata.
+  const evidenceArtifacts = events.filter(
+    (event): event is CanonicalEvent<"EvidenceArtifact"> => event.event_type === "EvidenceArtifact",
+  );
+  for (const evidence of evidenceArtifacts) {
+    const sourceRecords = [eventSourceRecord(evidence, "primary")];
+    chunks.push(
+      buildRetrievalChunk(
+        withCreatedAt(input.createdAt, {
+          chunkKind: "evidence_excerpt",
+          text: formatEvidenceMetadataText(evidence),
+          sourceRecords,
+          derivation: makeRetrievalDerivation({ sourceRecords, config }),
+          chunkIndex: chunks.length,
+        }),
+      ),
+    );
+  }
+
   return chunks;
+}
+
+/** Searchable metadata for EvidenceArtifact — never includes protected raw content. */
+export function formatEvidenceMetadataText(event: CanonicalEvent<"EvidenceArtifact">): string {
+  const { artifact_id, kind, media_type } = event.payload;
+  return [
+    "EvidenceArtifact",
+    `kind=${kind}`,
+    `media_type=${media_type}`,
+    `artifact_id=${artifact_id}`,
+    `subject_ref=${event.subject_ref}`,
+    `event_id=${event.event_id}`,
+  ].join(" ");
 }
 
 function withCreatedAt<T extends Omit<BuildChunkInput, "createdAt">>(

@@ -1,8 +1,8 @@
 import {
-  validateConformance,
   type CanonicalEvent,
   type ProvenanceRef,
   type TrustZone,
+  validateConformance,
 } from "@carpeos/schema";
 import { describe, expect, it } from "vitest";
 import { buildMeaningfulChunks, buildRetrievalChunk, normalizeChunkText } from "../src/chunks.js";
@@ -157,5 +157,57 @@ describe("retrieval chunk construction", () => {
     ]);
     expect(() => normalizeChunkText("raw_payload transcript_secret")).toThrow(/protected raw/);
     expect(chunks.every((chunk) => !chunk.text.includes("raw_payload"))).toBe(true);
+  });
+
+  it("projects EvidenceArtifact as metadata-only evidence_excerpt chunks", () => {
+    const evidence: CanonicalEvent<"EvidenceArtifact"> = {
+      ...baseEvent,
+      event_id: "evt_evidence001",
+      event_type: "EvidenceArtifact",
+      recorded_time: { start: "2026-01-01T00:00:30Z", end: null },
+      epistemic_authority: "imported",
+      request_fingerprint: `sha-256:${"1".repeat(64)}`,
+      zone_sequence: 1,
+      payload: {
+        artifact_id: "art_evidence001",
+        kind: "message",
+        media_type: "application/json",
+        content_ref: {
+          ref_type: "protected_value",
+          protected_value_id: "pv_synthetic_evidence_001",
+          vault_ref: "vault_local",
+          key_ref: "key_local",
+          encrypted_blob: {
+            algorithm: "aes-256-gcm",
+            nonce_ref: "nonce_evidence_001",
+            tag_ref: "tag_evidence_001",
+            digest: { algorithm: "sha-256", value: "a".repeat(64) },
+            size_bytes: 32,
+          },
+        },
+      },
+    };
+
+    const chunks = buildMeaningfulChunks({
+      events: [evidence, ...events],
+      createdAt: "2026-01-01T00:08:00Z",
+    });
+    const evidenceChunk = chunks.find((chunk) => chunk.chunk_kind === "evidence_excerpt");
+
+    expect(evidenceChunk).toBeDefined();
+    expect(evidenceChunk?.text).toContain("kind=message");
+    expect(evidenceChunk?.text).toContain("artifact_id=art_evidence001");
+    expect(evidenceChunk?.text).toContain("event_id=evt_evidence001");
+    expect(evidenceChunk?.text).not.toMatch(/ciphertext|plaintext|raw_payload/i);
+    expect(evidenceChunk).toBeDefined();
+    if (evidenceChunk === undefined) {
+      throw new Error("expected evidence_excerpt chunk");
+    }
+    expect(evidenceChunk.epistemic_authority).toBe("imported");
+    expect(evidenceChunk.source_records).toHaveLength(1);
+    expect(validateConformance("retrievalProjection", evidenceChunk)).toEqual({
+      valid: true,
+      errors: [],
+    });
   });
 });

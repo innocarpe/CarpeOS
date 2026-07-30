@@ -12,7 +12,19 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Retrieval: project `EvidenceArtifact` events as metadata-only
+  `evidence_excerpt` chunks (kind / media_type / artifact_id / subject / event
+  id — never protected raw payload), so capture → rebuild → `memory search`
+  works on day-to-day homes that only have hook evidence
+
+### Fixed
+
+- Retrieval freshness: advance `last_indexed_zone_sequence` from scanned events
+  as well as produced chunks (capture-only stores no longer stuck
+  `stale:behind_sync_cursor` after a clean rebuild)
+- CLI `memory search`: default `epistemic_authority` filter includes `imported`
+  (and the rest of the authority set), matching MCP `memory_search` so imported
+  capture evidence is not silently filtered out
 
 ## [0.2.1] - 2026-07-29
 
