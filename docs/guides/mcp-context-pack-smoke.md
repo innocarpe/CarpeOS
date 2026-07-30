@@ -7,6 +7,11 @@ This guide shows how to verify `memory_context_pack` behavior after a workspace
 build: expert-slot allocation, section order, budgets, and acceptance lineage.
 Use only synthetic project names and temporary directories.
 
+For retrieval proof inside this smoke, use a unique explicit `--project-id` and
+trust-zone pair. Protected raw hook payload fields such as `message` and
+`session_id` are intentionally not projected into searchable result text, so
+searching those raw labels is not a valid success check.
+
 ## What “context pack” means
 
 `memory_context_pack` is **active capacity** (ADR 0009 L2): a deterministic,
@@ -61,8 +66,9 @@ CI runs `pnpm smoke:mcp` as **“Run MCP smoke (G5)”** after `pnpm check`
 # CLI context-pack only (requires local store + trust zone from init)
 node apps/carpeos-cli/dist/index.js memory context-pack \
   --task "Summarize synthetic Alpha work" \
-  --trust-zone tz_synthetic_example \
-  --visible-trust-zone tz_synthetic_example \
+  --project-id project_smoke_context_pack_unique_001 \
+  --trust-zone tz_smoke_context_pack_unique \
+  --visible-trust-zone tz_smoke_context_pack_unique \
   --max-items 16 \
   --max-characters 8000
 
@@ -85,29 +91,31 @@ synthetic store shape agents later read through MCP. They do not call
 `memory_context_pack` directly.
 
 Use a temporary directory outside the git tree for real private runs. The
-commands below use a synthetic name under `/tmp` for illustration only — do not
-commit that directory.
+commands below use placeholders for local paths and synthetic identifiers only.
 
 ```sh
-# pick a private temp path on your machine
-export CARPEOS_SMOKE_HOME="/tmp/carpeos-context-pack-smoke-synthetic"
-mkdir -p "$CARPEOS_SMOKE_HOME"
-cd /path/to/carpeos   # repository root after clone
+# pick a private temp path on your machine and run from the repository root
+export CARPEOS_SMOKE_HOME="<temporary-carpeos-home>"
 
 # if your CLI expects a home/runtime via flags or env, follow local-capture.md.
 # Minimal synthetic capture using the built CLI entrypoint:
-node apps/carpeos-cli/dist/index.js init
-node apps/carpeos-cli/dist/index.js project identify
+node apps/carpeos-cli/dist/index.js init \
+  --home "$CARPEOS_SMOKE_HOME" \
+  --project-id project_smoke_context_pack_unique_001 \
+  --trust-zone tz_smoke_context_pack_unique
 
 node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
-  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic_pack","timestamp":"2026-01-01T00:00:00Z","message":"synthetic context pack smoke"}'
+  --home "$CARPEOS_SMOKE_HOME" \
+  --project-id project_smoke_context_pack_unique_001 \
+  --trust-zone tz_smoke_context_pack_unique \
+  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic_pack","timestamp":"2026-01-01T00:00:00Z","message":"We decided to keep this smoke proof synthetic."}'
 
-node apps/carpeos-cli/dist/index.js outbox status
+node apps/carpeos-cli/dist/index.js outbox status --home "$CARPEOS_SMOKE_HOME"
 
 # retrieval projection (dev embeddings are synthetic quality only)
-# Use the trust zone printed by init / your local runtime (example id only):
 node apps/carpeos-cli/dist/index.js retrieval rebuild \
-  --trust-zone tz_synthetic_example
+  --home "$CARPEOS_SMOKE_HOME" \
+  --trust-zone tz_smoke_context_pack_unique
 ```
 
 If trust-zone flags differ in your checkout, use the exact flags from
@@ -119,15 +127,20 @@ A typical retrieval smoke after rebuild:
 
 ```sh
 node apps/carpeos-cli/dist/index.js memory search \
-  --query "synthetic" \
-  --trust-zone tz_synthetic_example \
-  --visible-trust-zone tz_synthetic_example \
+  --home "$CARPEOS_SMOKE_HOME" \
+  --query "project_smoke_context_pack_unique_001" \
+  --project-id project_smoke_context_pack_unique_001 \
+  --trust-zone tz_smoke_context_pack_unique \
+  --visible-trust-zone tz_smoke_context_pack_unique \
   --limit 8
 ```
 
-Replace `tz_synthetic_example` with the active local trust zone from your
-runtime if different. Search results are candidate retrieval — still not
-accepted facts by themselves.
+The deterministic assertion is: at least one visible result is a summary chunk
+from an active `Observation` whose statement contains the projected project id.
+Then check canonical state separately for the Observation provenance and active
+record. A query for the raw payload text `We decided to keep this smoke proof
+synthetic.` or `session_synthetic_pack` may return zero results by design.
+Search results are candidate retrieval — still not accepted facts by themselves.
 
 ## Expected `memory_context_pack` shape
 
@@ -163,9 +176,9 @@ Default expert-slot policy (soft structure inside the hard budget):
 | `accepted_facts` | 6 |
 | `conflicts` | 2 |
 | `supersessions` | 1 |
-| procedure traces (into `evidence_summaries`) | 3 |
-| `observations` | 2 |
-| general `evidence_summaries` | 2 |
+| procedure traces (into `evidence_summaries`) | 2 |
+| `observations` | 4 |
+| general `evidence_summaries` | 1 |
 | draft / rejected / erasure | leftover budget only |
 
 Hard limits still win: if `max_items` or `max_characters` is hit, responses set

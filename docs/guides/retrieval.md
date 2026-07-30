@@ -53,6 +53,13 @@ include claims, observations, acceptance decisions, and selected evidence
 metadata. Raw protected values, encrypted ciphertext, provider payloads, local
 database paths, and credential locations must not be projected into result text.
 
+For synthetic smoke proofs, put the unique test token in explicit projected
+metadata such as `--project-id`. Do not use raw hook payload fields like
+`message`, `session_id`, or a synthetic transcript label as the success
+predicate: those fields remain protected input and are not indexed as result
+text. The extracted metadata-only Observation statement includes the projected
+subject/project id, so the project id is the public-safe token to search.
+
 ## Development Embeddings
 
 Create local deterministic development embeddings:
@@ -83,9 +90,10 @@ Search requires explicit trust-zone visibility:
 
 ```sh
 carpeos memory search \
-  --query "Alpha deterministic" \
-  --visible-trust-zone tz_synthetic_example \
-  --trust-zone tz_synthetic_example \
+  --query "project_smoke_retrieval_unique_001" \
+  --project-id project_smoke_retrieval_unique_001 \
+  --trust-zone tz_smoke_retrieval_unique \
+  --visible-trust-zone tz_smoke_retrieval_unique \
   --limit 10
 ```
 
@@ -101,6 +109,14 @@ Every result is rechecked against canonical state before it is returned. A
 vector or full-text hit can be excluded if trust-zone visibility, lifecycle
 state, epistemic authority, supersession, erasure, or stale projection metadata
 does not permit visibility.
+
+A deterministic local smoke should assert the exact projected lineage instead of
+only checking that any text matched. Use a unique throwaway trust zone plus an
+explicit `--project-id`, rebuild, search for that project id, and verify that
+the returned item is a summary chunk for an active `Observation` whose statement
+contains that project id. Check canonical state separately for the Observation
+provenance and active record. A search for the raw hook `message` text or
+`session_id` may correctly return zero results.
 
 ## Get
 
@@ -123,8 +139,9 @@ Build a bounded agent context pack from the local store (active capacity):
 ```sh
 carpeos memory context-pack \
   --task "Summarize Alpha decisions for the next agent turn" \
-  --trust-zone tz_synthetic_example \
-  --visible-trust-zone tz_synthetic_example \
+  --project-id project_smoke_retrieval_unique_001 \
+  --trust-zone tz_smoke_retrieval_unique \
+  --visible-trust-zone tz_smoke_retrieval_unique \
   --max-items 16 \
   --max-characters 8000 \
   --protected-value-policy metadata_only
@@ -138,7 +155,9 @@ Stdout is JSON:
   budgets, etc.)
 
 The pack is not a search ranking dump. Only acceptance-lineage facts fill
-`accepted_facts`. See [MCP context-pack smoke](mcp-context-pack-smoke.md).
+`accepted_facts`. `--task` describes the pack assembly target; it is not a
+ranked-search query wrapper and should not be used as the deterministic search
+predicate. See [MCP context-pack smoke](mcp-context-pack-smoke.md).
 
 ## Output Safety
 

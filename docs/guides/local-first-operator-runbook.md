@@ -44,7 +44,10 @@ Capture one synthetic hook payload:
 
 ```sh
 node apps/carpeos-cli/dist/index.js capture-hook --provider codex --input argv \
-  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"synthetic capture"}'
+  --home .carpeos-example \
+  --project-id project_example_alpha \
+  --trust-zone tz_synthetic_example \
+  '{"hook_event_name":"SessionEnd","session_id":"session_synthetic","timestamp":"2026-01-01T00:00:00Z","message":"We decided to keep this smoke proof synthetic."}'
 ```
 
 Check the outbox:
@@ -68,14 +71,16 @@ Search with explicit visibility:
 ```sh
 node apps/carpeos-cli/dist/index.js memory search \
   --home .carpeos-example \
-  --query "synthetic capture" \
+  --query "project_example_alpha" \
+  --project-id project_example_alpha \
   --trust-zone tz_synthetic_example \
   --visible-trust-zone tz_synthetic_example \
   --limit 10
 ```
 
 Retrieval output is a projection. A search result does not make a claim
-accepted.
+accepted. This smoke query targets the projected project id in the metadata-only
+Observation statement, not the raw hook `message` or `session_id` fields.
 
 ## MCP and Obsidian
 
