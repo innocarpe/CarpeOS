@@ -966,6 +966,9 @@ describe("LocalCaptureStore adjudication", () => {
       throw new Error("expected extraction");
     }
     expect(result.extraction.event.lifecycle_status).toBe("active");
+    expect(result.extraction.event.payload.statement).toContain(
+      "We decided to always use pnpm and never commit credentials in this monorepo.",
+    );
     const counts = store.listDispositionCounts();
     expect(counts.promote).toBe(1);
   });
@@ -993,10 +996,59 @@ describe("LocalCaptureStore adjudication", () => {
       }),
       { extract: true },
     );
-    // empty payload may decrypt without message/transcript → hold
-    if (result.extraction?.status === "extracted" || result.extraction?.status === "replay") {
-      expect(["active", "draft"]).toContain(result.extraction.event.lifecycle_status);
+    expect(result.extraction?.status).toBe("extracted");
+    if (result.extraction?.status !== "extracted" && result.extraction?.status !== "replay") {
+      throw new Error("expected held extraction");
     }
+    expect(result.extraction.event.lifecycle_status).toBe("draft");
+  });
+
+  it("extracts a safe procedure span from explicit procedure steps", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(
+      makeEnvelope({
+        hook_event_name: "SessionEnd",
+        procedure_trace: {
+          provider: "synthetic-agent",
+          session_id: "session_candidate_procedure",
+          completeness: "partial",
+          has_tool_calls: true,
+        },
+        payload: {
+          steps: [
+            { instruction: "Procedure: first run offline checks before release." },
+            "Then verify the synthetic package artifact.",
+          ],
+        },
+      }),
+      { extract: true },
+    );
+
+    expect(result.extraction?.status).toBe("extracted");
+    if (result.extraction?.status !== "extracted" && result.extraction?.status !== "replay") {
+      throw new Error("expected procedure extraction");
+    }
+    expect(result.extraction.event.lifecycle_status).toBe("active");
+    expect(result.extraction.event.payload.statement).toContain("Knowledge fragment (procedure)");
+    expect(result.extraction.event.payload.statement).toContain(
+      "Procedure: first run offline checks before release.",
+    );
+    expect(result.extraction.event.payload.statement).not.toContain("has_tool_calls");
+  });
+
+  it("rejects secret-like decision text before creating a knowledge statement", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(
+      makeEnvelope({
+        hook_event_name: "SessionEnd",
+        payload: { decision: "Decision: store api_key=syntheticsecretvalue123 for later." },
+      }),
+      { extract: true },
+    );
+
+    expect(result.extraction?.status).toBe("skipped");
+    expect(store.listDispositionCounts().reject).toBe(1);
+    expect(store.countRows("canonical_events")).toBe(1);
   });
 });
 
