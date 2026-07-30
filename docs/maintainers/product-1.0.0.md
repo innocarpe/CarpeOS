@@ -1,34 +1,37 @@
 # Product 1.0.0 — Definition of Done
 
-Status: **source of truth** for what SemVer `1.0.0` means for CarpeOS as a
-**product**, not only a frozen CLI/MCP contract.
+Status: **shipped baseline** for SemVer `1.0.0` — local **pipeline + public
+contract freeze**.  
+
+**Honest product reframe (post-ship):** 1.0 is **not** “brain-worthy knowledge
+judgment complete.” Lifecycle allowlist + metadata Observation is **not** full
+knowledge adjudication. That thesis is SSOT under
+**[product-2.0.0.md](product-2.0.0.md)**. Do **not** untag `v1.0.0`; do not market
+1.0 as a finished memory brain.
 
 Related:
 
+- **[Product 2.0.0 DoD](product-2.0.0.md)** — knowledge adjudication (next major product)
 - [v1 Readiness](v1-readiness.md) — contract freeze gates G1–G9 (necessary packaging)
-- [v1 Freeze Decision](v1-freeze-decision.md) — human Approve / Defer for the tag
+- [v1 Freeze Decision](v1-freeze-decision.md) — Approve recorded; tag cut
 - [Versioning and Releases](versioning-and-releases.md) — SemVer + release process
 - [Release Readiness](release-readiness.md) — per-release CI/local evidence
-- Public package: `@innocarpe/carpeos`
+- Public package: `@innocarpe/carpeos@1.0.0`
 
-**Do not cut** git tag `v1.0.0` or publish npm `1.0.0` until:
-
-1. This product loop DoD is green (or consciously waived in writing),
-2. Contract gates on [v1-readiness.md](v1-readiness.md) remain satisfied,
-3. [v1-freeze-decision.md](v1-freeze-decision.md) is flipped to **Approve** by a
-   maintainer (explicit chat/PR decision — never automatic).
+Historical note: cutting `1.0.0` required this loop green + freeze Approve. That
+bar was **pipeline completeness**, not the original “only store what a brain
+would keep” thesis.
 
 ---
 
 ## What 1.0.0 means
 
-**`1.0.0` means the original CarpeOS core product loop works end-to-end**, then we
-freeze the public contract.
+**`1.0.0` means the local capture → evidence → extract shell → search loop works
+end-to-end**, and we freeze the public CLI/MCP/setup/store contract.
 
-Contract freeze (CLI/MCP/setup/store surfaces) is **necessary packaging at the
-end**, not sufficient product completion. Older docs that treated GraphRAG,
-capture UX, and Evidence→meaning extraction as non-goals while still cutting
-`1.0.0` are **superseded by this document** for product judgment.
+It does **not** mean CarpeOS can reliably judge which session content is
+durable knowledge. Contract freeze is packaging; **knowledge OS completeness is
+2.0**.
 
 ### Core product loop (all must be true)
 

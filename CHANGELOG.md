@@ -12,7 +12,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Docs: [product 2.0.0 DoD](docs/maintainers/product-2.0.0.md) — knowledge
+  **adjudication** as next product major; honest reframe of 1.0 as pipeline/contract
+  baseline (not brain-worthy judgment complete)
 
 ## [1.0.0] - 2026-07-30
 
