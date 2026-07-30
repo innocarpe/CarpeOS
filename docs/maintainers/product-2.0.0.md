@@ -146,7 +146,7 @@ moves to **done** only with linked implementation and verification evidence.
 | K2 | Rule-based adjudicator MVP (value/durability/risk/disposition) | **done** (`adj_v1`) |
 | K3 | Wire promote → Observation/Claim draft; reject stays off meaning index | **done** (promote→active, hold→draft, reject→disp only) |
 | K4 | Retrieval/pack **default = adjudicated promoted only**; evidence secondary; held optional | **done** (CLI/MCP search default `active` only) |
-| K5 | Metrics + golden fixtures (precision-oriented; false-promote tests) | **partial** (unit + smoke fixtures; no golden suite yet) |
+| K5 | Metrics + golden fixtures (precision-oriented; false-promote tests) | **done** (12-case must-promote / hold / reject golden suite in capture tests) |
 | K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **partial** (`carpeos adjudicate --stats`; doctor wiring later) |
 | K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **done** |
 | K8 | Scenario dogfood: “noise session” does not pollute meaning search | **partial** (smoke covers PostToolUse noise) |
@@ -161,9 +161,9 @@ not infer that a **done** plumbing gate closes them.
 
 | Area | Current evidence on `main` | Required follow-up | Gate |
 | --- | --- | --- | --- |
-| Candidate text | Candidate v1 adds bounded decision / preference / constraint / procedure spans with evidence refs; promoted/held statements may include the primary sanitized fragment. | Preserve fail-closed secret/dump guards and calibrate fragment usefulness through golden fixtures. | K1 **done**; K5 residual |
+| Candidate text | Candidate v1 adds bounded decision / preference / constraint / procedure spans with evidence refs; promoted/held statements may include the primary sanitized fragment. | Keep fail-closed secret/dump and scoring-only transcript cases in the golden regression corpus. | K1, K5 **done** |
 | Candidate structure | Candidate v1 extracts up to three labeled spans from explicit message/procedure fields. Transcript/text may score but never enter statements directly. Session-level de-noising is not implemented. | Add de-noising only with precision evidence from golden fixtures and dogfood; do not widen raw-text ingestion for recall. | K1 **done (v1)**; K8 residual |
-| Calibration | `VALUE_TERMS`, signal length, and score thresholds have unit/smoke coverage but no golden precision corpus or maintainer calibration pass. | Add must-promote / must-hold / must-reject fixtures with reason-code assertions and public-safe dogfood notes. | K5, K8 |
+| Calibration | The deterministic golden corpus has four must-promote, four must-hold, and four must-reject cases with reason, lifecycle, and statement-safety assertions. Maintainer dogfood calibration is still pending. | Extend thresholds/fixtures only from public-safe dogfood evidence; do not widen recall speculatively. | K5 **done**; K8 residual |
 | Knowledge form | Promote and hold currently create Observations only. | Evaluate Claim drafting only after candidate precision is stable; Claims remain draft and never receive automatic AcceptanceDecision. | Deferred candidate for K3 |
 | Hold review | Held candidates become draft Observations, but the CLI cannot list, promote, or reject the held queue. | Add an explicit append-only operator review workflow. | Operator readiness |
 | Doctor | `carpeos adjudicate --stats` reports counts; setup/install doctor does not report policy version, rates, or the promoted-only search default. | Wire adjudication health into doctor and test the rendered output. | K6 |
@@ -171,7 +171,7 @@ not infer that a **done** plumbing gate closes them.
 | Policy replay | `knowledge_dispositions.source_event_id` is the primary key, so replay returns the existing row even if a later policy version should re-evaluate it. | Define append-only source-event + policy-version history and active-set migration semantics in an ADR and tests. | Audit durability |
 | Dogfood depth | `smoke:knowledge` covers decision-like SessionEnd versus PostToolUse noise. | Add noisy multi-hook sessions, UserPromptSubmit floods, secret-like candidates, and thanks/ok chatter. | K8 |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
-| Release language | Candidate v1 closes K1, but K5/K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
+| Release language | Candidate v1 and the golden suite close K1/K5, but K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
 
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
