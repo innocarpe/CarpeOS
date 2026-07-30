@@ -4,10 +4,22 @@ These templates forward selected lifecycle events to the provider-neutral
 `carpeos capture-hook` command. The command immediately appends encrypted raw
 evidence and a metadata-only canonical event to the local SQLite outbox.
 
+**Preferred product install** (merge into user host configs, absolute wrapper
+path, uninstallable without wiping user hooks):
+
+```sh
+carpeos setup hooks install --apply
+carpeos setup hooks doctor
+```
+
+See [one-stop install](../docs/guides/one-stop-install.md#capture-hooks-product-path).
+Example files below remain the manual / advanced path.
+
 The templates use `--fail-open`: a CarpeOS failure does not block the AI agent.
 They also use `--quiet`, so successful capture does not add hook output to the
 agent conversation. Review the event list and remove noisy events before
-installing a template in a high-volume workflow.
+installing a template in a high-volume workflow. Product install rewrites the
+command to an absolute `~/.local/bin/carpeos` (or `--bin-dir`) path.
 
 ## Codex CLI
 
@@ -33,9 +45,10 @@ Official reference: <https://code.claude.com/docs/en/hooks>
 ## Grok Build
 
 Install `grok/hooks.json.example` in the Grok Build hook configuration layer.
-Grok Build passes JSON on standard input. The template intentionally makes no
-claim that Grok hooks have a native asynchronous mode. Its command entries use
-the documented small numeric timeout shape rather than a millisecond value.
+Product install targets `~/.grok/hooks.json` by default. Grok Build passes JSON
+on standard input. The template intentionally makes no claim that Grok hooks
+have a native asynchronous mode. Its command entries use the documented small
+numeric timeout shape rather than a millisecond value.
 
 Official reference: <https://docs.x.ai/build/features/hooks>
 

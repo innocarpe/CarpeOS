@@ -12,6 +12,7 @@ import {
   installLocal,
   parseSetupArgs,
   resolveSetupPlan,
+  runSetupHooks,
 } from "./install-core.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -53,21 +54,25 @@ function printPlan(plan) {
 /**
  * @param {string} home
  * @param {boolean} asJson
+ * @param {boolean} [requireHooks]
  */
-function runDoctor(home, asJson) {
+function runDoctor(home, asJson, requireHooks = false) {
   const configPath = join(home, "config.json");
   if (!existsSync(configPath)) {
     process.stderr.write(`no install config at ${configPath}; run: carpeos setup run --apply\n`);
     return 1;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
-  const doctor = doctorInstall({ config });
+  const doctor = doctorInstall({ config, requireHooks });
   if (asJson) {
     printJson({ ok: doctor.ok, doctor });
   } else {
     process.stdout.write(
       doctor.ok ? "CarpeOS setup doctor: PASS\n" : "CarpeOS setup doctor: FAIL\n",
     );
+    if (doctor.hook_warnings?.length) {
+      process.stdout.write(`hook warnings: ${doctor.hook_warnings.join("; ")}\n`);
+    }
     printJson({ ok: doctor.ok, doctor });
   }
   return doctor.ok ? 0 : 1;
@@ -128,11 +133,27 @@ export async function runSetup(argv = process.argv.slice(2)) {
   }
 
   if (args.command === "doctor") {
-    return runDoctor(plan.home, plan.json);
+    return runDoctor(plan.home, plan.json, plan.requireHooks);
   }
 
   if (args.command === "show") {
     return runShow(plan.home, plan.json);
+  }
+
+  if (args.command === "hooks") {
+    try {
+      if (!plan.json && (plan.hooksCommand === "plan" || !plan.apply)) {
+        process.stdout.write(formatSetupPlanHuman(plan));
+      }
+      const result = runSetupHooks(plan);
+      printJson(result);
+      return result.ok ? 0 : 1;
+    } catch (error) {
+      process.stderr.write(
+        `hooks failed: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      return 1;
+    }
   }
 
   if (args.command === "plan" || !plan.apply) {
@@ -166,6 +187,8 @@ export async function runSetup(argv = process.argv.slice(2)) {
       skipBuild: true,
       skipMcp: plan.skipMcp,
       hosts: plan.hostList,
+      registerHooks: plan.registerHooksEnabled,
+      hookHosts: plan.hookHostList,
       dryRun: false,
       cliEntry,
       mcpEntry,
@@ -180,14 +203,17 @@ export async function runSetup(argv = process.argv.slice(2)) {
       workspace_root: plan.workspaceRoot,
       trust_zone_id: plan.trustZoneId,
       register_mcp: plan.registerMcp,
+      register_hooks: plan.registerHooks,
       package_root: packageRoot,
       hosts: result.hostResults,
+      hooks: result.hookResults,
       doctor: result.doctor,
       path_hint: result.state.path_hint,
       next: [
         "Open a new shell (or run: hash -r)",
         "carpeos setup doctor",
         "carpeos setup show",
+        "carpeos setup hooks install --apply   # if capture hooks not installed yet",
         "carpeos init --help",
       ],
     };

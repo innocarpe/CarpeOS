@@ -8,6 +8,15 @@ import { homedir, hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import {
+  doctorCaptureHooks,
+  installCaptureHooks,
+  parseHookHostsSpec,
+  resolveHookHosts,
+  resolveHooksTemplateDir,
+  uninstallCaptureHooks,
+  HOOK_HOSTS,
+} from "./install-hooks.mjs";
 
 export const DEFAULT_TRUST_ZONE = "tz_local_default";
 export const CONFIG_NAME = "config.json";
@@ -208,6 +217,8 @@ export function defaultRun(cmd, args, opts = {}) {
  *   skipBuild?: boolean,
  *   skipMcp?: boolean,
  *   hosts?: string[],
+ *   registerHooks?: boolean,
+ *   hookHosts?: string[],
  *   dryRun?: boolean,
  *   run?: typeof defaultRun,
  *   writeFile?: typeof writeFileSync,
@@ -338,12 +349,37 @@ export function installLocal(options) {
     }
   }
 
+  // 4b) Optional capture-hook install (product surface; off by default)
+  /** @type {object | undefined} */
+  let hookResults;
+  if (options.registerHooks) {
+    try {
+      const templateDir = resolveHooksTemplateDir(config.install_root);
+      const hookHosts = resolveHookHosts((cmd) => commandExists(cmd, run), options.hookHosts);
+      const installed = installCaptureHooks({
+        hosts: hookHosts,
+        binDir: config.bin_dir,
+        templateDir,
+        dryRun: Boolean(options.dryRun),
+        log,
+      });
+      hookResults = installed.results;
+      steps.push({ action: "hooks_install", results: installed.results });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      hookResults = [{ status: "failed", error: message }];
+      steps.push({ action: "hooks_install", status: "failed", error: message });
+      log(`Capture hooks install failed: ${message}`);
+    }
+  }
+
   const state = {
     schema_version: "v1",
     record_type: "carpeos_install_state",
     installed_at: config.updated_at,
     config,
     hosts: hostResults,
+    hooks: hookResults ?? [],
     path_hint: `export PATH=${shellQuote(config.bin_dir)}:$PATH`,
   };
   write(join(config.home, STATE_NAME), `${JSON.stringify(state, null, 2)}\n`, 0o600);
@@ -369,7 +405,7 @@ export function installLocal(options) {
     log(`  doctor: FAIL — ${doctor.failures.join("; ")}`);
   }
 
-  return { config, state, steps, doctor, hostResults };
+  return { config, state, steps, doctor, hostResults, hookResults };
 }
 
 /**
@@ -507,6 +543,7 @@ export function registerHostMcp(input) {
  *   run?: typeof defaultRun,
  *   exists?: typeof existsSync,
  *   skipHostProbe?: boolean,
+ *   requireHooks?: boolean,
  * }} input
  */
 export function doctorInstall(input) {
@@ -575,10 +612,32 @@ export function doctorInstall(input) {
     }
   }
 
+  // Capture-hook status (informational by default; missing hooks are not failures).
+  const hookDoctor = doctorCaptureHooks({
+    hosts: HOOK_HOSTS,
+    binDir: input.config.bin_dir,
+    exists,
+  });
+  /** @type {string[]} */
+  const hookWarnings = [];
+  for (const probe of hookDoctor.probes) {
+    checks.push(`${probe.host}_hooks: ${probe.status}`);
+    if (probe.status === "stale_path" || probe.status === "partial") {
+      hookWarnings.push(
+        `${probe.host}: capture hooks ${probe.status} (re-run: carpeos setup hooks install --apply)`,
+      );
+    }
+    if (input.requireHooks && probe.status === "not_installed") {
+      failures.push(`${probe.host}: capture hooks not installed`);
+    }
+  }
+
   return {
     ok: failures.length === 0,
     failures,
     checks,
+    hook_warnings: hookWarnings,
+    hooks: hookDoctor.probes,
   };
 }
 
@@ -593,10 +652,12 @@ export function doctorInstall(input) {
  *   plan           Print resolved plan only
  *   doctor         Verify existing install
  *   show           Show installed config
+ *   hooks          Capture-hook product surface (plan|install|uninstall|doctor)
  *   help           Show help
  */
 
-export const SETUP_COMMANDS = ["run", "plan", "doctor", "show", "help"];
+export const SETUP_COMMANDS = ["run", "plan", "doctor", "show", "hooks", "help"];
+export const HOOKS_SUBCOMMANDS = ["plan", "install", "uninstall", "doctor", "help"];
 
 /**
  * @param {string[]} argv
@@ -604,11 +665,13 @@ export const SETUP_COMMANDS = ["run", "plan", "doctor", "show", "help"];
 export function parseSetupArgs(argv) {
   /** @type {{
    *  command: string,
+   *  hooksCommand: string,
    *  home: string,
    *  binDir: string,
    *  workspaceRoot: string,
    *  trustZone: string,
    *  registerMcp: string,
+   *  registerHooks: string,
    *  repoRoot: string,
    *  skipBuild: boolean,
    *  apply: boolean,
@@ -616,14 +679,17 @@ export function parseSetupArgs(argv) {
    *  json: boolean,
    *  help: boolean,
    *  deprecatedYes: boolean,
+   *  requireHooks: boolean,
    * }} */
   const out = {
     command: "run",
+    hooksCommand: "plan",
     home: "",
     binDir: "",
     workspaceRoot: "",
     trustZone: "",
     registerMcp: "auto",
+    registerHooks: "none",
     repoRoot: "",
     skipBuild: false,
     apply: false,
@@ -631,6 +697,7 @@ export function parseSetupArgs(argv) {
     json: false,
     help: false,
     deprecatedYes: false,
+    requireHooks: false,
   };
 
   const args = [...argv];
@@ -647,6 +714,25 @@ export function parseSetupArgs(argv) {
     }
     out.command = cmd;
     args.shift();
+  }
+
+  // hooks <subcommand>
+  if (out.command === "hooks") {
+    if (args[0] && !args[0].startsWith("-")) {
+      const sub = args[0];
+      if (!HOOKS_SUBCOMMANDS.includes(sub)) {
+        throw new Error(
+          `unknown hooks subcommand: ${sub}\nAllowed: ${HOOKS_SUBCOMMANDS.join(", ")}`,
+        );
+      }
+      out.hooksCommand = sub;
+      args.shift();
+    } else {
+      out.hooksCommand = "plan";
+    }
+    if (out.hooksCommand === "help") {
+      out.help = true;
+    }
   }
 
   for (let i = 0; i < args.length; i += 1) {
@@ -673,6 +759,9 @@ export function parseSetupArgs(argv) {
       if (out.command === "run") {
         out.command = "plan";
       }
+      if (out.command === "hooks" && out.hooksCommand === "install") {
+        out.hooksCommand = "plan";
+      }
     } else if (arg === "--json") {
       out.json = true;
     } else if (arg === "--skip-build") {
@@ -689,9 +778,19 @@ export function parseSetupArgs(argv) {
       out.trustZone = need("--trust-zone");
     } else if (arg === "--register-mcp") {
       out.registerMcp = need("--register-mcp");
+    } else if (arg === "--register-hooks") {
+      out.registerHooks = need("--register-hooks");
     } else if (arg === "--hosts") {
-      // Alias for --register-mcp (older docs)
-      out.registerMcp = need("--hosts");
+      // For setup run: alias for --register-mcp (older docs).
+      // For setup hooks *: host list for capture-hook install.
+      const value = need("--hosts");
+      if (out.command === "hooks") {
+        out.registerHooks = value;
+      } else {
+        out.registerMcp = value;
+      }
+    } else if (arg === "--require-hooks") {
+      out.requireHooks = true;
     } else if (arg === "--repo-root") {
       out.repoRoot = need("--repo-root");
     } else if (arg === "--doctor") {
@@ -722,18 +821,27 @@ export function formatSetupHelp(opts = {}) {
   const repoLine = opts.includeRepoRoot
     ? "  --repo-root <path>          Git checkout root (default: auto-detect)\n  --skip-build                Skip pnpm install/build (checkout installer)\n"
     : "";
-  return `${program} — configure local CarpeOS runtime and agent MCP hosts
+  return `${program} — configure local CarpeOS runtime, MCP hosts, and capture hooks
 
 USAGE
   ${program} <command> [options]
   ${program} [options]                 # same as: run
+  ${program} hooks <subcommand> [options]
 
 COMMANDS
   run       Apply setup to this machine (requires --apply)
   plan      Show resolved paths and actions without changing anything
-  doctor    Verify an existing install
+  doctor    Verify an existing install (includes capture-hook status)
   show      Print installed config.json (if present)
+  hooks     Install / verify / remove session capture hooks
   help      Show this help
+
+HOOKS SUBCOMMANDS
+  plan        Show which host hook files would be updated
+  install     Merge CarpeOS capture-hook entries (requires --apply)
+  uninstall   Remove only CarpeOS capture-hook entries (requires --apply)
+  doctor      Report capture-hook status per host
+  help        Show this help
 
 OPTIONS
   --home <path>               Private runtime home
@@ -747,14 +855,23 @@ OPTIONS
   --register-mcp <spec>       Who gets MCP registration:
                               auto | none | claude,codex,grok
                               (default: auto = every host CLI found on PATH)
-${repoLine}  --apply                     Apply changes (required for "run")
-  --dry-run                   Alias for "plan" (no changes)
+  --register-hooks <spec>     Also install capture hooks during "run":
+                              auto | none | claude,codex,grok
+                              (default: none — use "setup hooks install")
+  --hosts <spec>              With "hooks *": same as --register-hooks host list
+                              With "run": alias for --register-mcp (legacy)
+  --require-hooks             Doctor fails if capture hooks are missing
+${repoLine}  --apply                     Apply changes (required for "run" / hooks install|uninstall)
+  --dry-run                   Alias for plan (no changes)
   --json                      Machine-readable JSON on stdout
   -h, --help                  Show help
 
 SAFETY
   Setup never mutates the machine unless you pass --apply.
   Without --apply, it prints the plan (or help) and exits.
+  Hook install merges into existing host configs and does not wipe user hooks.
+  Installed hook commands use the absolute wrapper under bin-dir
+  (default ~/.local/bin/carpeos).
 
 EXAMPLES
   # See what would happen with defaults
@@ -763,21 +880,25 @@ EXAMPLES
   # Apply default setup (home, wrappers, MCP for detected hosts)
   ${program} run --apply
 
-  # Custom home + only Claude MCP
-  ${program} run --apply \\
-    --home "$HOME/.carpeos" \\
-    --trust-zone tz_local_default \\
-    --register-mcp claude
+  # Install capture hooks for detected hosts (product path)
+  ${program} hooks install --apply
 
-  # Check health after install
+  # Only Claude hooks, custom bin-dir
+  ${program} hooks install --apply --hosts claude --bin-dir "$HOME/.local/bin"
+
+  # Verify hooks + runtime
   ${program} doctor
 
-  # Inspect saved config
-  ${program} show
+  # Remove only CarpeOS capture hooks (keep user hooks)
+  ${program} hooks uninstall --apply
+
+  # One-shot setup including hooks
+  ${program} run --apply --register-hooks auto
 
 NOTES
   --yes / -y still work as an alias for --apply (deprecated).
-  Session capture hooks (adapters/) are separate from MCP registration.
+  Capture hooks default off during plain "run"; use hooks install or
+  --register-hooks. Templates live under adapters/ (git) or dist/setup/hooks (npm).
 `;
 }
 
@@ -832,14 +953,31 @@ export function resolveSetupPlan(args, ctx = {}) {
     }
   }
 
+  const registerHooks = String(args.registerHooks || "none").trim();
+  const hookSpec = parseHookHostsSpec(registerHooks);
+  const registerHooksEnabled =
+    args.command === "hooks"
+      ? true
+      : !hookSpec.skip && registerHooks !== "none" && registerHooks !== "";
+
   const repoRoot = args.repoRoot
     ? resolve(args.repoRoot)
     : (ctx.defaultRepoRoot ?? defaultRepoRoot());
 
+  const hooksApply =
+    Boolean(args.apply) &&
+    args.command === "hooks" &&
+    (args.hooksCommand === "install" || args.hooksCommand === "uninstall") &&
+    !args.dryRun;
+
   return {
     command: args.command,
-    apply: Boolean(args.apply) && args.command === "run" && !args.dryRun,
-    dryRun: Boolean(args.dryRun) || args.command === "plan",
+    hooksCommand: args.hooksCommand || "plan",
+    apply: (Boolean(args.apply) && args.command === "run" && !args.dryRun) || hooksApply,
+    dryRun:
+      Boolean(args.dryRun) ||
+      args.command === "plan" ||
+      (args.command === "hooks" && (args.hooksCommand === "plan" || !args.apply)),
     json: Boolean(args.json),
     skipBuild: Boolean(args.skipBuild),
     skipMcp,
@@ -848,6 +986,10 @@ export function resolveSetupPlan(args, ctx = {}) {
     workspaceRoot,
     trustZoneId: trustZone,
     registerMcp,
+    registerHooks,
+    registerHooksEnabled,
+    hookHostList: hookSpec.hosts,
+    requireHooks: Boolean(args.requireHooks),
     hostList,
     repoRoot,
     nodePath: ctx.nodePath ?? process.execPath,
@@ -864,10 +1006,104 @@ export function resolveSetupPlan(args, ctx = {}) {
         : registerMcp === "auto"
           ? "Register MCP with every host CLI found on PATH (claude/codex/grok)"
           : `Register MCP with: ${hostList?.join(", ")}`,
+      registerHooksEnabled && args.command === "run"
+        ? registerHooks === "auto"
+          ? "Install capture hooks for detected hosts (absolute ~/.local/bin/carpeos)"
+          : `Install capture hooks for: ${hookSpec.hosts?.join(", ") ?? "auto"}`
+        : "Skip capture hooks (use: setup hooks install --apply)",
       "Initialize local store (carpeos init)",
-      "Run doctor checks",
+      "Run doctor checks (includes hook status)",
     ],
   };
+}
+
+/**
+ * Apply setup hooks subcommand (plan / install / uninstall / doctor).
+ * @param {ReturnType<typeof resolveSetupPlan>} plan
+ * @param {{
+ *   run?: typeof defaultRun,
+ *   log?: (msg: string) => void,
+ *   env?: NodeJS.ProcessEnv,
+ * }} [opts]
+ */
+export function runSetupHooks(plan, opts = {}) {
+  const run = opts.run ?? defaultRun;
+  const log = opts.log ?? ((msg) => process.stdout.write(`${msg}\n`));
+  const env = opts.env ?? process.env;
+  const templateDir = resolveHooksTemplateDir(plan.repoRoot);
+  const hosts = resolveHookHosts((cmd) => commandExists(cmd, run), plan.hookHostList);
+
+  if (plan.hooksCommand === "doctor") {
+    const report = doctorCaptureHooks({
+      hosts: plan.hookHostList ?? HOOK_HOSTS,
+      binDir: plan.binDir,
+      env,
+    });
+    return { ok: true, mode: "doctor", hosts, ...report };
+  }
+
+  if (plan.hooksCommand === "plan" || !plan.apply) {
+    const preview = installCaptureHooks({
+      hosts,
+      binDir: plan.binDir,
+      templateDir,
+      dryRun: true,
+      env,
+      log: () => {},
+    });
+    return {
+      ok: true,
+      mode: "plan",
+      apply: false,
+      hosts,
+      bin_dir: plan.binDir,
+      template_dir: templateDir,
+      results: preview.results,
+    };
+  }
+
+  if (plan.hooksCommand === "install") {
+    const installed = installCaptureHooks({
+      hosts,
+      binDir: plan.binDir,
+      templateDir,
+      dryRun: false,
+      env,
+      log,
+    });
+    const doctor = doctorCaptureHooks({ hosts, binDir: plan.binDir, env });
+    return {
+      ok: true,
+      mode: "install",
+      apply: true,
+      hosts,
+      bin_dir: plan.binDir,
+      results: installed.results,
+      doctor: doctor.probes,
+    };
+  }
+
+  if (plan.hooksCommand === "uninstall") {
+    const removed = uninstallCaptureHooks({
+      hosts,
+      binDir: plan.binDir,
+      templateDir,
+      dryRun: false,
+      env,
+      log,
+    });
+    const doctor = doctorCaptureHooks({ hosts, binDir: plan.binDir, env });
+    return {
+      ok: true,
+      mode: "uninstall",
+      apply: true,
+      hosts,
+      results: removed.results,
+      doctor: doctor.probes,
+    };
+  }
+
+  throw new Error(`unsupported hooks command: ${plan.hooksCommand}`);
 }
 
 /**
@@ -877,13 +1113,14 @@ export function formatSetupPlanHuman(plan) {
   const lines = [
     "CarpeOS setup plan",
     "──────────────────",
-    `  command:          ${plan.command}`,
+    `  command:          ${plan.command}${plan.command === "hooks" ? ` ${plan.hooksCommand}` : ""}`,
     `  apply changes:    ${plan.apply ? "yes (--apply)" : "no (plan only)"}`,
     `  home:             ${plan.home}`,
     `  bin-dir:          ${plan.binDir}`,
     `  workspace-root:   ${plan.workspaceRoot}`,
     `  trust-zone:       ${plan.trustZoneId}`,
     `  register-mcp:     ${plan.registerMcp}`,
+    `  register-hooks:   ${plan.registerHooks}`,
     `  distribution:     ${plan.distribution ?? "git-or-auto"}`,
     `  skip-build:       ${plan.skipBuild}`,
     "",
@@ -891,7 +1128,7 @@ export function formatSetupPlanHuman(plan) {
     ...plan.actions.map((a) => `  • ${a}`),
     "",
   ];
-  if (!plan.apply && plan.command === "run") {
+  if (!plan.apply && (plan.command === "run" || plan.command === "hooks")) {
     lines.push(
       "Nothing will be changed yet.",
       "Re-run with the same options plus --apply to execute.",

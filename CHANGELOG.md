@@ -12,7 +12,11 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Setup: `carpeos setup hooks plan|install|uninstall|doctor` installs Claude /
+  Codex / Grok capture hooks via the product path (merge-safe, absolute
+  `~/.local/bin/carpeos` command, opt-in `--register-hooks` on `setup run`)
+- Doctor reports per-host capture-hook status (`installed` / `not_installed` /
+  `stale_path`); use `--require-hooks` to fail when missing
 
 ## [0.2.2] - 2026-07-30
 

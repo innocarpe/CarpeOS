@@ -158,6 +158,18 @@ describe("install-core", () => {
     assert.throws(() => parseSetupArgs(["explode"]), /unknown setup command/);
   });
 
+  it("parseSetupArgs accepts hooks subcommands and --register-hooks", () => {
+    const hooks = parseSetupArgs(["hooks", "install", "--apply", "--hosts", "claude,codex"]);
+    assert.equal(hooks.command, "hooks");
+    assert.equal(hooks.hooksCommand, "install");
+    assert.equal(hooks.apply, true);
+    assert.equal(hooks.registerHooks, "claude,codex");
+
+    const oneShot = parseSetupArgs(["run", "--apply", "--register-hooks", "auto"]);
+    assert.equal(oneShot.registerHooks, "auto");
+    assert.equal(oneShot.apply, true);
+  });
+
   it("resolveSetupPlan is plan-only without --apply", () => {
     const args = parseSetupArgs([
       "run",
