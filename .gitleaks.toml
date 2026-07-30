@@ -1,0 +1,27 @@
+# CarpeOS gitleaks config — extends default rules; allowlist synthetic fixtures only.
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "CarpeOS"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated artifacts, lockfiles, and synthetic unit/e2e fixtures (not live secrets)"
+paths = [
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)packages/schema/src/generated/''',
+  # Tests use base64-looking ciphertext tags, idempotency keys, and sentinel strings
+  '''(^|/)(test|tests|__tests__)(/|$)''',
+  '''(^|/)scripts/test(/|$)''',
+  '''\.test\.(ts|tsx|js|mjs|cjs)$''',
+]
+regexes = [
+  '''(?i)synthetic[_-]''',
+  '''(?i)example\.workers\.dev''',
+  '''00000000-0000-0000-0000-00000000000[01]''',
+  # Public-boundary / projection sentinels (strings that must appear in product code)
+  '''BEGIN PRIVATE KEY''',
+  '''protected_plaintext_marker''',
+  '''PRIVATE_MARKER''',
+]
