@@ -156,9 +156,9 @@ Canonical draft lives in
 
 ## Current recommendation
 
-Stay on **`0.y.z`** (current public line: **`0.2.2`**). Contract gates G1–G8 are
-done; soak criterion 4 is **done** on published 0.2.2; criterion 5 Notes are
-**drafted**. G9 remains **Defer** until explicit **Approve** (criterion 6).
-**Product loop gates** on [product-1.0.0.md](product-1.0.0.md) are still open
-(capture-as-setup, extraction, meaningful retrieval, product E2E). Do **not** cut
-`1.0.0` until product DoD + contract freeze + explicit maintainer **Approve**.
+Stay on **`0.y.z`** (current public line: **`0.2.2`**; monorepo includes product
+loop). Contract gates G1–G8 are done; soak criterion 4 is **done** on published
+0.2.2; product loop P1–P9 content is green on [product-1.0.0.md](product-1.0.0.md).
+**G9 Decision remains Defer** until explicit maintainer **Approve** (see
+[v1-freeze-decision.md](v1-freeze-decision.md) one-read checklist). Do **not** cut
+`1.0.0` without that Approve.

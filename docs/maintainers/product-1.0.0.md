@@ -77,23 +77,20 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 
 | # | Criterion | Status | Evidence |
 | --- | --- | --- | --- |
-| P1 | Capture install is an official product path (`carpeos setup …` and/or documented one-shot) with verify + uninstall/disable; does not wipe user host hooks | **todo** | Ultragoal G002 |
-| P2 | Session lifecycle capture writes encrypted raw + EvidenceArtifact into local store | **partial** | Capture-hook + dogfood already land evidence; install path still G002 |
-| P3 | Extraction policy documented + implemented (lifecycle defaults; PostToolUse off by default; privacy rules) | **done** | ADR 0011 + `packages/capture/src/meaningful-unit-policy.ts` (G003) |
-| P4 | Extraction pipeline MVP: Evidence → Observation and/or Claim (idempotent, trust-zone aware) | **done** | `extractFromEvidenceArtifact` + CLI (G004); Claim auto still policy-gated off |
-| P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **done** | Kind priority + diversity (G005); smoke asserts Observation |
-| P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` / `scripts/smoke-product-loop.mjs` + CI (G006) |
+| P1 | Capture install is an official product path (`carpeos setup …` and/or documented one-shot) with verify + uninstall/disable; does not wipe user host hooks | **done** | `setup hooks install|uninstall|doctor` (G002) |
+| P2 | Session lifecycle capture writes encrypted raw + EvidenceArtifact into local store | **done** | capture-hook + smoke:product (G004/G006) |
+| P3 | Extraction policy documented + implemented (lifecycle defaults; PostToolUse off by default; privacy rules) | **done** | ADR 0011 + `meaningful-unit-policy.ts` (G003) |
+| P4 | Extraction pipeline MVP: Evidence → Observation and/or Claim (idempotent, trust-zone aware) | **done** | extract pipeline + CLI (G004); Claim auto policy-gated off |
+| P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **done** | Kind priority + diversity (G005) |
+| P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` + CI (G006) |
 | P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **done** | doctor store probe + README product path (G007) |
-| P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **done** | S1–S5 automated/public-safe notes (G008) |
-| P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **todo** | Ultragoal G009 |
-| P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **partial** | G1–G8 done; G9 Defer |
-| P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **blocked** | Ultragoal G010 — only after explicit Approve |
+| P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **done** | S1–S5 notes (G008) |
+| P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **done** | [v1-freeze-decision.md](v1-freeze-decision.md) one-read gate (G009) — **still Defer** |
+| P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **partial** | G1–G8 done; G9 Decision **Defer** until Approve |
+| P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **blocked** | G010 — only after explicit **Approve** in chat/PR |
 
-Baseline note (2026-07-30, updated through G006): public package `0.2.2`; local
-contract gates largely done; capture-hook + setup hooks install; Evidence→
-Observation extraction MVP; meaningful-first search; **`pnpm smoke:product`**
-CI gate. Remaining product gaps: doctor/README polish (P7), scenario dogfood
-(P8), freeze Approve (P9–P11).
+**Product loop (P1–P9): green for automation.** Remaining stop line: human **Approve**
+(criterion 6 / P11) before any `v1.0.0` tag or npm publish.
 
 ---
 
