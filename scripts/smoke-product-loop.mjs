@@ -89,22 +89,69 @@ function runCli(home, argv) {
   });
 }
 
-function hasObservationHit(results) {
+function sourceEventTypes(item) {
+  return (item?.lineage?.source_records ?? item?.source_records ?? [])
+    .map((record) => record?.event_type)
+    .filter(Boolean);
+}
+
+function describeSearchTopHit(home, results) {
+  const top = Array.isArray(results) ? results[0] : undefined;
+  return JSON.stringify({
+    result_count: Array.isArray(results) ? results.length : 0,
+    top_status: top?.status,
+    top_chunk_id: top?.chunk_id,
+    top_chunk_kind:
+      top?.chunk?.chunk_kind ?? top?.chunk_kind ?? indexedChunkKind(home, top?.chunk_id),
+    top_text: String(top?.text ?? top?.chunk?.text ?? "").slice(0, 180),
+    top_source_event_types: sourceEventTypes(top),
+  });
+}
+
+function indexedChunkKind(home, chunkId) {
+  if (typeof chunkId !== "string" || chunkId.length === 0) {
+    return undefined;
+  }
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--disable-warning=ExperimentalWarning",
+      "-e",
+      `
+        const { DatabaseSync } = await import("node:sqlite");
+        const db = new DatabaseSync(process.argv[1], { readOnly: true });
+        try {
+          const row = db.prepare("SELECT chunk_kind FROM retrieval_chunks WHERE chunk_id = ?").get(process.argv[2]);
+          if (typeof row?.chunk_kind === "string") process.stdout.write(row.chunk_kind);
+        } finally {
+          db.close();
+        }
+      `,
+      join(home, "carpeos.sqlite"),
+      chunkId,
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim() || undefined;
+}
+
+function hasObservationHit(home, results) {
   if (!Array.isArray(results) || results.length === 0) {
     return false;
   }
   const top = results[0];
-  const kind = top?.chunk?.chunk_kind ?? top?.chunk_kind;
-  const text = String(top?.chunk?.text ?? "");
-  if (kind === "summary" && /SessionEnd|Captured/i.test(text)) {
-    return true;
-  }
-  return results.some((item) => {
-    const eventTypes = (item?.lineage?.source_records ?? item?.source_records ?? [])
-      .map((r) => r?.event_type)
-      .filter(Boolean);
-    return eventTypes.includes("Observation") || item?.chunk?.chunk_kind === "summary";
-  });
+  const kind = top?.chunk?.chunk_kind ?? top?.chunk_kind ?? indexedChunkKind(home, top?.chunk_id);
+  const text = String(top?.text ?? top?.chunk?.text ?? "");
+  const eventTypes = sourceEventTypes(top);
+  return (
+    top?.status === "visible" &&
+    kind === "summary" &&
+    eventTypes.includes("Observation") &&
+    /Captured codex SessionEnd evidence/i.test(text)
+  );
 }
 
 function runProductLoop() {
@@ -258,9 +305,9 @@ function runProductLoop() {
         return false;
       }
       const results = body.result?.results;
-      if (!hasObservationHit(results)) {
+      if (!hasObservationHit(home, results)) {
         fail(
-          `search did not return Observation/summary for product query: ${JSON.stringify(results).slice(0, 500)}`,
+          `search top hit was not the expected Observation summary: ${describeSearchTopHit(home, results)}`,
         );
         return false;
       }
