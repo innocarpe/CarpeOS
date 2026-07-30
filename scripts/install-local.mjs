@@ -18,6 +18,7 @@ import {
   installLocal,
   parseSetupArgs,
   resolveSetupPlan,
+  runSetupHooks,
 } from "./lib/install-core.mjs";
 
 /**
@@ -56,8 +57,9 @@ function printPlan(plan) {
 /**
  * @param {string} home
  * @param {boolean} asJson
+ * @param {boolean} [requireHooks]
  */
-function runDoctor(home, asJson) {
+function runDoctor(home, asJson, requireHooks = false) {
   const configPath = join(home, "config.json");
   if (!existsSync(configPath)) {
     process.stderr.write(
@@ -66,13 +68,16 @@ function runDoctor(home, asJson) {
     return 1;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
-  const doctor = doctorInstall({ config });
+  const doctor = doctorInstall({ config, requireHooks });
   if (asJson) {
     printJson({ ok: doctor.ok, doctor });
   } else {
     process.stdout.write(
       doctor.ok ? "CarpeOS install doctor: PASS\n" : "CarpeOS install doctor: FAIL\n",
     );
+    if (doctor.hook_warnings?.length) {
+      process.stdout.write(`hook warnings: ${doctor.hook_warnings.join("; ")}\n`);
+    }
     printJson({ ok: doctor.ok, doctor });
   }
   return doctor.ok ? 0 : 1;
@@ -130,12 +135,33 @@ function main(argv = process.argv.slice(2)) {
   }
 
   if (args.command === "doctor") {
-    process.exitCode = runDoctor(plan.home, plan.json);
+    process.exitCode = runDoctor(plan.home, plan.json, plan.requireHooks);
     return;
   }
 
   if (args.command === "show") {
     process.exitCode = runShow(plan.home, plan.json);
+    return;
+  }
+
+  if (args.command === "hooks") {
+    try {
+      if (!plan.json && (plan.hooksCommand === "plan" || !plan.apply)) {
+        process.stdout.write(formatSetupPlanHuman(plan));
+      }
+      const result = runSetupHooks(plan);
+      if (plan.json) {
+        printJson(result);
+      } else {
+        printJson(result);
+      }
+      process.exitCode = result.ok ? 0 : 1;
+    } catch (error) {
+      process.stderr.write(
+        `hooks failed: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -160,6 +186,8 @@ function main(argv = process.argv.slice(2)) {
       skipBuild: plan.skipBuild,
       skipMcp: plan.skipMcp,
       hosts: plan.hostList,
+      registerHooks: plan.registerHooksEnabled,
+      hookHosts: plan.hookHostList,
       dryRun: false,
     });
 
@@ -171,7 +199,9 @@ function main(argv = process.argv.slice(2)) {
       workspace_root: result.config.workspace_root,
       trust_zone_id: result.config.trust_zone_id,
       register_mcp: plan.registerMcp,
+      register_hooks: plan.registerHooks,
       hosts: result.hostResults,
+      hooks: result.hookResults,
       doctor: result.doctor,
       path_hint: result.state.path_hint,
     };

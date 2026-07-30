@@ -68,6 +68,25 @@ try {
 const setupOut = join(distDir, "setup");
 mkdirSync(setupOut, { recursive: true });
 cpSync(join(repoRoot, "scripts/lib/install-core.mjs"), join(setupOut, "install-core.mjs"));
+cpSync(join(repoRoot, "scripts/lib/install-hooks.mjs"), join(setupOut, "install-hooks.mjs"));
+// Capture-hook templates (adapters are not in the npm package otherwise).
+const hooksOut = join(setupOut, "hooks");
+mkdirSync(hooksOut, { recursive: true });
+for (const host of ["claude", "codex", "grok"]) {
+  const hostOut = join(hooksOut, host);
+  mkdirSync(hostOut, { recursive: true });
+  if (host === "claude") {
+    cpSync(
+      join(repoRoot, "adapters/claude/settings.json.example"),
+      join(hostOut, "settings.json.example"),
+    );
+  } else {
+    cpSync(
+      join(repoRoot, `adapters/${host}/hooks.json.example`),
+      join(hostOut, "hooks.json.example"),
+    );
+  }
+}
 writeFileSync(
   join(setupOut, "run-setup.mjs"),
   `${readFileSync(join(packageRoot, "scripts/run-setup.template.mjs"), "utf8")}`,

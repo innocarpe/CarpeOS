@@ -136,11 +136,44 @@ Doctor checks:
 3. `claude mcp list` / `codex mcp list` / `grok mcp list` show `carpeos`
 4. Agent sessions can call `memory_search` / `memory_context_pack` without per-repo ad-hoc config
 
-## Hooks (separate, optional)
+## Capture hooks (product path)
 
-Installer registers **MCP** (read/propose/context-pack). Automatic session
-**capture** still needs host hook templates from `adapters/` (Codex/Claude/Grok
-hooks). Treat hooks as a second step after MCP is healthy.
+Installer registers **MCP** by default. **Session capture hooks** are a separate
+setup subcommand so they stay opt-in and never wipe existing user hooks:
+
+```sh
+# After wrappers exist (setup run --apply), install capture hooks:
+carpeos setup hooks plan
+carpeos setup hooks install --apply
+# or only one host:
+carpeos setup hooks install --apply --hosts claude
+
+# Verify (doctor always reports hook status; missing hooks are not a hard fail)
+carpeos setup doctor
+carpeos setup hooks doctor
+
+# Remove only CarpeOS capture-hook entries (user hooks stay)
+carpeos setup hooks uninstall --apply
+```
+
+Optional one-shot during full setup:
+
+```sh
+carpeos setup run --apply --register-hooks auto
+```
+
+Installed commands use the **absolute** wrapper under `--bin-dir`
+(default `~/.local/bin/carpeos`), so host hook processes do not depend on PATH.
+
+Merge targets (user layer):
+
+| Host | Config path |
+| --- | --- |
+| Claude Code | `~/.claude/settings.json` (`hooks` key) |
+| Codex CLI | `~/.codex/hooks.json` |
+| Grok Build | `~/.grok/hooks.json` |
+
+Manual template copy under `adapters/` remains valid for advanced layouts.
 
 ## Cross-Mac
 
@@ -172,7 +205,8 @@ Both `carpeos setup` and `node scripts/install-local.mjs` share one interface:
 | --- | --- |
 | `plan` | Print resolved paths and actions only |
 | `run --apply` | Apply setup |
-| `doctor` | Verify existing install |
+| `hooks plan` / `hooks install --apply` / `hooks uninstall --apply` / `hooks doctor` | Capture-hook product surface |
+| `doctor` | Verify existing install (includes hook status) |
 | `show` | Print `config.json` |
 | `help` / `--help` | Full parameter docs |
 
