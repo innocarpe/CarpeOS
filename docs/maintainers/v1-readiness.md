@@ -40,7 +40,7 @@ Update the **Status** column as work lands. Status values: `done` · `partial` �
 | G6 | Local store migration story written; no silent wipe of existing homes | **done** | [`docs/architecture/local-store-migrations.md`](../architecture/local-store-migrations.md) + preserve-events test |
 | G7 | MCP tool contract inventory (names + schema versions) frozen in docs | **done** | [`docs/contracts/mcp-tools-v1.md`](../contracts/mcp-tools-v1.md) + JSON + `tool-inventory.test.ts` |
 | G8 | No open “will rename soon” breaks in CHANGELOG / known issues | **done** | [`compatibility-and-deprecations.md`](compatibility-and-deprecations.md) — planned breaks empty |
-| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **partial** | [v1-freeze-decision.md](v1-freeze-decision.md): **Defer** recorded 2026-07-30; Approve when soak criteria met |
+| G9 | Maintainer decision recorded (PR or release notes) to cut `v1.0.0` | **partial** | [v1-freeze-decision.md](v1-freeze-decision.md): **Defer**; criteria 1–5 ready; waiting on explicit **Approve** (criterion 6) |
 
 ## Explicit non-goals for 1.0
 
@@ -114,20 +114,24 @@ When changing CLI/setup/MCP surfaces:
 
 ## Suggested 1.0 CHANGELOG shape
 
+Canonical draft lives in
+[v1-freeze-decision.md](v1-freeze-decision.md) (criterion 5). Summary:
+
 ```markdown
 ## [1.0.0] - YYYY-MM-DD
 
 ### Notes
 
-- First stable public contract for CLI, setup, MCP tools, and local store layout.
+- First stable public contract for CLI, setup, MCP tools, local store layout,
+  and trust-zone / visibility semantics.
 - Breaking changes after this release require a MAJOR bump.
+- Hosted Cloudflare / GraphRAG / multi-Mac polish remain post-1.0 additive work.
 ```
 
 ## Current recommendation
 
-Stay on **`0.y.z`** (current public line: **`0.2.2`**). G1–G8 checklist items are
-done; G1 clean-profile recheck on 0.2.1 is recorded (0.2.2 recheck also green);
-G9 is a recorded **Defer** with soak criterion 4 **done** on published 0.2.2 —
-remaining judgment is CHANGELOG `1.0.0` Notes + explicit **Approve**. Do not rush
+Stay on **`0.y.z`** (current public line: **`0.2.2`**). G1–G8 are done; soak
+criterion 4 is **done** on published 0.2.2; criterion 5 Notes are **drafted**.
+G9 remains **Defer** until explicit **Approve** (criterion 6). Do not rush
 `1.0.0` for marketing. When ready, update
 [v1-freeze-decision.md](v1-freeze-decision.md) to **Approve** and cut the tag.
