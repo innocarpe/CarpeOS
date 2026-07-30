@@ -12,6 +12,8 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- Docs: product 1.0 scenario checklist S1–S5 dogfood notes (public-safe,
+  automation-backed)
 - Setup doctor: reports recent capture + Observation/Claim counts (warnings by
   default; `--require-capture` / `--require-units` for hard fail); README EN/KO
   product path install → hooks → doctor → search
