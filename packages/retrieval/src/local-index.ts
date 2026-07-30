@@ -149,7 +149,9 @@ export function rebuildLocalRetrievalIndex(
       writeChunk(db, chunk, now);
     }
     replaceFts(db, chunks);
-    const freshness = writeFreshness(db, chunks, now);
+    // Freshness advances by max scanned event sequence for the zone, not only
+    // sequences that produced chunks (capture-only homes used to stay stale).
+    const freshness = writeFreshness(db, chunks, now, events);
     db.exec("COMMIT");
     return { chunks, freshness };
   } catch (error) {
@@ -340,6 +342,7 @@ function writeFreshness(
   db: SqlDatabase,
   chunks: readonly RetrievalChunk[],
   now: Date,
+  scannedEvents: readonly CanonicalEvent[] = [],
 ): ProjectionFreshness[] {
   const cursorRows = db
     .prepare("SELECT trust_zone_id, after_sequence FROM sync_cursors")
@@ -347,15 +350,23 @@ function writeFreshness(
   const zoneIds = new Set([
     ...cursorRows.map((row) => row.trust_zone_id),
     ...chunks.flatMap((chunk) => chunk.source_records.map((record) => record.trust_zone_id)),
+    ...scannedEvents.map((event) => event.trust_zone.trust_zone_id),
   ]);
   const freshness = [...zoneIds].sort().map((trustZoneId): ProjectionFreshness => {
-    const lastIndexed = Math.max(
+    const lastFromChunks = Math.max(
       0,
       ...chunks
         .flatMap((chunk) => chunk.source_records)
         .filter((record) => record.trust_zone_id === trustZoneId)
         .map((record) => record.zone_sequence),
     );
+    const lastFromScan = Math.max(
+      0,
+      ...scannedEvents
+        .filter((event) => event.trust_zone.trust_zone_id === trustZoneId)
+        .map((event) => event.zone_sequence ?? 0),
+    );
+    const lastIndexed = Math.max(lastFromChunks, lastFromScan);
     const cursor = cursorRows.find((row) => row.trust_zone_id === trustZoneId);
     const afterSequence = Number(cursor?.after_sequence ?? lastIndexed);
     return lastIndexed < afterSequence

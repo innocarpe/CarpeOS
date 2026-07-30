@@ -17,8 +17,10 @@ const protectedContentPatterns = [
     pattern: /\/Users\/[A-Za-z0-9._-]+(?:\/|$)/,
   },
   {
+    // Require a non-identifier boundary so prose like "install/home/wrappers"
+    // is not treated as an absolute home directory leak (CI false positive).
     label: "absolute Linux home path",
-    pattern: /\/home\/[A-Za-z0-9._-]+(?:\/|$)/,
+    pattern: /(?:^|[^A-Za-z0-9_])\/home\/[A-Za-z0-9._-]+(?:\/|$)/,
   },
   {
     label: "private key block",

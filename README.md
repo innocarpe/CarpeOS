@@ -8,11 +8,13 @@
 
 **Capture context. Compound knowledge.**
 
-CarpeOS is a personal knowledge system for people who work with AI agents.
+CarpeOS is a personal knowledge OS for AI-assisted work that captures agent
+sessions with provenance, keeps accepted decisions searchable, and helps you
+and your agents retrieve that context later via MCP, CLI, and Obsidian — all
+local-first.
 
-It records what happened in those sessions, keeps the trail of where each piece
-came from, and makes that history searchable later — by you or by another
-agent — without dumping everything into one chat log.
+It keeps the trail of where each piece came from without dumping everything
+into one chat log.
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />

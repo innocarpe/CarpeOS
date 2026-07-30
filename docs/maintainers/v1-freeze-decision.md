@@ -71,7 +71,7 @@ All of the following should be true (or consciously waived in writing):
 | 1 | G1–G8 still **done** on [v1-readiness.md](v1-readiness.md) | yes |
 | 2 | Planned-breaks table empty in [compatibility-and-deprecations.md](compatibility-and-deprecations.md) | yes |
 | 3 | G1 recheck procedure completed on **0.2.1+** (or later) and recorded | **done** (this section) |
-| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **mostly done** — S1–S7 pass on monorepo after #75; published package still needs a patch/minor that includes #75 before freeze Approve |
+| 4 | No known “will rename soon” on freeze surfaces after 0.2.1 soak | **mostly done** — S1–S7 pass on monorepo after #75 (merged to `main`); published package still needs a patch/minor that includes #75 before freeze Approve |
 | 5 | CHANGELOG ready for a `## [1.0.0]` Notes bullet (first stable contract) | not yet |
 | 6 | Maintainer explicitly changes this decision row to **Approve** | not yet |
 
@@ -89,7 +89,7 @@ Recorded **2026-07-30** (UTC date of run) against **published**
 | S1 | Published package version in daily use | `carpeos version` → `0.2.1+` | **pass** — `0.2.1` |
 | S2 | Trust zone comes from config after install | `carpeos project identify` → `trust_zone_source: config` (or env if intentionally set) | **pass** — `trust_zone_id: tz_local_default`, `trust_zone_source: config` |
 | S3 | Outbox/status diagnosis is usable | `carpeos sync status` shows zone, `outbox_errors`, no unexpected mismatch warning for normal capture | **pass** — zone + source present; `outbox_trust_zone_mismatch: false`; `outbox_errors: []` |
-| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | **pass (monorepo unreleased / #75)** — published **0.2.1** still empty/stale on capture-only homes. After building monorepo at fix PR **#75**: rebuild `chunks: 6`, freshness `stale: false` (`last_indexed` = sync cursor), `memory search` returns `evidence_excerpt` hits with `imported` in default filters. Re-check once #75 is on a published package. |
+| S4 | Capture + local memory path still works | capture-hook → retrieval rebuild → memory search/context-pack (no crash) | **pass (monorepo / #75 on main, unreleased)** — published **0.2.1** still empty/stale on capture-only homes. After building monorepo with #75: rebuild `chunks: 6`, freshness `stale: false` (`last_indexed` = sync cursor), `memory search` returns `evidence_excerpt` hits with `imported` in default filters. Re-check once #75 is on a published package. |
 | S5 | Optional private sync still works if enrolled | `sync once` against private edge; no sticky leased rows | **pass** (operator-private edge) — after once: outbox `pending:0` `leased:0`, delivered count advanced, no zone mismatch / outbox errors |
 | S6 | Clean recheck still green | `node scripts/g1-recheck.mjs --version 0.2.1` (or later) | **pass** — install gates green with `--skip-smoke` (monorepo MCP smoke already covered by G1 table + CI) |
 | S7 | No new “rename soon” items | [compatibility-and-deprecations.md](compatibility-and-deprecations.md) planned-breaks table still empty | **pass** — planned breaks empty; only documented aliases |

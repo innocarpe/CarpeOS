@@ -205,4 +205,36 @@ describe("check-public-boundary", () => {
       rmSync(repository, { recursive: true, force: true });
     }
   });
+
+  it("does not treat path-like prose install/home/wrappers as a Linux home path", () => {
+    const repository = createRepository();
+    try {
+      mkdirSync(join(repository, "docs"), { recursive: true });
+      writeFileSync(
+        join(repository, "docs/synthetic-note.md"),
+        "The recheck isolates install/home/wrappers/init without leaking operator homes.\n",
+      );
+      gitAdd(repository, "docs/synthetic-note.md");
+      const result = runBoundaryCheck(repository);
+      assert.equal(result.status, 0, result.stderr);
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
+  });
+
+  it("still rejects absolute Linux home paths in tracked prose", () => {
+    const repository = createRepository();
+    try {
+      mkdirSync(join(repository, "docs"), { recursive: true });
+      // Split so this test file itself does not trip the boundary scanner.
+      const leaked = ["/", "home", "/", "runner", "/", "work", "/carpeos"].join("");
+      writeFileSync(join(repository, "docs/leak.md"), `Do not commit ${leaked} into docs.\n`);
+      gitAdd(repository, "docs/leak.md");
+      const result = runBoundaryCheck(repository);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /absolute Linux home path/);
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
+  });
 });

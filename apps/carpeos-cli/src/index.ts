@@ -1369,7 +1369,16 @@ function makeRetrievalQuery(input: {
     filters: {
       visible_trust_zone_ids: [...input.visibleTrustZones],
       lifecycle_status: ["active"],
-      epistemic_authority: ["observed", "derived", "verified"],
+      // Align with MCP memory_search: capture writes EvidenceArtifact as
+      // epistemic_authority "imported"; excluding it made day-to-day search empty.
+      epistemic_authority: [
+        "unverified",
+        "self_reported",
+        "observed",
+        "imported",
+        "derived",
+        "verified",
+      ],
       protected_value_policy: "metadata_only",
       conflict_policy: "surface_conflicts",
     },

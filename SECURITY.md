@@ -27,7 +27,15 @@ The public repository must not contain:
 - local filesystem paths;
 - credentials, tokens, cookies, passwords, API keys, or private keys;
 - runtime SQLite databases;
-- D1, R2, Vectorize, or Obsidian exports from a private instance.
+- D1, R2, Vectorize, or Obsidian exports from a private instance;
+- local agent harness session state (for example `.gjc/`, `.omx/`).
+
+CI enforces this boundary with:
+
+- `scripts/check-public-boundary.mjs` (via `pnpm check`) for protected paths, home
+  paths, and non-placeholder Cloudflare identifiers;
+- the **Secret scan** workflow (`gitleaks`) for high-entropy secrets across git
+  history on every pull request and `main` push.
 
 ## Private Runtime Boundary
 

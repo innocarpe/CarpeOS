@@ -19,6 +19,8 @@ build/
 # CarpeOS runtime state and private data
 .omx/
 .carpeos/
+# Local agent/session harness state (home paths, token-usage logs) — never commit
+.gjc/
 *.db
 *.sqlite
 *.sqlite3
