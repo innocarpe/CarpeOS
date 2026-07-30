@@ -103,6 +103,9 @@ describe("adjudication", () => {
       extractKnowledgeCandidateSpans("Decision: store api_key=syntheticsecretvalue123 for later."),
     ).toEqual([]);
     expect(
+      extractKnowledgeCandidateSpans("Decision: store password=syntheticsecretvalue123 for later."),
+    ).toEqual([]);
+    expect(
       extractKnowledgeCandidateSpans('Decision: inspect {"transcript":"raw session dump"}.'),
     ).toEqual([]);
   });
@@ -142,6 +145,18 @@ describe("adjudication", () => {
     expect(statement).not.toContain("Knowledge fragment");
   });
 
+  it("holds strong scoring text when no explicit safe candidate span exists", () => {
+    const result = adjudicateKnowledgeCandidate({
+      provider: "synthetic-agent",
+      hook_event_name: "SessionEnd",
+      signal_text: "Decision: always keep this scoring-only transcript as the default policy.",
+    });
+
+    expect(result.disposition).toBe("hold");
+    expect(result.reason_codes).toContain("no_safe_candidate_span");
+    expect(result.statement).not.toContain("scoring-only transcript");
+  });
+
   it("rejects hostile or mismatched explicit candidate spans", () => {
     const result = adjudicateKnowledgeCandidate({
       provider: "synthetic-agent",
@@ -173,5 +188,10 @@ describe("adjudication", () => {
         text: "Procedure: first run offline checks, then verify the synthetic release artifact.",
       },
     ]);
+    expect(
+      extractKnowledgeCandidateSpans(
+        "First run to lunch, then check the weather before heading back.",
+      ),
+    ).toEqual([]);
   });
 });

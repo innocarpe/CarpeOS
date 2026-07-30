@@ -921,8 +921,10 @@ describe("LocalCaptureStore extraction", () => {
       throw new Error("expected extraction");
     }
     expect(result.extraction.event.event_type).toBe("Observation");
+    expect(result.extraction.event.lifecycle_status).toBe("draft");
     expect(result.extraction.event.payload.statement).toContain("SessionEnd");
     expect(result.extraction.event.payload.statement).not.toContain("secret should not appear");
+    expect(result.extraction.event.payload.statement).not.toContain("Knowledge fragment");
     expect(result.extraction.event.payload.evidence_artifact_refs).toEqual([
       result.event.payload.artifact_id,
     ]);
@@ -971,6 +973,26 @@ describe("LocalCaptureStore adjudication", () => {
     );
     const counts = store.listDispositionCounts();
     expect(counts.promote).toBe(1);
+  });
+
+  it("labels explicit semantic fields before building a statement", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(
+      makeEnvelope({
+        hook_event_name: "SessionEnd",
+        payload: { decision: "Use pnpm as the default synthetic workspace installer." },
+      }),
+      { extract: true },
+    );
+
+    expect(result.extraction?.status).toBe("extracted");
+    if (result.extraction?.status !== "extracted" && result.extraction?.status !== "replay") {
+      throw new Error("expected decision extraction");
+    }
+    expect(result.extraction.event.lifecycle_status).toBe("active");
+    expect(result.extraction.event.payload.statement).toContain(
+      "Knowledge fragment (decision): Decision: Use pnpm as the default synthetic workspace installer.",
+    );
   });
 
   it("rejects PostToolUse noise without creating Observation", () => {
@@ -1041,7 +1063,7 @@ describe("LocalCaptureStore adjudication", () => {
     const result = store.captureHook(
       makeEnvelope({
         hook_event_name: "SessionEnd",
-        payload: { decision: "Decision: store api_key=syntheticsecretvalue123 for later." },
+        payload: { decision: "Store password=syntheticsecretvalue123 for later." },
       }),
       { extract: true },
     );

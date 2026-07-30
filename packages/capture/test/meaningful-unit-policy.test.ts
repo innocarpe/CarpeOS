@@ -91,6 +91,8 @@ describe("meaningful-unit-policy", () => {
     expect(containsSecretLikeMaterial("token sk-abcdefghijklmnop")).toBe(true);
     expect(containsSecretLikeMaterial("Authorization: Bearer abcdefghijklmnop")).toBe(true);
     expect(containsSecretLikeMaterial("api_key=supersecretvalue")).toBe(true);
+    expect(containsSecretLikeMaterial("password=syntheticsecretvalue")).toBe(true);
+    expect(containsSecretLikeMaterial("client_secret: syntheticsecretvalue")).toBe(true);
 
     expect(assertSafeMeaningfulUnitText("  User chose pnpm over npm.  ")).toBe(
       "User chose pnpm over npm.",

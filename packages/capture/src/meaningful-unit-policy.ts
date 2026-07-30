@@ -166,7 +166,7 @@ const SECRET_LIKE_PATTERNS: readonly RegExp[] = [
   // Common credential shapes (synthetic fixtures only in tests)
   /\bsk-[a-zA-Z0-9]{8,}\b/,
   /\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b/,
-  /\b(?:api[_-]?key|access[_-]?token|secret[_-]?key)\s*[:=]\s*\S+/i,
+  /\b(?:api[_-]?key|access[_-]?token|secret[_-]?key|client[_-]?secret|password|passwd|passphrase)\s*[:=]\s*\S+/i,
   /\b-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\bghp_[A-Za-z0-9]{20,}\b/,
   /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/,

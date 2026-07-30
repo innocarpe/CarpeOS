@@ -171,7 +171,7 @@ not infer that a **done** plumbing gate closes them.
 | Policy replay | `knowledge_dispositions.source_event_id` is the primary key, so replay returns the existing row even if a later policy version should re-evaluate it. | Define append-only source-event + policy-version history and active-set migration semantics in an ADR and tests. | Audit durability |
 | Dogfood depth | `smoke:knowledge` covers decision-like SessionEnd versus PostToolUse noise. | Add noisy multi-hook sessions, UserPromptSubmit floods, secret-like candidates, and thanks/ok chatter. | K8 |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
-| Release language | The adjudication MVP is merged, but K1/K5/K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
+| Release language | Candidate v1 closes K1, but K5/K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
 
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into

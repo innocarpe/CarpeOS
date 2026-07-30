@@ -195,7 +195,9 @@ function signalFromPayload(payload: unknown, candidateOnly: boolean): string | u
   const scoringKeys = ["transcript", "text", "content", "prompt"] as const;
   for (const key of candidateKeys) {
     const signal = boundedSignal(record[key]);
-    if (signal !== undefined) return signal;
+    if (signal !== undefined) {
+      return candidateOnly ? labelCandidateField(key, signal) : signal;
+    }
   }
   if (!candidateOnly) {
     for (const key of scoringKeys) {
@@ -224,9 +226,23 @@ function signalFromPayload(payload: unknown, candidateOnly: boolean): string | u
         }
       }
     }
-    if (parts.length > 0) return parts.join(" ").slice(0, 1_200);
+    if (parts.length > 0) {
+      const joined = parts.join(" ").slice(0, 1_200);
+      return candidateOnly && !/^\s*(?:procedure|workflow|runbook|playbook|steps?)\b/i.test(joined)
+        ? `Procedure: ${joined}`
+        : joined;
+    }
   }
   return undefined;
+}
+
+function labelCandidateField(
+  field: "decision" | "preference" | "constraint" | "procedure" | "summary" | "message",
+  signal: string,
+): string {
+  if (field === "summary" || field === "message") return signal;
+  const label = `${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+  return signal.toLowerCase().startsWith(field) ? signal : `${label}: ${signal}`;
 }
 
 function boundedSignal(value: unknown): string | undefined {
@@ -1212,6 +1228,7 @@ export class LocalCaptureStore {
 
     const extractedSignals = this.tryExtractSignals(evidence, metaFromEnvelope);
     const signalText = input.signalText ?? extractedSignals.scoring ?? "";
+    // CLI/API signalText is scoring-only; statements require captured explicit candidate fields.
     const candidateText = input.signalText === undefined ? extractedSignals.candidate : undefined;
 
     const evidenceRefs = [

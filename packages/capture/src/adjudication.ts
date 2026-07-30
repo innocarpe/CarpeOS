@@ -81,7 +81,7 @@ const CANDIDATE_KIND_PATTERNS: readonly [KnowledgeCandidateKind, RegExp][] = [
   ["decision", /\b(decid(?:e|ed|ing|es)|decision|adopt(?:ed)?|chose|choose|selected?|default)\b/i],
   ["preference", /\b(prefer(?:red|s|ring)?|preference|would rather|favor(?:ed|s)?)\b/i],
   ["constraint", /\b(must(?: not)?|should not|never|always|required?|forbidden|constraint)\b/i],
-  ["procedure", /\b(procedure|steps?|first|then|next|finally|run|verify|check|before|after)\b/i],
+  ["procedure", /\b(procedure|workflow|runbook|playbook|steps?)\b/i],
 ];
 
 /**
@@ -185,6 +185,7 @@ export function adjudicateKnowledgeCandidate(
   }
 
   const signal = (candidate.signal_text ?? "").trim();
+  const hasSafeSpan = (candidate.spans?.length ?? 0) > 0;
   let value = 0.25;
   let durability = 0.3;
   let risk = 0.1;
@@ -244,6 +245,10 @@ export function adjudicateKnowledgeCandidate(
     );
   }
 
+  if (!hasSafeSpan) {
+    reasons.push("no_safe_candidate_span");
+  }
+
   if (PROMOTE_HOOKS.has(hook)) {
     value += 0.35;
     durability += 0.35;
@@ -287,6 +292,7 @@ export function adjudicateKnowledgeCandidate(
   const promoteScore = value * 0.5 + durability * 0.4 - noise * 0.35 - risk * 0.5;
 
   if (
+    hasSafeSpan &&
     promoteScore >= 0.45 &&
     value >= 0.5 &&
     noise < 0.55 &&
