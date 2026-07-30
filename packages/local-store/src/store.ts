@@ -131,6 +131,32 @@ export type ProposeObservationDraftInput = {
   lifecycleStatus?: "active" | "draft";
 };
 
+export type HeldDisposition = {
+  source_event_id: string;
+  artifact_id: string;
+  statement: string;
+  reason_codes: string[];
+  policy_version: string;
+  created_at: string;
+};
+
+export type HeldReviewDecision = "promote" | "reject";
+
+export type HeldReviewResult =
+  | {
+      status: "reviewed" | "replay";
+      review_id: string;
+      source_event_id: string;
+      decision: HeldReviewDecision;
+      policy_version: string;
+      extraction?: ExtractionResult;
+    }
+  | {
+      status: "failed";
+      source_event_id: string;
+      error: string;
+    };
+
 export type AdjudicateResult =
   | {
       status: "promoted" | "held";
@@ -159,11 +185,21 @@ export type AdjudicateResult =
 
 type StoredDisposition = {
   source_event_id: string;
+  artifact_id: string;
   disposition: KnowledgeDisposition;
   reason_codes: string[];
   scores: AdjudicationResult["scores"];
   policy_version: string;
   statement: string;
+  created_at: string;
+};
+
+type StoredHeldReview = {
+  review_id: string;
+  source_event_id: string;
+  decision: HeldReviewDecision;
+  policy_version: string;
+  created_at: string;
 };
 
 /** Pull a bounded rule-scoring signal from supported payload fields. */
@@ -413,6 +449,7 @@ export const LOCAL_STORE_MIGRATION_IDS = [
   "001_local_capture_store",
   "002_sync_transfer_imports",
   "003_knowledge_dispositions",
+  "004_knowledge_disposition_reviews",
 ] as const;
 
 export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
@@ -420,6 +457,7 @@ export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
 const MIGRATION_ID: LocalStoreMigrationId = "001_local_capture_store";
 const SYNC_MIGRATION_ID: LocalStoreMigrationId = "002_sync_transfer_imports";
 const DISPOSITION_MIGRATION_ID: LocalStoreMigrationId = "003_knowledge_dispositions";
+const DISPOSITION_REVIEW_MIGRATION_ID: LocalStoreMigrationId = "004_knowledge_disposition_reviews";
 
 export type ProtectedValueTransferExport = {
   protected_value_id: string;
@@ -1457,6 +1495,157 @@ export class LocalCaptureStore {
     return { ...counts, policy_version: ADJUDICATION_POLICY_VERSION };
   }
 
+  listHeldDispositions(limit = 50): HeldDisposition[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      throw new Error("held disposition limit must be an integer between 1 and 200");
+    }
+    const rows = this.db
+      .prepare(
+        `
+          SELECT d.source_event_id, d.artifact_id, d.statement,
+                 d.reason_codes_json, d.policy_version, d.created_at
+          FROM knowledge_dispositions d
+          LEFT JOIN knowledge_disposition_reviews r
+            ON r.source_event_id = d.source_event_id
+           AND r.trust_zone_id = d.trust_zone_id
+           AND r.policy_version = d.policy_version
+          WHERE d.trust_zone_id = ?
+            AND d.disposition = 'hold'
+            AND r.review_id IS NULL
+          ORDER BY d.created_at ASC, d.source_event_id ASC
+          LIMIT ?
+        `,
+      )
+      .all(this.trustZone.trust_zone_id, limit) as Array<{
+      source_event_id: string;
+      artifact_id: string;
+      statement: string;
+      reason_codes_json: string;
+      policy_version: string;
+      created_at: string;
+    }>;
+    return rows.map((row) => ({
+      source_event_id: row.source_event_id,
+      artifact_id: row.artifact_id,
+      statement: row.statement,
+      reason_codes: JSON.parse(row.reason_codes_json) as string[],
+      policy_version: row.policy_version,
+      created_at: row.created_at,
+    }));
+  }
+
+  reviewHeldDisposition(sourceEventId: string, decision: HeldReviewDecision): HeldReviewResult {
+    const normalizedEventId = sourceEventId.trim();
+    if (normalizedEventId.length === 0) {
+      return {
+        status: "failed",
+        source_event_id: sourceEventId,
+        error: "source event id is required",
+      };
+    }
+    if (decision !== "promote" && decision !== "reject") {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        error: `invalid held review decision: ${String(decision)}`,
+      };
+    }
+    const disposition = this.getDisposition(normalizedEventId);
+    if (disposition === undefined) {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        error: `disposition not found in trust zone: ${normalizedEventId}`,
+      };
+    }
+    if (disposition.disposition !== "hold") {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        error: `disposition is ${disposition.disposition}, expected hold`,
+      };
+    }
+
+    let review = this.getHeldReview(normalizedEventId, disposition.policy_version);
+    let status: "reviewed" | "replay" = "replay";
+    if (review === undefined) {
+      const reviewId = heldReviewId(
+        normalizedEventId,
+        this.trustZone.trust_zone_id,
+        disposition.policy_version,
+        decision,
+      );
+      try {
+        this.withImmediateTransaction(() => {
+          this.db
+            .prepare(
+              `
+                INSERT INTO knowledge_disposition_reviews (
+                  review_id, source_event_id, trust_zone_id, policy_version,
+                  review_decision, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+              `,
+            )
+            .run(
+              reviewId,
+              normalizedEventId,
+              this.trustZone.trust_zone_id,
+              disposition.policy_version,
+              decision,
+              this.clock.now().toISOString(),
+            );
+        });
+        review = this.getHeldReview(normalizedEventId, disposition.policy_version);
+        status = "reviewed";
+      } catch (error) {
+        review = this.getHeldReview(normalizedEventId, disposition.policy_version);
+        if (review === undefined) throw error;
+      }
+    }
+    if (review === undefined) {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        error: "held review audit could not be recorded",
+      };
+    }
+    if (review.decision !== decision) {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        error: `held disposition already reviewed as ${review.decision}`,
+      };
+    }
+    if (decision === "reject") {
+      return {
+        status,
+        review_id: review.review_id,
+        source_event_id: normalizedEventId,
+        decision,
+        policy_version: disposition.policy_version,
+      };
+    }
+
+    try {
+      return {
+        status,
+        review_id: review.review_id,
+        source_event_id: normalizedEventId,
+        decision,
+        policy_version: disposition.policy_version,
+        extraction: this.materializeHeldPromotion(disposition),
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        error: `held review audit ${review.review_id} recorded; retry promote-held: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
   /**
    * Explicit extract by evidence event id (CLI backfill).
    */
@@ -1557,8 +1746,8 @@ export class LocalCaptureStore {
     const row = this.db
       .prepare(
         `
-          SELECT source_event_id, disposition, reason_codes_json, scores_json,
-                 policy_version, statement
+          SELECT source_event_id, artifact_id, disposition, reason_codes_json, scores_json,
+                 policy_version, statement, created_at
           FROM knowledge_dispositions
           WHERE source_event_id = ? AND trust_zone_id = ?
         `,
@@ -1566,11 +1755,13 @@ export class LocalCaptureStore {
       .get(sourceEventId, this.trustZone.trust_zone_id) as
       | {
           source_event_id: string;
+          artifact_id: string;
           disposition: KnowledgeDisposition;
           reason_codes_json: string;
           scores_json: string;
           policy_version: string;
           statement: string;
+          created_at: string;
         }
       | undefined;
     if (row === undefined) {
@@ -1578,12 +1769,53 @@ export class LocalCaptureStore {
     }
     return {
       source_event_id: row.source_event_id,
+      artifact_id: row.artifact_id,
       disposition: row.disposition,
       reason_codes: JSON.parse(row.reason_codes_json) as string[],
       scores: JSON.parse(row.scores_json) as AdjudicationResult["scores"],
       policy_version: row.policy_version,
       statement: row.statement,
+      created_at: row.created_at,
     };
+  }
+
+  private getHeldReview(
+    sourceEventId: string,
+    policyVersion: string,
+  ): StoredHeldReview | undefined {
+    return this.db
+      .prepare(
+        `
+          SELECT review_id, source_event_id, review_decision AS decision,
+                 policy_version, created_at
+          FROM knowledge_disposition_reviews
+          WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version = ?
+        `,
+      )
+      .get(sourceEventId, this.trustZone.trust_zone_id, policyVersion) as
+      | StoredHeldReview
+      | undefined;
+  }
+
+  private materializeHeldPromotion(disposition: StoredDisposition): ExtractionResult {
+    const source = this.getEvent(disposition.source_event_id);
+    if (source === undefined || source.event_type !== "EvidenceArtifact") {
+      throw new Error(`held source evidence not found: ${disposition.source_event_id}`);
+    }
+    return this.proposeObservationDraft({
+      statement: disposition.statement,
+      evidenceArtifactRefs: [disposition.artifact_id],
+      sourceEventId: disposition.source_event_id,
+      subjectRef: source.subject_ref,
+      validTime: source.valid_time,
+      observedAt: source.valid_time.start,
+      idempotencyKey: heldReviewObservationIdempotencyKey(
+        disposition.source_event_id,
+        this.trustZone.trust_zone_id,
+        disposition.policy_version,
+      ),
+      lifecycleStatus: "active",
+    });
   }
 
   private insertDisposition(input: {
@@ -2219,7 +2451,9 @@ export class LocalCaptureStore {
       | "protected_value_imports"
       | "sync_inbox_events"
       | "sync_inbox_erasures"
-      | "sync_cursors",
+      | "sync_cursors"
+      | "knowledge_dispositions"
+      | "knowledge_disposition_reviews",
   ): number {
     const row = this.db.prepare(`SELECT count(*) AS count FROM ${table}`).get() as {
       count: number;
@@ -2628,6 +2862,55 @@ export class LocalCaptureStore {
           .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
           .run(DISPOSITION_MIGRATION_ID, this.clock.now().toISOString());
       }
+
+      const dispositionReviewExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(DISPOSITION_REVIEW_MIGRATION_ID);
+      if (dispositionReviewExisting === undefined) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS knowledge_disposition_reviews (
+            review_id TEXT PRIMARY KEY,
+            source_event_id TEXT NOT NULL REFERENCES canonical_events(event_id),
+            trust_zone_id TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            review_decision TEXT NOT NULL CHECK (review_decision IN ('promote', 'reject')),
+            created_at TEXT NOT NULL,
+            UNIQUE (source_event_id, trust_zone_id, policy_version)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_knowledge_disposition_reviews_zone_decision
+            ON knowledge_disposition_reviews (
+              trust_zone_id, policy_version, review_decision, created_at
+            );
+
+          CREATE TRIGGER IF NOT EXISTS knowledge_dispositions_no_update
+          BEFORE UPDATE ON knowledge_dispositions
+          BEGIN
+            SELECT RAISE(ABORT, 'knowledge dispositions are append-only');
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS knowledge_dispositions_no_delete
+          BEFORE DELETE ON knowledge_dispositions
+          BEGIN
+            SELECT RAISE(ABORT, 'knowledge dispositions are append-only');
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS knowledge_disposition_reviews_no_update
+          BEFORE UPDATE ON knowledge_disposition_reviews
+          BEGIN
+            SELECT RAISE(ABORT, 'knowledge disposition reviews are append-only');
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS knowledge_disposition_reviews_no_delete
+          BEFORE DELETE ON knowledge_disposition_reviews
+          BEGIN
+            SELECT RAISE(ABORT, 'knowledge disposition reviews are append-only');
+          END;
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(DISPOSITION_REVIEW_MIGRATION_ID, this.clock.now().toISOString());
+      }
     });
   }
 
@@ -2712,6 +2995,37 @@ export class LocalCaptureStore {
       throw error;
     }
   }
+}
+
+function heldReviewId(
+  sourceEventId: string,
+  trustZoneId: string,
+  policyVersion: string,
+  decision: HeldReviewDecision,
+): string {
+  return `kdr_${hashHex(
+    stableJson({
+      source_event_id: sourceEventId,
+      trust_zone_id: trustZoneId,
+      policy_version: policyVersion,
+      decision,
+    }),
+  ).slice(0, 32)}`;
+}
+
+function heldReviewObservationIdempotencyKey(
+  sourceEventId: string,
+  trustZoneId: string,
+  policyVersion: string,
+): string {
+  return `idem_${hashHex(
+    stableJson({
+      kind: "held_review_promote",
+      source_event_id: sourceEventId,
+      trust_zone_id: trustZoneId,
+      policy_version: policyVersion,
+    }),
+  ).slice(0, 32)}`;
 }
 
 export function runtimeDirFromEnv(env: NodeJS.ProcessEnv = process.env): string {

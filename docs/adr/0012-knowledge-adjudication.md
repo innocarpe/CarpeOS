@@ -33,9 +33,21 @@ EvidenceArtifact (+ capture metadata)
 
 ### Store
 
-Table `knowledge_dispositions` records disposition + reason codes + scores.
-Observations remain canonical events; disposition explains **why** they exist
-or why evidence was not promoted.
+Table `knowledge_dispositions` records the initial disposition + reason codes +
+scores. `knowledge_disposition_reviews` records one terminal operator decision
+for a held source event and policy version. Both are append-only.
+
+A held review never rewrites the draft Observation or initial disposition:
+
+- `promote` records the review first, then appends a new active Observation with
+  a distinct deterministic idempotency key;
+- `reject` records review only and leaves the draft off default retrieval;
+- replaying the same decision is idempotent; an opposite second decision for the
+  same policy version fails.
+
+Observations remain canonical events; disposition and review explain **why** they
+exist or why evidence was not promoted. Held review never creates an
+`AcceptanceDecision`.
 
 ### Retrieval
 

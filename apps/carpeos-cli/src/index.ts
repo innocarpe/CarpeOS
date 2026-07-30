@@ -515,8 +515,15 @@ function runExtract(argv: readonly string[], env: NodeJS.ProcessEnv): number {
 }
 
 function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const [requestedMode, ...rest] = argv;
+  const mode =
+    requestedMode === "list-held" ||
+    requestedMode === "promote-held" ||
+    requestedMode === "reject-held"
+      ? requestedMode
+      : undefined;
   const parsed = parseArgs({
-    args: [...argv],
+    args: mode === undefined ? [...argv] : rest,
     allowPositionals: false,
     strict: true,
     options: {
@@ -526,6 +533,7 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
       "project-id": { type: "string" },
       "trust-zone": { type: "string" },
       stats: { type: "boolean", default: false },
+      limit: { type: "string", default: "50" },
     },
   });
 
@@ -538,6 +546,55 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
     env,
   );
   try {
+    if (mode === "list-held") {
+      const limit = parseInteger(parsed.values.limit, "--limit", 1);
+      if (limit > 200) {
+        throw new CliUsageError("--limit must be less than or equal to 200");
+      }
+      const held = store.listHeldDispositions(limit);
+      writeJson(process.stdout, {
+        ok: true,
+        command: "adjudicate",
+        mode,
+        count: held.length,
+        held,
+      });
+      return 0;
+    }
+
+    if (mode === "promote-held" || mode === "reject-held") {
+      const eventId = parsed.values["event-id"]?.trim();
+      if (eventId === undefined || eventId.length === 0) {
+        throw new CliUsageError(`${mode} requires --event-id <evt_…>`);
+      }
+      const result = store.reviewHeldDisposition(
+        eventId,
+        mode === "promote-held" ? "promote" : "reject",
+      );
+      writeJson(process.stdout, {
+        ok: result.status !== "failed",
+        command: "adjudicate",
+        mode,
+        ...result,
+        ...(result.status !== "failed" && result.extraction !== undefined
+          ? {
+              extraction: {
+                status: result.extraction.status,
+                ...(result.extraction.status === "extracted" ||
+                result.extraction.status === "replay"
+                  ? {
+                      observation_event_id: result.extraction.event.event_id,
+                      observation_id: result.extraction.event.payload.observation_id,
+                      lifecycle_status: result.extraction.event.lifecycle_status,
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      });
+      return result.status === "failed" ? 1 : 0;
+    }
+
     if (parsed.values.stats === true) {
       writeJson(process.stdout, {
         ok: true,
@@ -551,7 +608,7 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
     const eventId = parsed.values["event-id"];
     if (eventId === undefined || eventId.trim().length === 0) {
       throw new CliUsageError(
-        "adjudicate requires --event-id <evt_…> or --stats (see: carpeos help adjudicate)",
+        "adjudicate requires --event-id <evt_…>, --stats, or a held-review subcommand (see: carpeos help adjudicate)",
       );
     }
     const signalText = parsed.values["signal-text"];
@@ -1157,7 +1214,7 @@ OPTIONS
 
 NOTES
   Runs knowledge adjudication (promote|hold|reject). Reject skips meaning units.
-  Statement text is metadata-only (no decrypted transcript).
+  Statements may include a bounded safe candidate fragment; raw transcript text stays protected.
   Idempotent: re-running the same event_id replays disposition + Observation.
 `;
     case "adjudicate":
@@ -1166,11 +1223,15 @@ NOTES
 USAGE
   carpeos adjudicate --event-id <evt_…> [options]
   carpeos adjudicate --stats [options]
+  carpeos adjudicate list-held [--limit <n>] [options]
+  carpeos adjudicate promote-held --event-id <evt_…> [options]
+  carpeos adjudicate reject-held --event-id <evt_…> [options]
 
 OPTIONS
-  --event-id <id>           EvidenceArtifact event_id to adjudicate
+  --event-id <id>           EvidenceArtifact event_id to adjudicate or review
   --signal-text <text>      Optional free-text signal for scoring only
   --stats                   Print promote/hold/reject counts for trust zone
+  --limit <n>               Held queue rows, 1–200 (default: 50)
   --home <path>
   --project-id <id>
   --trust-zone <id>
@@ -1178,6 +1239,9 @@ OPTIONS
 NOTES
   Precision-first rule adjudicator (adj_v1). Promote → active Observation;
   hold → draft Observation; reject → disposition only.
+  Held review is terminal and append-only. promote-held appends a new active
+  Observation; reject-held records review only. Replays are idempotent, and an
+  opposite second decision fails. Neither path creates an AcceptanceDecision.
   Prefer: carpeos adjudicate after capture sessions (hooks stay fail-open).
 `;
     case "capture-hook":
