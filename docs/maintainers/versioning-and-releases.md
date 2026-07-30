@@ -28,14 +28,22 @@ still follow a consistent rule:
 | --- | --- | --- |
 | **PATCH** `0.1.0 → 0.1.1` | Bug fixes, docs-only user-facing install fixes, no intentional API/CLI break | fix context-pack crash |
 | **MINOR** `0.1.0 → 0.2.0` | New features **or** intentional breaking CLI/MCP/setup changes | new `carpeos memory *` command; changed MCP env names |
-| **MAJOR** `0.x → 1.0.0` | First stable public contract (deliberate milestone, not automatic) | “v1 CLI + MCP contract freeze” |
+| **MAJOR** `0.x → 1.0.0` | First stable public contract + local pipeline freeze | “v1 CLI + MCP + capture pipeline” |
+| **MAJOR** `1.x → 2.0.0` | Knowledge adjudication becomes default product contract | “adjudicated meaning-first OS” ([product-2.0.0](product-2.0.0.md)) |
 
 In `0.y.z`, treat **breaking changes as MINOR** (not silent patches). Call them
 out in the changelog under `### Breaking`.
 
+### What about `2.0.0`?
+
+**Product 2.0** = knowledge **adjudication** (what is brain-worthy), not another
+pipeline polish. SSOT: [product-2.0.0.md](product-2.0.0.md). Prefer shipping
+judgment work as `1.x` while compatible; cut **`2.0.0`** when adjudicated
+meaning becomes the default public product contract. Explicit Approve required.
+
 ### When is `1.0.0` allowed?
 
-`1.0.0` is a **product + contract** milestone:
+`1.0.0` (already cut) was a **pipeline + contract** milestone:
 
 1. **Product:** the core loop works end-to-end — setup installs capture, evidence
    lands, meaningful units (Observation/Claim) are derived, search/context-pack
@@ -57,9 +65,9 @@ Contract freeze is **necessary packaging**, not sufficient product completion.
 
 **Not required for 1.0.0:** GraphRAG completeness, multi-Mac sync polish,
 production embedding providers, or hosted Cloudflare as a public product.
-**Required for product 1.0** (not deferred UX): capture install via product setup,
-Evidence→Observation/Claim extraction MVP, and retrieval of those units.
-Canonical non-goals: [product-1.0.0.md](product-1.0.0.md).
+**Required for shipped 1.0 pipeline:** capture install, extract shell, retrieval of
+those units. **Not claimed as complete knowledge OS:** brain-worthy content
+adjudication — that is [product-2.0.0.md](product-2.0.0.md).
 
 **Practical gate (checklist before tagging `v1.0.0`):**
 
@@ -69,7 +77,13 @@ Canonical non-goals: [product-1.0.0.md](product-1.0.0.md).
    [Compatibility and Deprecations](compatibility-and-deprecations.md)
 4. Maintainer **Approve** in [v1 freeze decision](v1-freeze-decision.md) — never automatic
 
-### After `1.0.0`
+### After `1.0.0` / toward `2.0.0`
+
+Ship judgment work on `1.x` when backward compatible. Cut **`2.0.0`** when
+defaults and contracts assume **adjudicated** knowledge (see
+[product-2.0.0.md](product-2.0.0.md)). Never retag or unpublish `1.0.0`.
+
+### After `1.0.0` (SemVer table)
 
 | Bump | When |
 | --- | --- |
