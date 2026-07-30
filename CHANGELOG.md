@@ -12,9 +12,35 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- Docs: [product 2.0.0 DoD](docs/maintainers/product-2.0.0.md) — knowledge
-  **adjudication** as next product major; honest reframe of 1.0 as pipeline/contract
-  baseline (not brain-worthy judgment complete)
+- (none yet — fold entries here before the next release)
+
+## [2.0.0] - 2026-07-30
+
+### Breaking
+
+- Product meaning major: default knowledge path is **adjudicated** promote | hold | reject (`adj_v1`), not “every eligible SessionEnd becomes searchable meaning.”
+- Default `memory search` / MCP retrieval surfaces **active/promoted** units only; draft/held require explicit opt-in (`--include-held` / `include_held`).
+- Local store dispositions are keyed by `(source_event_id, trust_zone_id, policy_version)` with append-only history and held-review audit tables (migrations `003`–`005`).
+
+### Added
+
+- Knowledge adjudication MVP (`adj_v1`): candidate spans, precision-first dispositions, golden suite, and `pnpm smoke:knowledge`
+- Operator held queue: `carpeos adjudicate list-held|promote-held|reject-held` (append-only, no auto-`AcceptanceDecision`)
+- Policy-version re-adjudication and `carpeos adjudicate history` / `--policy-version`
+- Setup/install doctor adjudication health (policy version, promote/hold/reject counts, promoted-only default search)
+- Explicit held search opt-in: CLI `--include-held`, MCP `include_held`
+- Public-safe multi-hook dogfood: `pnpm smoke:dogfood`
+- Maintainer product-2.0 gates, freeze packet, and Claim-form defer notes
+
+### Changed
+
+- Capture/extract path runs post-capture adjudication; hooks stay fail-open and fast
+- Doctor and EN/KO honesty: 1.0 remains pipeline infrastructure; 2.0 is operator-real adjudication MVP packaging
+
+### Fixed
+
+- Smoke fixtures and promoted-only search regressions after adjudication defaults
+- Public-boundary-safe synthetic secret fixtures in dogfood smoke
 
 ## [1.0.0] - 2026-07-30
 
@@ -178,7 +204,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v2.0.0...HEAD
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
 [0.1.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.2
@@ -187,3 +213,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [0.2.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.1
 [0.2.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.2
 [1.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v1.0.0
+[2.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v2.0.0
