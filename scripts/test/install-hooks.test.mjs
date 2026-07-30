@@ -29,7 +29,10 @@ describe("install-hooks", () => {
     assert.equal(isCarpeosCaptureCommand(cmd, "claude"), true);
     assert.equal(isCarpeosCaptureCommand(cmd, "codex"), false);
     assert.equal(
-      isCarpeosCaptureCommand("carpeos capture-hook --provider claude --fail-open --quiet", "claude"),
+      isCarpeosCaptureCommand(
+        "carpeos capture-hook --provider claude --fail-open --quiet",
+        "claude",
+      ),
       true,
     );
   });

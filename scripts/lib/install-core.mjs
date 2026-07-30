@@ -355,10 +355,7 @@ export function installLocal(options) {
   if (options.registerHooks) {
     try {
       const templateDir = resolveHooksTemplateDir(config.install_root);
-      const hookHosts = resolveHookHosts(
-        (cmd) => commandExists(cmd, run),
-        options.hookHosts,
-      );
+      const hookHosts = resolveHookHosts((cmd) => commandExists(cmd, run), options.hookHosts);
       const installed = installCaptureHooks({
         hosts: hookHosts,
         binDir: config.bin_dir,
@@ -976,13 +973,11 @@ export function resolveSetupPlan(args, ctx = {}) {
   return {
     command: args.command,
     hooksCommand: args.hooksCommand || "plan",
-    apply:
-      (Boolean(args.apply) && args.command === "run" && !args.dryRun) || hooksApply,
+    apply: (Boolean(args.apply) && args.command === "run" && !args.dryRun) || hooksApply,
     dryRun:
       Boolean(args.dryRun) ||
       args.command === "plan" ||
-      (args.command === "hooks" &&
-        (args.hooksCommand === "plan" || !args.apply)),
+      (args.command === "hooks" && (args.hooksCommand === "plan" || !args.apply)),
     json: Boolean(args.json),
     skipBuild: Boolean(args.skipBuild),
     skipMcp,
@@ -1036,10 +1031,7 @@ export function runSetupHooks(plan, opts = {}) {
   const log = opts.log ?? ((msg) => process.stdout.write(`${msg}\n`));
   const env = opts.env ?? process.env;
   const templateDir = resolveHooksTemplateDir(plan.repoRoot);
-  const hosts = resolveHookHosts(
-    (cmd) => commandExists(cmd, run),
-    plan.hookHostList,
-  );
+  const hosts = resolveHookHosts((cmd) => commandExists(cmd, run), plan.hookHostList);
 
   if (plan.hooksCommand === "doctor") {
     const report = doctorCaptureHooks({

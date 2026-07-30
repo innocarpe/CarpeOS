@@ -124,8 +124,7 @@ export function isCarpeosCaptureCommand(command, provider) {
   const normalized = command.replace(/['"]/g, " ");
   return (
     normalized.includes("capture-hook") &&
-    (normalized.includes(`--provider ${provider}`) ||
-      normalized.includes(`--provider=${provider}`))
+    (normalized.includes(`--provider ${provider}`) || normalized.includes(`--provider=${provider}`))
   );
 }
 
@@ -464,8 +463,7 @@ export function installCaptureHooks(options) {
       results.push({ host, status: "skipped", reason: "unsupported host" });
       continue;
     }
-    const configPath =
-      options.pathForHost?.(host) ?? defaultHookConfigPath(host, env);
+    const configPath = options.pathForHost?.(host) ?? defaultHookConfigPath(host, env);
     const template = loadHookTemplate(host, options.templateDir);
     const materialized = materializeHookTemplate(template, host, options.binDir);
 
@@ -572,8 +570,7 @@ export function uninstallCaptureHooks(options) {
       results.push({ host, status: "skipped", reason: "unsupported host" });
       continue;
     }
-    const configPath =
-      options.pathForHost?.(host) ?? defaultHookConfigPath(host, env);
+    const configPath = options.pathForHost?.(host) ?? defaultHookConfigPath(host, env);
 
     if (!exists(configPath)) {
       results.push({
@@ -684,9 +681,7 @@ export function parseHookHostsSpec(spec) {
     .filter(Boolean);
   for (const h of hosts) {
     if (!HOOK_HOSTS.includes(h)) {
-      throw new Error(
-        `invalid hook host "${h}" (allowed: auto, none, claude, codex, grok)`,
-      );
+      throw new Error(`invalid hook host "${h}" (allowed: auto, none, claude, codex, grok)`);
     }
   }
   return { hosts, skip: false };
