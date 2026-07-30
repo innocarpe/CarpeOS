@@ -136,6 +136,8 @@ describe("install-core", () => {
     assert.equal(activity.store, "missing");
     assert.ok(activity.warnings.length > 0);
     assert.equal(activity.observation_count, 0);
+    assert.equal(activity.adjudication.available, false);
+    assert.equal(activity.adjudication.default_search, "promoted_active_only");
   });
 
   it("doctorLocalStoreActivity counts evidence and meaningful units", () => {
@@ -154,6 +156,18 @@ describe("install-core", () => {
           protected_value_id TEXT,
           event_json TEXT,
           recorded_at TEXT
+        );
+        CREATE TABLE knowledge_dispositions (
+          source_event_id TEXT NOT NULL,
+          artifact_id TEXT NOT NULL,
+          trust_zone_id TEXT NOT NULL,
+          disposition TEXT NOT NULL,
+          reason_codes_json TEXT NOT NULL,
+          scores_json TEXT NOT NULL,
+          policy_version TEXT NOT NULL,
+          statement TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (source_event_id, trust_zone_id, policy_version)
         );
       `);
       const nowIso = new Date().toISOString();
@@ -185,6 +199,51 @@ describe("install-core", () => {
         "{}",
         nowIso,
       );
+      db.prepare(
+        `INSERT INTO knowledge_dispositions
+         (source_event_id, artifact_id, trust_zone_id, disposition, reason_codes_json, scores_json, policy_version, statement, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_evi_doctor01",
+        "art_doctor01",
+        "tz_local_default",
+        "promote",
+        "[]",
+        "{}",
+        "adj_v1",
+        "synthetic doctor promote statement",
+        nowIso,
+      );
+      db.prepare(
+        `INSERT INTO knowledge_dispositions
+         (source_event_id, artifact_id, trust_zone_id, disposition, reason_codes_json, scores_json, policy_version, statement, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_evi_doctor02",
+        "art_doctor02",
+        "tz_local_default",
+        "hold",
+        "[]",
+        "{}",
+        "adj_v1",
+        "synthetic doctor hold statement",
+        nowIso,
+      );
+      db.prepare(
+        `INSERT INTO knowledge_dispositions
+         (source_event_id, artifact_id, trust_zone_id, disposition, reason_codes_json, scores_json, policy_version, statement, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_evi_doctor03",
+        "art_doctor03",
+        "tz_local_default",
+        "reject",
+        "[]",
+        "{}",
+        "adj_test_old",
+        "synthetic older-policy reject ignored by current counts",
+        nowIso,
+      );
       db.close();
 
       const activity = doctorLocalStoreActivity({ storePath: dbPath });
@@ -193,6 +252,14 @@ describe("install-core", () => {
       assert.equal(activity.observation_count, 1);
       assert.ok(activity.recent_evidence_count >= 1);
       assert.equal(activity.warnings.length, 0);
+      assert.equal(activity.adjudication.available, true);
+      assert.equal(activity.adjudication.policy_version, "adj_v1");
+      assert.equal(activity.adjudication.promote, 1);
+      assert.equal(activity.adjudication.hold, 1);
+      assert.equal(activity.adjudication.reject, 0);
+      assert.equal(activity.adjudication.default_search, "promoted_active_only");
+      assert.ok(activity.checks.some((c) => c.includes("adjudication: ok")));
+      assert.ok(activity.checks.some((c) => c.includes("default_search: promoted_active_only")));
 
       const config = buildConfig({
         repoRoot: join(dir, "repo"),
@@ -211,6 +278,10 @@ describe("install-core", () => {
       });
       assert.ok(doctor.checks.some((c) => c.includes("meaningful_units: ok")));
       assert.ok(doctor.checks.some((c) => c.includes("recent_capture: ok")));
+      assert.ok(doctor.checks.some((c) => c.includes("adjudication: ok")));
+      assert.ok(doctor.checks.some((c) => c.includes("default_search: promoted_active_only")));
+      assert.equal(doctor.adjudication.policy_version, "adj_v1");
+      assert.equal(doctor.default_search, "promoted_active_only");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

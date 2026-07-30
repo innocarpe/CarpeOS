@@ -81,6 +81,16 @@ function runDoctor(home, asJson, opts = {}) {
     if (doctor.store_warnings?.length) {
       process.stdout.write(`store warnings: ${doctor.store_warnings.join("; ")}\n`);
     }
+    const adjudication = doctor.adjudication ?? doctor.store?.adjudication;
+    if (adjudication) {
+      const policy = adjudication.policy_version ?? "n/a";
+      process.stdout.write(
+        `adjudication: policy=${policy} promote=${adjudication.promote ?? 0} hold=${adjudication.hold ?? 0} reject=${adjudication.reject ?? 0}\n`,
+      );
+      process.stdout.write(
+        `default search: ${adjudication.default_search ?? doctor.default_search ?? "promoted_active_only"}\n`,
+      );
+    }
     printJson({ ok: doctor.ok, doctor });
   }
   return doctor.ok ? 0 : 1;

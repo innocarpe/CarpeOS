@@ -665,6 +665,8 @@ export function doctorInstall(input) {
     hooks: hookDoctor.probes,
     store_warnings: storeWarnings,
     store: storeActivity,
+    adjudication: storeActivity.adjudication,
+    default_search: "promoted_active_only",
   };
 }
 
@@ -703,6 +705,15 @@ export function doctorLocalStoreActivity(input) {
       recent_evidence_count: 0,
       last_evidence_at: null,
       last_observation_at: null,
+      adjudication: {
+        available: false,
+        policy_version: null,
+        promote: 0,
+        hold: 0,
+        reject: 0,
+        total: 0,
+        default_search: "promoted_active_only",
+      },
       checks,
       warnings,
     };
@@ -762,6 +773,82 @@ export function doctorLocalStoreActivity(input) {
         `meaningful_units: ${observation + claim > 0 ? `ok (Observation=${observation}, Claim=${claim})` : "none"}`,
       );
 
+      /** @type {{ available: boolean, policy_version: string | null, promote: number, hold: number, reject: number, total: number, default_search: string }} */
+      let adjudication = {
+        available: false,
+        policy_version: null,
+        promote: 0,
+        hold: 0,
+        reject: 0,
+        total: 0,
+        default_search: "promoted_active_only",
+      };
+      try {
+        const tableRow = db
+          .prepare(
+            "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'knowledge_dispositions'",
+          )
+          .get();
+        if (tableRow) {
+          // Current product adjudicator identity (keep in sync with ADJUDICATION_POLICY_VERSION).
+          const policyVersion = "adj_v1";
+          const dispRows = db
+            .prepare(
+              `
+                SELECT disposition AS disposition, COUNT(*) AS n
+                FROM knowledge_dispositions
+                WHERE policy_version = ?
+                GROUP BY disposition
+              `,
+            )
+            .all(policyVersion);
+          let promote = 0;
+          let hold = 0;
+          let reject = 0;
+          for (const row of dispRows) {
+            const disposition = String(
+              /** @type {{ disposition?: string }} */ (row).disposition ?? "",
+            );
+            const n = Number(/** @type {{ n?: number }} */ (row).n ?? 0);
+            if (disposition === "promote") promote = n;
+            else if (disposition === "hold") hold = n;
+            else if (disposition === "reject") reject = n;
+          }
+          const total = promote + hold + reject;
+          adjudication = {
+            available: true,
+            policy_version: policyVersion,
+            promote,
+            hold,
+            reject,
+            total,
+            default_search: "promoted_active_only",
+          };
+          checks.push(
+            total > 0
+              ? `adjudication: ok (policy=${policyVersion}, promote=${promote}, hold=${hold}, reject=${reject})`
+              : `adjudication: none (policy=${policyVersion})`,
+            "default_search: promoted_active_only",
+          );
+          if (total === 0 && evidence > 0) {
+            warnings.push(
+              `no knowledge dispositions under ${policyVersion} — run: carpeos adjudicate --event-id … or capture eligible hooks with extract`,
+            );
+          }
+        } else {
+          checks.push(
+            "adjudication: unavailable (knowledge_dispositions missing — reopen store to migrate)",
+          );
+          warnings.push(
+            "knowledge_dispositions table missing — reopen local store / upgrade CarpeOS to enable adjudication doctor signals",
+          );
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        checks.push(`adjudication: unreadable (${message.slice(0, 80)})`);
+        warnings.push(`adjudication health unreadable: ${message.slice(0, 120)}`);
+      }
+
       if (evidence === 0) {
         warnings.push(
           "no EvidenceArtifact yet — install hooks (`carpeos setup hooks install --apply`) and run a host session or capture-hook",
@@ -785,6 +872,7 @@ export function doctorLocalStoreActivity(input) {
         recent_evidence_count: recentEvidence,
         last_evidence_at: lastEvidence,
         last_observation_at: lastObservation,
+        adjudication,
         checks,
         warnings,
       };
@@ -807,6 +895,15 @@ export function doctorLocalStoreActivity(input) {
       recent_evidence_count: 0,
       last_evidence_at: null,
       last_observation_at: null,
+      adjudication: {
+        available: false,
+        policy_version: null,
+        promote: 0,
+        hold: 0,
+        reject: 0,
+        total: 0,
+        default_search: "promoted_active_only",
+      },
       checks,
       warnings,
     };

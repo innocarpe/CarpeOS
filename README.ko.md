@@ -248,7 +248,7 @@ node scripts/install-local.mjs doctor
 carpeos setup run --apply
 # 2) 캡처 훅 (사용자 훅을 지우지 않음)
 carpeos setup hooks install --apply
-# 3) doctor (wrapper, MCP, 훅 상태, 최근 capture, Observation/Claim 유무)
+# 3) doctor (wrapper, MCP, 훅, 스토어, 판정 health, 기본 검색=promoted only)
 carpeos setup doctor
 # 4) 호스트 세션(또는 capture-hook) 후 rebuild + 의미 단위 검색
 carpeos retrieval rebuild --trust-zone tz_local_default
@@ -262,9 +262,11 @@ carpeos memory context-pack \
   --visible-trust-zone tz_local_default
 ```
 
-`carpeos setup doctor` 는 훅 설치 상태, 최근 `EvidenceArtifact`,
-**Observation/Claim** 존재 여부를 보고합니다 (빈 스토어는 warning, fail 아님).
-자동 게이트: `pnpm smoke:product`.
+`carpeos setup doctor` 는 훅 설치 상태, 최근 `EvidenceArtifact`, Observation/Claim
+개수, **판정 policy_version + promote/hold/reject 카운트**, 그리고 **기본 검색이
+promoted/active only** 임을 보고합니다 (빈 스토어는 warning, fail 아님).
+1.0은 파이프라인 인프라이며, 2.0 판정은 병합된 MVP 이후에도 진행 중입니다.
+자동 게이트: `pnpm smoke:product` · `pnpm smoke:knowledge`.
 
 수동/고급 템플릿은 [`adapters/`](adapters/) 에 있습니다. 자세한 문서:
 [one-stop install](docs/guides/one-stop-install.md) ·
