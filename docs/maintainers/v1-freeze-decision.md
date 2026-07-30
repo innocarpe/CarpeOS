@@ -1,32 +1,24 @@
 # v1.0.0 Freeze Decision
 
-Status: **recorded — Defer** (updated 2026-07-30 UTC, product ultragoal G009).  
-Cutting `1.0.0` is **not** approved yet.
+Status: **recorded — Approve** (2026-07-30 UTC).  
+Maintainer chat: **Approve** (G010). Proceed to cut `v1.0.0` / npm `1.0.0`.
 
 **Product definition of done (SSOT):** [product-1.0.0.md](product-1.0.0.md).  
 **Contract packaging checklist:** [v1-readiness.md](v1-readiness.md).
-
-Do **not** treat `node scripts/release.mjs major` / `1.0.0` as automatic.
-**Approve** by updating the Decision row below (or an explicit maintainer chat
-message that says **Approve**) and then run G010 release steps. **Do not tag in
-this document’s PR.**
 
 ---
 
 ## One-read Approve checklist
 
-Maintainer: if every row is **yes** (or consciously waived), flip Decision to
-**Approve** and proceed to G010.
-
 | # | Question | Status |
 | --- | --- | --- |
-| 0 | Product loop P1–P9 green on [product-1.0.0.md](product-1.0.0.md)? | **yes** (G001–G009 landed; P9 = this gate, Decision still Defer) |
+| 0 | Product loop P1–P9 green on [product-1.0.0.md](product-1.0.0.md)? | **yes** |
 | 1 | Contract gates G1–G8 done on [v1-readiness.md](v1-readiness.md)? | **yes** |
 | 2 | Planned-breaks table empty? | **yes** — [compatibility-and-deprecations.md](compatibility-and-deprecations.md) |
-| 3 | G1 recheck recorded on 0.2.1+? | **yes** — 0.2.1 + 0.2.2 sections below |
+| 3 | G1 recheck recorded on 0.2.1+? | **yes** — 0.2.1 + 0.2.2 |
 | 4 | 0.2.x soak (S1–S7) acceptable? | **yes** — published **0.2.2** |
-| 5 | Draft `## [1.0.0]` Notes ready (do not publish until cut)? | **yes** — draft block below |
-| 6 | Maintainer says **Approve**? | **no** — **Defer** until explicit ack |
+| 5 | Draft `## [1.0.0]` Notes ready? | **yes** — released in CHANGELOG at cut |
+| 6 | Maintainer says **Approve**? | **yes** — chat Approve 2026-07-30 |
 
 **CI product gates (monorepo):** `pnpm check` · `pnpm smoke:mcp` · `pnpm smoke:product`.
 
@@ -36,24 +28,19 @@ Maintainer: if every row is **yes** (or consciously waived), flip Decision to
 
 | Field | Value |
 | --- | --- |
-| Decision | **Defer** `1.0.0` (not Approve) |
-| Date (UTC) | 2026-07-30 (product gate re-sync G009) |
-| Decider(s) | Maintainer (Innocarpe) — **Approve requires explicit re-ack** |
-| Package version to ship | n/a (stay on `0.y.z`; current public **`0.2.2`**; monorepo ahead with product loop) |
-| Git tag | n/a |
-| Based on | `origin/main` after product ultragoal G001–G008 merges |
+| Decision | **Approve** `1.0.0` product + contract freeze |
+| Date (UTC) | 2026-07-30 |
+| Decider(s) | Maintainer (Innocarpe) — explicit chat **Approve** |
+| Package version to ship | **`1.0.0`** |
+| Git tag | **`v1.0.0`** |
+| Based on | `origin/main` at G010 cut (product ultragoal G001–G009) |
 
-### Why still Defer
+### Why Approve now
 
-Product loop automation (P1–P8) and draft Notes (P9 content) are ready, but:
-
-1. **Criterion 6** — no explicit human **Approve** yet. G9 Approve is deliberate
-   product judgment, not an automatic checklist consequence.
-2. **Published npm is still `0.2.2`** — product-loop code (hooks install, extract,
-   meaningful-first search, smoke:product) is on `main` and must ship in a
-   public `0.y` or `1.0.0` cut the maintainer chooses at Approve time.
-3. **Hosted Cloudflare / multi-Mac / GraphRAG** remain non-goals and must not
-   block or redefine 1.0.
+1. Product loop P1–P9 green (hooks install, capture, extract, meaningful retrieval,
+   product E2E, doctor/README, scenarios, gate doc).
+2. Contract G1–G8 green; soak on 0.2.2 recorded.
+3. Explicit maintainer **Approve** in chat (criterion 6).
 
 ---
 
@@ -69,7 +56,7 @@ Product loop automation (P1–P8) and draft Notes (P9 content) are ready, but:
 | P6 product E2E CI | done | `pnpm smoke:product` (PR #86) |
 | P7 doctor + README | done | store probe + product path (PR #88) |
 | P8 scenarios S1–S5 | done | checklist notes (PR #89) |
-| P9 this gate | done (Defer) | this document |
+| P9 this gate | done | Approve recorded; G010 release |
 
 ---
 
@@ -131,17 +118,17 @@ at cut time.
 
 ---
 
-## How to Approve (G010 handoff)
+## Release (G010)
 
-When the maintainer is ready:
+**Approved.** Cut path:
 
-1. Edit this file: Decision → **Approve**, date, and optionally the ship version.
-2. Or send an explicit chat message: **Approve** (after reading this page).
-3. Run G010 only then: paste Notes into CHANGELOG, `node scripts/release.mjs 1.0.0`,
-   push tag `v1.0.0`, verify npm `@innocarpe/carpeos@1.0.0`.
-
-Until then: **stay on `0.y.z`**. Optional: ship a `0.3.0` (or later) that
-includes the product-loop commits without freezing SemVer 1.0.
+```sh
+node scripts/release.mjs 1.0.0
+git push origin main   # or merge release PR first
+git push origin v1.0.0
+# Release workflow: pnpm check → npm publish → GitHub Release
+npm view @innocarpe/carpeos version   # expect 1.0.0
+```
 
 ---
 

@@ -10,35 +10,42 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
-### Notes (draft for 1.0.0 — do not date/publish until Approve)
+### Added
 
-Ready copy lives in [v1-freeze-decision.md](docs/maintainers/v1-freeze-decision.md)
-(criterion 5). Product loop + first stable contract; Decision still **Defer**.
+- (none yet — fold entries here before the next release)
+
+## [1.0.0] - 2026-07-30
+
+### Notes
+
+- First stable **product** release for `@innocarpe/carpeos`: setup installs
+  capture hooks, session evidence lands in local SQLite (encrypted raw +
+  EvidenceArtifact), Observations are derived from eligible lifecycle events,
+  and memory search / context-pack return meaningful units first-class on the
+  local path (see `docs/maintainers/product-1.0.0.md`).
+- First stable **public contract**: CLI commands/flags, setup/env/`~/.carpeos`
+  layout, MCP tool names + JSON shapes (`docs/contracts/mcp-tools-v1.md`), local
+  store migration policy, and trust-zone / visibility semantics (including
+  documented default resolution order: flag → env → config → device default).
+- Breaking changes on those surfaces after this release require a **MAJOR** bump
+  (see `docs/maintainers/versioning-and-releases.md`).
+- Hosted Cloudflare edge, GraphRAG, multi-Mac polish, and production embeddings
+  remain **non-goals** of 1.0 and may ship later as additive `1.x` MINOR work.
 
 ### Added
 
-- Docs: product gate one-read checklist; Decision remains Defer until Approve (G009)
-- Docs: product 1.0 scenario checklist S1–S5 dogfood notes (public-safe,
-  automation-backed)
-- Setup doctor: reports recent capture + Observation/Claim counts (warnings by
-  default; `--require-capture` / `--require-units` for hard fail); README EN/KO
-  product path install → hooks → doctor → search
-- CI/scripts: `pnpm smoke:product` (`scripts/smoke-product-loop.mjs`) product
-  E2E gate — capture → extract → rebuild → search/context-pack (wired in CI)
-- Retrieval: rank **Observation/Claim/decision** above `evidence_excerpt`
-  (kind priority + meaningful-first diversity); CLI search lifecycle matches MCP
-  (`active`+`draft`); context-pack slots favor observations
-- Capture/local-store: **Evidence → Observation** extraction pipeline (metadata
-  heuristic, policy-gated, idempotent); CLI `capture-hook` extracts by default
-  (`--no-extract` opt-out) and `carpeos extract --event-id` for backfill
-- Capture: meaningful-unit **extraction policy** defaults (PostToolUse off;
-  Observation-first MVP; secret-like text guard) in
-  `@carpeos/capture` + ADR 0011
-- Setup: `carpeos setup hooks plan|install|uninstall|doctor` installs Claude /
-  Codex / Grok capture hooks via the product path (merge-safe, absolute
-  `~/.local/bin/carpeos` command, opt-in `--register-hooks` on `setup run`)
-- Doctor reports per-host capture-hook status (`installed` / `not_installed` /
-  `stale_path`); use `--require-hooks` to fail when missing
+- Product setup: `carpeos setup hooks plan|install|uninstall|doctor` (merge-safe
+  capture hooks; absolute `~/.local/bin/carpeos` commands)
+- Setup doctor: hook status, recent capture, Observation/Claim counts
+  (`--require-hooks` / `--require-capture` / `--require-units`)
+- README EN/KO product path: install → hooks → doctor → rebuild/search/context-pack
+- Meaningful-unit extraction policy (ADR 0011; PostToolUse off by default)
+- Evidence → Observation extraction MVP; CLI `capture-hook` extract default +
+  `carpeos extract --event-id` (idempotent)
+- Retrieval ranks Observation/Claim/decision above `evidence_excerpt`; CLI
+  lifecycle filters align with MCP (`active`+`draft`)
+- Product E2E gate: `pnpm smoke:product` (CI)
+- Product 1.0 DoD + scenario checklist + freeze Approve gate docs
 
 ## [0.2.2] - 2026-07-30
 
@@ -169,7 +176,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v1.0.0...HEAD
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
 [0.1.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.2
@@ -177,3 +184,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [0.2.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.0
 [0.2.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.1
 [0.2.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.2
+[1.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v1.0.0
