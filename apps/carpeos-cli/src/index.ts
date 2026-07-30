@@ -236,6 +236,7 @@ async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promi
       "max-characters": { type: "string", default: "8000" },
       "protected-value-policy": { type: "string", default: "metadata_only" },
       "visible-trust-zone": { type: "string", multiple: true },
+      "include-held": { type: "boolean", default: false },
     },
   });
   const trustZone = requireStoreTrustZone(parsed.values["trust-zone"]);
@@ -257,6 +258,7 @@ async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promi
               text: queryText,
               visibleTrustZones,
               limit: parseInteger(parsed.values.limit, "--limit", 1),
+              includeHeld: parsed.values["include-held"] === true,
             }),
           }),
         );
@@ -283,6 +285,7 @@ async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promi
               text: chunk.text,
               visibleTrustZones,
               limit: 100,
+              includeHeld: parsed.values["include-held"] === true,
             }),
           });
         });
@@ -322,6 +325,7 @@ async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promi
             protected_value_policy: protectedValuePolicy,
           },
           task,
+          include_held: parsed.values["include-held"] === true,
           context_budget: {
             max_items: maxItems,
             max_characters: maxCharacters,
@@ -1399,6 +1403,8 @@ OPTIONS
   --max-characters <n>           context-pack (default 8000)
   --protected-value-policy <p>   metadata_only | allow_decrypt | deny
                                  (default metadata_only)
+  --include-held               Include draft/held knowledge units (default: off;
+                                 search remains promoted/active only)
 
 EXAMPLES
   carpeos memory search \\
@@ -1632,6 +1638,7 @@ function makeRetrievalQuery(input: {
   text: string;
   visibleTrustZones: readonly string[];
   limit: number;
+  includeHeld?: boolean;
 }): RetrievalQuery {
   return {
     schema_version: "v1",
@@ -1641,7 +1648,7 @@ function makeRetrievalQuery(input: {
     filters: {
       visible_trust_zone_ids: [...input.visibleTrustZones],
       // Product 2.0: default to promoted (active) meaning only; held draft is opt-in.
-      lifecycle_status: ["active"],
+      lifecycle_status: input.includeHeld === true ? ["active", "draft"] : ["active"],
       // Capture writes EvidenceArtifact as epistemic_authority "imported".
       epistemic_authority: [
         "unverified",

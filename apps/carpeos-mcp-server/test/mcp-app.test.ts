@@ -97,6 +97,86 @@ describe("CarpeOS MCP in-process application", () => {
     }
   });
 
+  it("keeps draft Observations out of default memory_search and includes them when include_held is true", async () => {
+    const { app, store } = makeHarness();
+    const evidence = store.captureHook(
+      {
+        provider: "codex",
+        hook_event_name: "SessionEnd",
+        captured_at: "2026-01-01T00:00:00Z",
+        workspace_root: "/synthetic/workspace",
+        session_id: "session_mcp_held_search_seed",
+        payload: { message: "seed evidence for held search opt-in" },
+      },
+      { extract: false },
+    );
+    const held = store.proposeObservationDraft({
+      statement: "heldtoken synthetic held draft observation for opt-in search.",
+      evidenceArtifactRefs: [evidence.event.payload.artifact_id],
+      sourceEventId: evidence.event.event_id,
+      lifecycleStatus: "draft",
+    });
+    store.proposeObservationDraft({
+      statement: "promotetoken synthetic promoted observation for baseline search.",
+      evidenceArtifactRefs: [evidence.event.payload.artifact_id],
+      sourceEventId: evidence.event.event_id,
+      lifecycleStatus: "active",
+      idempotencyKey: "idem_mcp_promote_held_search_0001",
+    });
+    if (held.status !== "extracted" && held.status !== "replay") {
+      throw new Error("expected held observation");
+    }
+    const heldEventId = held.event.event_id;
+
+    const defaultSearch = await app.dispatch("memory_search", {
+      schema_version: "v1",
+      visibility: visible(),
+      query: "heldtoken",
+      context_budget: { max_items: 10, max_characters: 4000 },
+    });
+    expect(defaultSearch.isError).toBe(false);
+    const defaultRecords = defaultSearch.structuredContent.records as Array<{
+      record_id?: string;
+      lifecycle_status?: string;
+    }>;
+    expect(defaultRecords.some((record) => record.record_id === heldEventId)).toBe(false);
+    expect(defaultRecords.some((record) => record.lifecycle_status === "draft")).toBe(false);
+
+    const heldSearch = await app.dispatch("memory_search", {
+      schema_version: "v1",
+      visibility: visible(),
+      query: "heldtoken",
+      include_held: true,
+      context_budget: { max_items: 10, max_characters: 4000 },
+    });
+    expect(heldSearch.isError).toBe(false);
+    const heldRecords = heldSearch.structuredContent.records as Array<{
+      record_id?: string;
+      lifecycle_status?: string;
+    }>;
+    expect(heldRecords.some((record) => record.record_id === heldEventId)).toBe(true);
+    expect(heldRecords.some((record) => record.lifecycle_status === "draft")).toBe(true);
+
+    const defaultPack = await app.dispatch("memory_context_pack", {
+      schema_version: "v1",
+      visibility: visible(),
+      task: "heldtoken",
+      context_budget: { max_items: 50, max_characters: 20_000 },
+    });
+    const defaultObs = defaultPack.structuredContent.observations as Array<{ record_id?: string }>;
+    expect(defaultObs.some((record) => record.record_id === heldEventId)).toBe(false);
+
+    const heldPack = await app.dispatch("memory_context_pack", {
+      schema_version: "v1",
+      visibility: visible(),
+      task: "heldtoken",
+      include_held: true,
+      context_budget: { max_items: 50, max_characters: 20_000 },
+    });
+    const heldObs = heldPack.structuredContent.observations as Array<{ record_id?: string }>;
+    expect(heldObs.some((record) => record.record_id === heldEventId)).toBe(true);
+  });
+
   it("classifies accepted, draft, rejected, conflict, superseded, erased, and redacted context separately", async () => {
     const { app } = makeHarnessWithContext();
     const result = await app.dispatch("memory_context_pack", {

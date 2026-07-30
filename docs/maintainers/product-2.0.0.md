@@ -145,7 +145,7 @@ moves to **done** only with linked implementation and verification evidence.
 | K1 | Candidate model + fixtures (synthetic sessions only) | **done** (candidate v1: labeled spans + evidence refs + safe statement fragments) |
 | K2 | Rule-based adjudicator MVP (value/durability/risk/disposition) | **done** (`adj_v1`) |
 | K3 | Wire promote → Observation/Claim draft; reject stays off meaning index | **done** (promote→active, hold→draft, reject→disp only) |
-| K4 | Retrieval/pack **default = adjudicated promoted only**; evidence secondary; held optional | **done** (CLI/MCP search default `active` only) |
+| K4 | Retrieval/pack **default = adjudicated promoted only**; evidence secondary; held optional | **done** (default `active` only; CLI `--include-held` / MCP `include_held` opt-in) |
 | K5 | Metrics + golden fixtures (precision-oriented; false-promote tests) | **done** (12-case must-promote / hold / reject golden suite in capture tests) |
 | K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **done** (`setup doctor` + `adjudicate --stats`; default search = promoted only) |
 | K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **done** |
@@ -167,7 +167,7 @@ not infer that a **done** plumbing gate closes them.
 | Knowledge form | Promote and hold currently create Observations only. | Evaluate Claim drafting only after candidate precision is stable; Claims remain draft and never receive automatic AcceptanceDecision. | Deferred candidate for K3 |
 | Hold review | `adjudicate list-held`, `promote-held`, and `reject-held` provide a terminal append-only review path. Promote appends active meaning; reject leaves draft off default search. | Keep review idempotency and no-auto-AcceptanceDecision behavior covered as policy versions evolve. | Operator readiness **done (v1)** |
 | Doctor | `setup doctor` reports policy version, promote/hold/reject counts, and promoted-only default search; `adjudicate --stats` remains available. | Keep EN/KO public wording honest as later gates land. | K6 **done** |
-| Held retrieval | Retrieval correctly defaults to `active`, but operator-facing CLI/MCP held opt-in is not documented as a supported workflow. | Add and test an explicit draft/held filter while preserving the default. | K4 operator surface |
+| Held retrieval | CLI `--include-held` and MCP `include_held` include draft/held units only when requested; default remains active/promoted only. | Keep docs/tests current as retrieval surfaces expand. | K4 operator surface **done** |
 | Policy replay | Dispositions are keyed by `(source_event_id, trust_zone_id, policy_version)`; same policy replays, new policy appends. Active search remains lifecycle `active` only. | Optional operator migration/cleanup of superseded active Observations from older policies. | Audit durability **done (v1)** |
 | Dogfood depth | `smoke:knowledge` covers decision-like SessionEnd versus PostToolUse noise. | Add noisy multi-hook sessions, UserPromptSubmit floods, secret-like candidates, and thanks/ok chatter. | K8 |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
