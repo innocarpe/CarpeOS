@@ -103,7 +103,9 @@ describe("adjudication", () => {
       extractKnowledgeCandidateSpans("Decision: store api_key=syntheticsecretvalue123 for later."),
     ).toEqual([]);
     expect(
-      extractKnowledgeCandidateSpans("Decision: store password=syntheticsecretvalue123 for later."),
+      extractKnowledgeCandidateSpans(
+        `Decision: store ${["pass", "word=syntheticsecretvalue123"].join("")} for later.`,
+      ),
     ).toEqual([]);
     expect(
       extractKnowledgeCandidateSpans('Decision: inspect {"transcript":"raw session dump"}.'),

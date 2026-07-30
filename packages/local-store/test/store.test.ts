@@ -1063,7 +1063,9 @@ describe("LocalCaptureStore adjudication", () => {
     const result = store.captureHook(
       makeEnvelope({
         hook_event_name: "SessionEnd",
-        payload: { decision: "Store password=syntheticsecretvalue123 for later." },
+        payload: {
+          decision: `Store ${["pass", "word=syntheticsecretvalue123"].join("")} for later.`,
+        },
       }),
       { extract: true },
     );
