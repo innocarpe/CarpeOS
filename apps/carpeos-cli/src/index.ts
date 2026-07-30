@@ -1451,7 +1451,8 @@ function makeRetrievalQuery(input: {
     query_text: input.text,
     filters: {
       visible_trust_zone_ids: [...input.visibleTrustZones],
-      lifecycle_status: ["active"],
+      // Align with MCP memory_search (active + draft claims).
+      lifecycle_status: ["active", "draft"],
       // Align with MCP memory_search: capture writes EvidenceArtifact as
       // epistemic_authority "imported"; excluding it made day-to-day search empty.
       epistemic_authority: [

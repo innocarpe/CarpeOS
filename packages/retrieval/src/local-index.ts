@@ -231,8 +231,11 @@ export function searchLocalRetrievalIndex(
   },
 ): RetrievalResult {
   migrateLocalRetrievalIndex(db);
-  const ftsChunkIds = ftsCandidateChunkIds(db, input.query, input.query.limit);
-  const structuredChunkIds = structuredCandidateChunkIds(db, input.query, input.query.limit);
+  // Over-fetch candidates so hybrid rank can prefer Observation/Claim over
+  // recent evidence_excerpt rows that share FTS tokens.
+  const candidateLimit = Math.max(input.query.limit * 4, 32);
+  const ftsChunkIds = ftsCandidateChunkIds(db, input.query, candidateLimit);
+  const structuredChunkIds = structuredCandidateChunkIds(db, input.query, candidateLimit);
   const chunkIds = [...new Set([...ftsChunkIds, ...structuredChunkIds])].sort();
   const chunks = readChunks(db, chunkIds);
   const storedVectors = readVectors(db, chunkIds);
