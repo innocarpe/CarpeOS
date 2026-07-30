@@ -86,6 +86,13 @@ carpeos adjudicate --event-id "$EVENT_ID" --policy-version adj_v2
 carpeos adjudicate history --event-id "$EVENT_ID"
 ```
 
+## Claim form (G009)
+
+Adjudication MVP promotes/holds **Observations** only. Draft Claims remain an
+explicit operator/MCP path (`memory_propose_claim`) and are **not** auto-emitted
+by `adj_v1`. Enabling adjudicated Claim drafts requires a separate precision
+suite and still forbids automatic `AcceptanceDecision`.
+
 ## Related
 
 - [product-2.0.0.md](../maintainers/product-2.0.0.md)
