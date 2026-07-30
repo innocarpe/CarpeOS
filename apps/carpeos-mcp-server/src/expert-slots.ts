@@ -8,9 +8,10 @@ export const DEFAULT_EXPERT_SLOT_POLICY = {
   accepted_facts: 6,
   conflicts: 2,
   supersessions: 1,
-  procedure_summaries: 3,
-  observations: 2,
-  evidence_summaries: 2,
+  procedure_summaries: 2,
+  // Product 1.0: observations first-class; evidence metadata secondary.
+  observations: 4,
+  evidence_summaries: 1,
   /** Remaining sections may only use leftover budget after primary slots. */
   draft_claims: 0,
   rejected_claims: 0,

@@ -81,7 +81,7 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 | P2 | Session lifecycle capture writes encrypted raw + EvidenceArtifact into local store | **partial** | Capture-hook + dogfood already land evidence; install path still G002 |
 | P3 | Extraction policy documented + implemented (lifecycle defaults; PostToolUse off by default; privacy rules) | **done** | ADR 0011 + `packages/capture/src/meaningful-unit-policy.ts` (G003) |
 | P4 | Extraction pipeline MVP: Evidence → Observation and/or Claim (idempotent, trust-zone aware) | **done** | `extractFromEvidenceArtifact` + CLI (G004); Claim auto still policy-gated off |
-| P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **todo** | Ultragoal G005 |
+| P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **done** | Kind priority + diversity (G005); smoke asserts Observation |
 | P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **todo** | Ultragoal G006 |
 | P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **todo** | Ultragoal G007 |
 | P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **todo** | Ultragoal G008 |

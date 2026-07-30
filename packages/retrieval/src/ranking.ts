@@ -8,6 +8,26 @@ export type RankWeights = {
   recency: number;
 };
 
+/**
+ * Product 1.0: Observation (summary), Claim, Decision rank above evidence metadata.
+ * Values are 0–1 and fold into hybrid structured boost + sort tie-break.
+ */
+export const CHUNK_KIND_PRIORITY: Readonly<Record<string, number>> = {
+  claim: 1,
+  decision: 0.95,
+  summary: 0.9,
+  open_loop: 0.7,
+  evidence_excerpt: 0.2,
+};
+
+export function isMeaningfulChunkKind(kind: string): boolean {
+  return kind === "claim" || kind === "decision" || kind === "summary" || kind === "open_loop";
+}
+
+export function chunkKindPriority(kind: string): number {
+  return CHUNK_KIND_PRIORITY[kind] ?? 0.5;
+}
+
 export type RetrievalCandidate = {
   chunk: RetrievalChunk;
   structured_score: number;
@@ -39,17 +59,48 @@ export type DiversityOptions = {
   maxPerChunkKind?: number;
   /** Jaccard token similarity above which a later candidate is deferred. */
   nearDuplicateThreshold?: number;
+  /**
+   * Prefer claim/summary/decision over evidence_excerpt when filling the limit.
+   * Product default true (meaningful units first-class).
+   */
+  preferMeaningfulFirst?: boolean;
 };
 
 /**
  * Quantile-style diversity selection over a score-ranked list.
  * Preserves determinism: walks ranked order, admits when kind/diversity caps allow,
  * then fills remainder from deferred candidates.
+ * With preferMeaningfulFirst (default), meaningful kinds fill before evidence_excerpt.
  */
 export function selectWithDiversity(
   ranked: readonly RankedCandidate[],
   limit: number,
   options: DiversityOptions = {},
+): RankedCandidate[] {
+  if (limit <= 0 || ranked.length === 0) {
+    return [];
+  }
+  const preferMeaningfulFirst = options.preferMeaningfulFirst !== false;
+  if (!preferMeaningfulFirst) {
+    return selectWithDiversityCore(ranked, limit, options);
+  }
+  const meaningful = ranked.filter((candidate) =>
+    isMeaningfulChunkKind(candidate.chunk.chunk_kind),
+  );
+  const secondary = ranked.filter(
+    (candidate) => !isMeaningfulChunkKind(candidate.chunk.chunk_kind),
+  );
+  const primary = selectWithDiversityCore(meaningful, limit, options);
+  if (primary.length >= limit) {
+    return primary;
+  }
+  return [...primary, ...selectWithDiversityCore(secondary, limit - primary.length, options)];
+}
+
+function selectWithDiversityCore(
+  ranked: readonly RankedCandidate[],
+  limit: number,
+  options: DiversityOptions,
 ): RankedCandidate[] {
   if (limit <= 0 || ranked.length === 0) {
     return [];
@@ -124,7 +175,10 @@ export function scoreCandidate(
   candidate: RetrievalCandidate,
   weights: RankWeights,
 ): RetrievalScore {
-  const structured = candidate.structured_score * weights.structured;
+  // Fold kind priority into structured so schema score shape stays unchanged.
+  const kindBoost =
+    chunkKindPriority(candidate.chunk.chunk_kind) * Math.max(weights.structured, 0) * 0.4;
+  const structured = candidate.structured_score * weights.structured + kindBoost;
   const fts = candidate.fts_score * weights.fts;
   const semantic = candidate.semantic_score * weights.semantic;
   const recency = candidate.recency_score * weights.recency;
@@ -192,6 +246,7 @@ export function fakeVector(text: string): number[] {
 export function compareRankedCandidates(left: RankedCandidate, right: RankedCandidate): number {
   return (
     right.score.total - left.score.total ||
+    chunkKindPriority(right.chunk.chunk_kind) - chunkKindPriority(left.chunk.chunk_kind) ||
     right.score.semantic - left.score.semantic ||
     right.score.fts - left.score.fts ||
     right.chunk.created_at.localeCompare(left.chunk.created_at) ||

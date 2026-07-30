@@ -8,6 +8,7 @@ import {
   scoreStructured,
   cosineSimilarity,
   selectWithDiversity,
+  chunkKindPriority,
 } from "../src/ranking.js";
 
 const sourceRecords = [
@@ -74,6 +75,64 @@ describe("retrieval ranking", () => {
     expect(ranked.map((candidate) => candidate.chunk.chunk_id)).toEqual(
       [...ranked.map((candidate) => candidate.chunk.chunk_id)].sort(),
     );
+  });
+
+  it("ranks Observation (summary) above equal-score evidence_excerpt", () => {
+    const observation = buildRetrievalChunk({
+      chunkKind: "summary",
+      text: "Captured codex SessionEnd evidence (transcript, application/json) for subject_alpha.",
+      sourceRecords: [
+        {
+          ...sourceRecords[0]!,
+          event_type: "Observation",
+          source_record_id: "evt_obs_alpha",
+          epistemic_authority: "observed",
+        },
+      ],
+      derivation,
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+    const evidence = buildRetrievalChunk({
+      chunkKind: "evidence_excerpt",
+      text: "EvidenceArtifact kind=transcript media_type=application/json artifact_id=art_x subject_ref=subject_alpha event_id=evt_evi",
+      sourceRecords: [
+        {
+          ...sourceRecords[0]!,
+          event_type: "EvidenceArtifact",
+          source_record_id: "evt_evi_alpha",
+          epistemic_authority: "imported",
+        },
+      ],
+      derivation,
+      chunkIndex: 1,
+      createdAt: "2026-01-01T00:00:01Z",
+    });
+    expect(chunkKindPriority("summary")).toBeGreaterThan(chunkKindPriority("evidence_excerpt"));
+    const ranked = rankHybrid(
+      [
+        {
+          chunk: evidence,
+          structured_score: 0.2,
+          fts_score: 0.8,
+          semantic_score: 0.5,
+          recency_score: 1,
+        },
+        {
+          chunk: observation,
+          structured_score: 0.2,
+          fts_score: 0.8,
+          semantic_score: 0.5,
+          recency_score: 0.5,
+        },
+      ],
+      { structured: 1, fts: 1, semantic: 1, recency: 0.1 },
+    );
+    expect(ranked[0]?.chunk.chunk_kind).toBe("summary");
+    expect(ranked[1]?.chunk.chunk_kind).toBe("evidence_excerpt");
+
+    const selected = selectWithDiversity(ranked, 1);
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.chunk.chunk_kind).toBe("summary");
   });
 
   it("selects with chunk_kind diversity instead of pure score monopoly", () => {

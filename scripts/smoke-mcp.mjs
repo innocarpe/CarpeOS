@@ -151,7 +151,10 @@ function runCliSmoke() {
           }),
         ],
         check: (body) =>
-          body.ok === true && body.command === "capture-hook" && body.status === "captured",
+          body.ok === true &&
+          body.command === "capture-hook" &&
+          body.status === "captured" &&
+          body.extraction?.status === "extracted",
       },
       {
         name: "retrieval rebuild",
@@ -159,7 +162,7 @@ function runCliSmoke() {
         check: (body) => body.ok === true && body.command === "retrieval rebuild",
       },
       {
-        name: "memory search",
+        name: "memory search (meaningful unit)",
         argv: [
           "memory",
           "search",
@@ -167,10 +170,31 @@ function runCliSmoke() {
           "--visible-trust-zone",
           trustZone,
           "--query",
-          "synthetic",
+          "Captured SessionEnd",
         ],
-        check: (body) =>
-          body.ok === true && body.command === "memory search" && body.result !== undefined,
+        check: (body) => {
+          if (body.ok !== true || body.command !== "memory search" || body.result === undefined) {
+            return false;
+          }
+          const results = body.result?.results;
+          if (!Array.isArray(results) || results.length === 0) {
+            return false;
+          }
+          // Top hit should be Observation (summary), not only evidence_excerpt.
+          const top = results[0];
+          const kind = top?.chunk?.chunk_kind ?? top?.chunk_kind;
+          const text = top?.chunk?.text ?? "";
+          if (kind === "summary" && /SessionEnd|Captured/i.test(text)) {
+            return true;
+          }
+          // Fallback: any active result carries Observation lineage.
+          return results.some((item) => {
+            const eventTypes = (item?.lineage?.source_records ?? item?.source_records ?? [])
+              .map((r) => r?.event_type)
+              .filter(Boolean);
+            return eventTypes.includes("Observation") || item?.chunk?.chunk_kind === "summary";
+          });
+        },
       },
       {
         name: "memory context-pack",
@@ -197,11 +221,16 @@ function runCliSmoke() {
             "tool",
             "accepted_facts",
             "evidence_summaries",
+            "observations",
             "budget",
           ]) {
             if (!(key in pack)) return false;
           }
-          return pack.tool === "memory_context_pack" && pack.schema_version === "v1";
+          if (pack.tool !== "memory_context_pack" || pack.schema_version !== "v1") {
+            return false;
+          }
+          // Product: extracted Observation appears in observations section.
+          return Array.isArray(pack.observations) && pack.observations.length >= 1;
         },
       },
     ];

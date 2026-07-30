@@ -12,6 +12,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- Retrieval: rank **Observation/Claim/decision** above `evidence_excerpt`
+  (kind priority + meaningful-first diversity); CLI search lifecycle matches MCP
+  (`active`+`draft`); context-pack slots favor observations
 - Capture/local-store: **Evidence → Observation** extraction pipeline (metadata
   heuristic, policy-gated, idempotent); CLI `capture-hook` extracts by default
   (`--no-extract` opt-out) and `carpeos extract --event-id` for backfill
