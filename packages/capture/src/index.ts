@@ -17,6 +17,26 @@ export {
   type RunLedgerStatus,
 } from "./run-ledger.js";
 
+export {
+  DEFAULT_EXTRACTION_EXCLUDED_HOOK_EVENTS,
+  DEFAULT_EXTRACTION_HOOK_EVENTS,
+  DEFAULT_MEANINGFUL_UNIT_POLICY,
+  KNOWN_CAPTURE_HOOK_EVENTS,
+  MEANINGFUL_UNIT_POLICY_VERSION,
+  OBSERVATION_VS_CLAIM_MVP,
+  OPTIONAL_EXTRACTION_NOTIFY_EVENTS,
+  assertSafeMeaningfulUnitText,
+  containsSecretLikeMaterial,
+  defaultMeaningfulUnitPolicySnapshot,
+  isHookEligibleForExtraction,
+  recommendExtractionTarget,
+  resolveMeaningfulUnitPolicy,
+  type CaptureHookEventName,
+  type ExtractionTargetKind,
+  type MeaningfulUnitPolicyConfig,
+  type PostToolUseExtractionMode,
+} from "./meaningful-unit-policy.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 

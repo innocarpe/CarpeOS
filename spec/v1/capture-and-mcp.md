@@ -188,6 +188,26 @@ writing a partial claim.
 | Draft claim support is not visible | Reject before writing. |
 | MCP startup config missing | Fail startup without protocol output on stdout. |
 
+## Meaningful-unit extraction policy (product 1.0)
+
+Normative product defaults for **which lifecycle hooks feed extraction** (not
+which hooks may be captured as evidence):
+
+| Hook event | Extraction default |
+| --- | --- |
+| `Stop`, `SessionEnd`, `PreCompact`, `UserPromptSubmit` | ON → prefer **Observation** |
+| `PostToolUse` | **OFF** (opt-in) |
+| `SessionStart` | OFF |
+
+- Observation is the MVP auto target; draft Claims only when explicitly enabled
+  and confidence gates pass.
+- Extractors MUST NOT emit `AcceptanceDecision`.
+- Statement / chunk text MUST pass secret-like material checks.
+
+Machine-readable defaults:
+`packages/capture/src/meaningful-unit-policy.ts`  
+ADR: [0011-meaningful-unit-extraction-policy](../../docs/adr/0011-meaningful-unit-extraction-policy.md).
+
 ## Synthetic Example
 
 A generic coding hook submits a synthetic message artifact. The adapter stores

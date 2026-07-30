@@ -12,6 +12,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- Capture: meaningful-unit **extraction policy** defaults (PostToolUse off;
+  Observation-first MVP; secret-like text guard) in
+  `@carpeos/capture` + ADR 0011 — consumed by the future extractor pipeline
 - Setup: `carpeos setup hooks plan|install|uninstall|doctor` installs Claude /
   Codex / Grok capture hooks via the product path (merge-safe, absolute
   `~/.local/bin/carpeos` command, opt-in `--register-hooks` on `setup run`)
