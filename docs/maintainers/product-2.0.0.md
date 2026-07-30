@@ -1,6 +1,6 @@
 # Product 2.0.0 — Definition of Done (knowledge adjudication)
 
-Status: **design SSOT** for the next major product milestone.  
+Status: **design SSOT** for the next major product milestone.
 Not shipped. Do not claim 2.0.0 until this document’s gates are green **and** a
 maintainer records explicit Approve.
 
@@ -72,10 +72,10 @@ Private CF sync may keep working; it does not define 2.0.
 
 ### 1.0 judgment (insufficient alone)
 
-1. Hook fired?  
-2. Lifecycle on extraction allowlist?  
-3. Secret-like text?  
-4. Never auto-AcceptanceDecision  
+1. Hook fired?
+2. Lifecycle on extraction allowlist?
+3. Secret-like text?
+4. Never auto-AcceptanceDecision
 
 Useful plumbing. **Not** “is this knowledge?”
 
@@ -150,7 +150,7 @@ moves to **done** only with linked implementation and verification evidence.
 | K6 | Doctor reports adjudication health (promote/hold/reject rates, policy version) | **done** (`setup doctor` + `adjudicate --stats`; default search = promoted only) |
 | K7 | `pnpm smoke:knowledge` (or extend product smoke) proves non-dump behavior | **done** |
 | K8 | Scenario dogfood: “noise session” does not pollute meaning search | **done** (`pnpm smoke:dogfood` multi-hook public-safe scenarios) |
-| K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **todo** |
+| K9 | Freeze decision for 2.0 contracts (Defer until Approve) | **done (Defer)** — one-read decision recorded; freeze not approved |
 | K10 | SemVer **2.0.0** release only after explicit Approve | **blocked** |
 
 ## Known gaps and debt after the MVP
@@ -171,7 +171,7 @@ not infer that a **done** plumbing gate closes them.
 | Policy replay | Dispositions are keyed by `(source_event_id, trust_zone_id, policy_version)`; same policy replays, new policy appends. Active search remains lifecycle `active` only. | Optional operator migration/cleanup of superseded active Observations from older policies. | Audit durability **done (v1)** |
 | Dogfood depth | `smoke:dogfood` covers decision/preference promote, PostToolUse noise floods, UserPromptSubmit floods, secret-like rejects, and thanks/ok chatter without default-search pollution. | Keep extending only with public-safe fixtures when new pollution classes appear. | K8 **done** |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
-| Release language | Candidate v1, golden suite, doctor, held opt-in, and dogfood close K1/K4/K5/K6/K8, but K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
+| Release language | K0–K8 green with evidence; K9 is **Defer** (this decision); K10 remains blocked without chat **Approve**. | Do not tag, publish, deploy, or claim product 2.0 complete. | K9 **Defer**, K10 **blocked** |
 
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
@@ -222,6 +222,67 @@ lands in a coherent PR.
 
 ---
 
+
+## G010 Freeze decision (2026-07-30) — **Defer**
+
+**Decision: Defer freezing product-2.0 public contracts. Do not tag, publish, deploy, or claim product 2.0 complete.**
+
+This is a one-read freeze packet for maintainers. It is **not** approval to release.
+
+### Green gates (evidence on `main`)
+
+| Gate | Evidence |
+| --- | --- |
+| K0–K3 | ADR 0012 + adj_v1 + Observation promote/hold/reject wiring (PR #94 lineage) |
+| K1/K5 | Candidate v1 + 12-case golden suite (PR #97 / #99) |
+| K4 | Promoted-only default search; `--include-held` / `include_held` opt-in (PR #103) |
+| Operator hold queue | `list-held` / `promote-held` / `reject-held` append-only (PR #100) |
+| Policy history | `(source_event, zone, policy_version)` disposition identity (PR #101) |
+| K6 | Doctor adjudication health + promoted-only default search (PR #102) |
+| K7 | `pnpm smoke:knowledge` |
+| K8 | `pnpm smoke:dogfood` multi-hook public-safe scenarios (PR #104) |
+| G009 | Adjudicated Claim drafts **deferred** with evidence (PR #105) |
+
+### Validation commands (public-safe)
+
+```sh
+pnpm build
+pnpm --filter @carpeos/capture test
+pnpm --filter @carpeos/local-store test
+pnpm --filter @carpeos/cli test
+pnpm --filter @carpeos/mcp-server test
+pnpm smoke:knowledge
+pnpm smoke:dogfood
+pnpm smoke:product
+pnpm public-boundary
+```
+
+### Residual risk (why freeze stays Defer)
+
+1. **Calibration depth** — golden + dogfood are synthetic; no maintainer-signed real-session calibration pack is claimed.
+2. **Session de-noising** — candidate v1 does not implement multi-turn session de-noising.
+3. **Claim form** — adjudicated Claim drafts remain deferred (G009); accepted facts still require explicit AcceptanceDecision paths outside adjudication.
+4. **Older-policy active units** — policy re-adjudication can leave historical actives; cleanup is optional residual.
+5. **1.0 vs 2.0 honesty** — 1.0 remains pipeline infrastructure; 2.0 adjudication is operator-real MVP, not a finished knowledge product.
+
+### Deferred work (not blockers for documenting Defer)
+
+- Claim-form precision suite before any `allow_auto_claim` / adjudicated Claim drafts
+- Optional cleanup of superseded actives across policy versions
+- Further de-noising only with precision evidence
+- K10 release packaging **only** after explicit maintainer chat **Approve**
+
+### Hard non-actions without Approve
+
+- Do **not** cut or retag `v2.0.0`
+- Do **not** publish `@innocarpe/carpeos@2.0.0`
+- Do **not** unpublish or retag `v1.0.0` / `@innocarpe/carpeos@1.0.0`
+- Do **not** claim product 2.0 complete in README or release notes
+
+**Freeze status:** Defer.
+**Release status (K10/G011):** blocked until a maintainer says **Approve** in chat after reading this packet.
+
+
 ## Relationship to shipped code
 
 **Already merged in PR #94:** candidate scoring, `adj_v1`, disposition storage,
@@ -239,8 +300,8 @@ retrieval, and `smoke:knowledge`.
 
 ## Versioning note
 
-- Keep **`1.0.0`** on npm as the pipeline/contract baseline. No force-retag.  
-- Ship judgment work as **`1.x` MINOR** while APIs stay compatible when possible; cut **`2.0.0`** when adjudication becomes the public product contract (breaking defaults: e.g. search no longer treats raw lifecycle extracts as first-class knowledge without promote).  
+- Keep **`1.0.0`** on npm as the pipeline/contract baseline. No force-retag.
+- Ship judgment work as **`1.x` MINOR** while APIs stay compatible when possible; cut **`2.0.0`** when adjudication becomes the public product contract (breaking defaults: e.g. search no longer treats raw lifecycle extracts as first-class knowledge without promote).
 - If defaults change in a breaking way earlier, document under SemVer deliberately — prefer one clear **2.0** product story over quiet behavior shifts.
 
 ---
