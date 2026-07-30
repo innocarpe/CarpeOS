@@ -10,6 +10,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
+### Added
+
+- (none yet — fold entries here before the next release)
+
+## [2.0.0] - 2026-07-30
+
 ### Breaking
 
 - Product meaning major: default knowledge path is **adjudicated** promote | hold | reject (`adj_v1`), not “every eligible SessionEnd becomes searchable meaning.”
@@ -35,7 +41,6 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - Smoke fixtures and promoted-only search regressions after adjudication defaults
 - Public-boundary-safe synthetic secret fixtures in dogfood smoke
-
 
 ## [1.0.0] - 2026-07-30
 
@@ -199,7 +204,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v2.0.0...HEAD
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
 [0.1.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.2
@@ -208,3 +213,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [0.2.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.1
 [0.2.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.2
 [1.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v1.0.0
+[2.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v2.0.0
