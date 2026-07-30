@@ -142,7 +142,7 @@ moves to **done** only with linked implementation and verification evidence.
 | # | Criterion | Status |
 | --- | --- | --- |
 | K0 | Spec: this document + ADR for adjudication model | **done** (ADR 0012) |
-| K1 | Candidate model + fixtures (synthetic sessions only) | **partial** (signal from envelope/payload; metadata statement) |
+| K1 | Candidate model + fixtures (synthetic sessions only) | **done** (candidate v1: labeled spans + evidence refs + safe statement fragments) |
 | K2 | Rule-based adjudicator MVP (value/durability/risk/disposition) | **done** (`adj_v1`) |
 | K3 | Wire promote → Observation/Claim draft; reject stays off meaning index | **done** (promote→active, hold→draft, reject→disp only) |
 | K4 | Retrieval/pack **default = adjudicated promoted only**; evidence secondary; held optional | **done** (CLI/MCP search default `active` only) |
@@ -161,8 +161,8 @@ not infer that a **done** plumbing gate closes them.
 
 | Area | Current evidence on `main` | Required follow-up | Gate |
 | --- | --- | --- | --- |
-| Candidate text | `KnowledgeCandidate.signal_text` affects scoring, but `buildCandidateStatement` still emits a metadata-only Observation shell. | Extract bounded, sanitized decision / preference / constraint fragments with evidence references; never copy raw transcripts or protected dumps. | K1 |
-| Candidate structure | Signal recovery is best-effort `message` / `transcript` / `text`; there are no multi-span candidates, procedure-trace structure, or session de-noising. | Define candidate v1 spans and kind labels with empty, noise, decision, and preference fixtures. | K1 |
+| Candidate text | Candidate v1 adds bounded decision / preference / constraint / procedure spans with evidence refs; promoted/held statements may include the primary sanitized fragment. | Preserve fail-closed secret/dump guards and calibrate fragment usefulness through golden fixtures. | K1 **done**; K5 residual |
+| Candidate structure | Candidate v1 extracts up to three labeled spans from explicit message/procedure fields. Transcript/text may score but never enter statements directly. Session-level de-noising is not implemented. | Add de-noising only with precision evidence from golden fixtures and dogfood; do not widen raw-text ingestion for recall. | K1 **done (v1)**; K8 residual |
 | Calibration | `VALUE_TERMS`, signal length, and score thresholds have unit/smoke coverage but no golden precision corpus or maintainer calibration pass. | Add must-promote / must-hold / must-reject fixtures with reason-code assertions and public-safe dogfood notes. | K5, K8 |
 | Knowledge form | Promote and hold currently create Observations only. | Evaluate Claim drafting only after candidate precision is stable; Claims remain draft and never receive automatic AcceptanceDecision. | Deferred candidate for K3 |
 | Hold review | Held candidates become draft Observations, but the CLI cannot list, promote, or reject the held queue. | Add an explicit append-only operator review workflow. | Operator readiness |
@@ -171,7 +171,7 @@ not infer that a **done** plumbing gate closes them.
 | Policy replay | `knowledge_dispositions.source_event_id` is the primary key, so replay returns the existing row even if a later policy version should re-evaluate it. | Define append-only source-event + policy-version history and active-set migration semantics in an ADR and tests. | Audit durability |
 | Dogfood depth | `smoke:knowledge` covers decision-like SessionEnd versus PostToolUse noise. | Add noisy multi-hook sessions, UserPromptSubmit floods, secret-like candidates, and thanks/ok chatter. | K8 |
 | Product proof | `smoke:product` proves the 1.0 capture/extract/search pipeline; it does not prove brain-worthy judgment. | Keep both smoke suites and their claims separate. | K7, honesty |
-| Release language | The adjudication MVP is merged, but K1/K5/K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
+| Release language | Candidate v1 closes K1, but K5/K6/K8 remain partial and K9/K10 are not green. | Describe 2.0 adjudication as in progress; do not tag or publish 2.0.0 without the gate review and explicit Approve. | K9, K10 |
 
 The review queue and policy replay work must preserve an append-only disposition
 audit. Hooks remain fail-open and fast; no story may move heavy adjudication into
@@ -208,8 +208,8 @@ retrieval, and `smoke:knowledge`.
 
 - **Reuse:** capture, local-store, fail-open hooks, policy guards, retrieval
   ranking, and both smoke harnesses.
-- **Extend:** metadata-only candidate statements, disposition history, doctor,
-  operator review, and explicit held retrieval.
+- **Extend:** candidate calibration and session de-noising, disposition history,
+  doctor, operator review, and explicit held retrieval.
 - **Do not:** treat lifecycle allowlists, a disposition count, or a metadata shell
   as proof that a unit is brain-worthy.
 

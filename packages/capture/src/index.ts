@@ -50,10 +50,14 @@ export {
   adjudicateKnowledgeCandidate,
   adjudicationIdempotencyKey,
   buildCandidateStatement,
+  extractKnowledgeCandidateSpans,
   type AdjudicationResult,
   type AdjudicationScores,
   type KnowledgeCandidate,
+  type KnowledgeCandidateKind,
+  type KnowledgeCandidateSpan,
   type KnowledgeDisposition,
+  type KnowledgeEvidenceRef,
 } from "./adjudication.js";
 
 /** Media type for agent thinking/tool histories captured as protected evidence. */

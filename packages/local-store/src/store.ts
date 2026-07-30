@@ -8,6 +8,7 @@ import {
   deriveIdempotencyKey,
   adjudicateKnowledgeCandidate,
   ADJUDICATION_POLICY_VERSION,
+  extractKnowledgeCandidateSpans,
   extractionObservationIdempotencyKey,
   fingerprintEnvelope,
   fingerprintObject,
@@ -165,26 +166,89 @@ type StoredDisposition = {
   statement: string;
 };
 
-/** Pull a short free-text signal from capture envelope / decrypted payload shapes. */
+/** Pull a bounded rule-scoring signal from supported payload fields. */
 function signalFromUnknownPayload(payload: unknown): string | undefined {
-  if (payload === null || payload === undefined) {
-    return undefined;
-  }
+  return signalFromPayload(payload, false);
+}
+
+/** Pull only explicit message/procedure text that may enter a knowledge statement. */
+function candidateTextFromUnknownPayload(payload: unknown): string | undefined {
+  return signalFromPayload(payload, true);
+}
+
+function signalFromPayload(payload: unknown, candidateOnly: boolean): string | undefined {
+  if (payload === null || payload === undefined) return undefined;
   if (typeof payload === "string") {
-    const trimmed = payload.trim();
-    return trimmed.length > 0 ? trimmed.slice(0, 400) : undefined;
+    return candidateOnly ? undefined : boundedSignal(payload);
   }
-  if (typeof payload !== "object") {
-    return undefined;
-  }
+  if (typeof payload !== "object") return undefined;
+
   const record = payload as Record<string, unknown>;
-  for (const key of ["message", "transcript", "text", "content", "summary", "prompt"] as const) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim().slice(0, 400);
+  const candidateKeys = [
+    "decision",
+    "preference",
+    "constraint",
+    "procedure",
+    "summary",
+    "message",
+  ] as const;
+  const scoringKeys = ["transcript", "text", "content", "prompt"] as const;
+  for (const key of candidateKeys) {
+    const signal = boundedSignal(record[key]);
+    if (signal !== undefined) {
+      return candidateOnly ? labelCandidateField(key, signal) : signal;
+    }
+  }
+  if (!candidateOnly) {
+    for (const key of scoringKeys) {
+      const signal = boundedSignal(record[key]);
+      if (signal !== undefined) return signal;
+    }
+  }
+
+  for (const key of ["steps", "procedure_steps"] as const) {
+    const values = record[key];
+    if (!Array.isArray(values)) continue;
+    const parts: string[] = [];
+    for (const value of values.slice(0, 3)) {
+      const direct = boundedSignal(value);
+      if (direct !== undefined) {
+        parts.push(direct);
+        continue;
+      }
+      if (value === null || typeof value !== "object") continue;
+      const step = value as Record<string, unknown>;
+      for (const field of ["instruction", "decision", "constraint", "summary", "text"] as const) {
+        const signal = boundedSignal(step[field]);
+        if (signal !== undefined) {
+          parts.push(signal);
+          break;
+        }
+      }
+    }
+    if (parts.length > 0) {
+      const joined = parts.join(" ").slice(0, 1_200);
+      return candidateOnly && !/^\s*(?:procedure|workflow|runbook|playbook|steps?)\b/i.test(joined)
+        ? `Procedure: ${joined}`
+        : joined;
     }
   }
   return undefined;
+}
+
+function labelCandidateField(
+  field: "decision" | "preference" | "constraint" | "procedure" | "summary" | "message",
+  signal: string,
+): string {
+  if (field === "summary" || field === "message") return signal;
+  const label = `${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+  return signal.toLowerCase().startsWith(field) ? signal : `${label}: ${signal}`;
+}
+
+function boundedSignal(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, 1_200) : undefined;
 }
 
 export type ProposeClaimDraftInput = {
@@ -1162,9 +1226,15 @@ export class LocalCaptureStore {
       };
     }
 
-    const signalText =
-      input.signalText ?? this.tryExtractSignalText(evidence, metaFromEnvelope) ?? "";
+    const extractedSignals = this.tryExtractSignals(evidence, metaFromEnvelope);
+    const signalText = input.signalText ?? extractedSignals.scoring ?? "";
+    // CLI/API signalText is scoring-only; statements require captured explicit candidate fields.
+    const candidateText = input.signalText === undefined ? extractedSignals.candidate : undefined;
 
+    const evidenceRefs = [
+      { ref_type: "source_event" as const, ref_id: evidence.event_id },
+      { ref_type: "artifact" as const, ref_id: evidence.payload.artifact_id },
+    ];
     const adjudication = adjudicateKnowledgeCandidate(
       {
         provider,
@@ -1175,6 +1245,8 @@ export class LocalCaptureStore {
         artifact_id: evidence.payload.artifact_id,
         source_event_id: evidence.event_id,
         signal_text: signalText,
+        spans: extractKnowledgeCandidateSpans(candidateText, evidenceRefs),
+        evidence_refs: evidenceRefs,
       },
       input.policyOverrides,
     );
@@ -1440,16 +1512,20 @@ export class LocalCaptureStore {
   }
 
   /**
-   * Best-effort short signal for rule scoring (never required).
-   * Prefers live envelope fields; may decrypt local protected payload for message/transcript text.
+   * Recover rule-scoring and statement-safe signals in one bounded decrypt pass.
+   * Transcript/text fields may score but never enter candidate statements directly.
    */
-  private tryExtractSignalText(
+  private tryExtractSignals(
     evidence: CanonicalEvent<"EvidenceArtifact">,
     envelope?: CaptureEnvelope,
-  ): string | undefined {
-    const fromEnvelope = signalFromUnknownPayload(envelope?.payload);
-    if (fromEnvelope !== undefined) {
-      return fromEnvelope;
+  ): { scoring?: string; candidate?: string } {
+    const envelopeScoring = signalFromUnknownPayload(envelope?.payload);
+    const envelopeCandidate = candidateTextFromUnknownPayload(envelope?.payload);
+    if (envelopeScoring !== undefined || envelopeCandidate !== undefined) {
+      return {
+        ...(envelopeScoring === undefined ? {} : { scoring: envelopeScoring }),
+        ...(envelopeCandidate === undefined ? {} : { candidate: envelopeCandidate }),
+      };
     }
     const contentRef = evidence.payload?.content_ref;
     const pvId =
@@ -1458,23 +1534,23 @@ export class LocalCaptureStore {
       typeof contentRef.protected_value_id === "string"
         ? contentRef.protected_value_id
         : undefined;
-    if (pvId === undefined) {
-      return undefined;
-    }
+    if (pvId === undefined) return {};
+
     try {
       const plaintext = this.decryptProtectedValue(pvId);
       const parsed = JSON.parse(Buffer.from(plaintext).toString("utf8")) as unknown;
-      // Capture stores full envelope JSON as protected plaintext.
-      if (parsed !== null && typeof parsed === "object") {
-        const record = parsed as Record<string, unknown>;
-        return (
-          signalFromUnknownPayload(record.payload) ?? signalFromUnknownPayload(record) ?? undefined
-        );
-      }
+      if (parsed === null || typeof parsed !== "object") return {};
+      const record = parsed as Record<string, unknown>;
+      const scoring = signalFromUnknownPayload(record.payload) ?? signalFromUnknownPayload(record);
+      const candidate =
+        candidateTextFromUnknownPayload(record.payload) ?? candidateTextFromUnknownPayload(record);
+      return {
+        ...(scoring === undefined ? {} : { scoring }),
+        ...(candidate === undefined ? {} : { candidate }),
+      };
     } catch {
-      return undefined;
+      return {};
     }
-    return undefined;
   }
 
   private getDisposition(sourceEventId: string): StoredDisposition | undefined {
