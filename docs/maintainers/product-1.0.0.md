@@ -83,7 +83,7 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 | P4 | Extraction pipeline MVP: Evidence → Observation and/or Claim (idempotent, trust-zone aware) | **done** | `extractFromEvidenceArtifact` + CLI (G004); Claim auto still policy-gated off |
 | P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **done** | Kind priority + diversity (G005); smoke asserts Observation |
 | P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` / `scripts/smoke-product-loop.mjs` + CI (G006) |
-| P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **todo** | Ultragoal G007 |
+| P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **done** | doctor store probe + README product path (G007) |
 | P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **todo** | Ultragoal G008 |
 | P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **todo** | Ultragoal G009 |
 | P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **partial** | G1–G8 done; G9 Defer |

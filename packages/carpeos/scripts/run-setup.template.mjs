@@ -54,16 +54,21 @@ function printPlan(plan) {
 /**
  * @param {string} home
  * @param {boolean} asJson
- * @param {boolean} [requireHooks]
+ * @param {{ requireHooks?: boolean, requireCapture?: boolean, requireUnits?: boolean }} [opts]
  */
-function runDoctor(home, asJson, requireHooks = false) {
+function runDoctor(home, asJson, opts = {}) {
   const configPath = join(home, "config.json");
   if (!existsSync(configPath)) {
     process.stderr.write(`no install config at ${configPath}; run: carpeos setup run --apply\n`);
     return 1;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
-  const doctor = doctorInstall({ config, requireHooks });
+  const doctor = doctorInstall({
+    config,
+    requireHooks: Boolean(opts.requireHooks),
+    requireCapture: Boolean(opts.requireCapture),
+    requireUnits: Boolean(opts.requireUnits),
+  });
   if (asJson) {
     printJson({ ok: doctor.ok, doctor });
   } else {
@@ -72,6 +77,9 @@ function runDoctor(home, asJson, requireHooks = false) {
     );
     if (doctor.hook_warnings?.length) {
       process.stdout.write(`hook warnings: ${doctor.hook_warnings.join("; ")}\n`);
+    }
+    if (doctor.store_warnings?.length) {
+      process.stdout.write(`store warnings: ${doctor.store_warnings.join("; ")}\n`);
     }
     printJson({ ok: doctor.ok, doctor });
   }
@@ -133,7 +141,11 @@ export async function runSetup(argv = process.argv.slice(2)) {
   }
 
   if (args.command === "doctor") {
-    return runDoctor(plan.home, plan.json, plan.requireHooks);
+    return runDoctor(plan.home, plan.json, {
+      requireHooks: plan.requireHooks,
+      requireCapture: plan.requireCapture,
+      requireUnits: plan.requireUnits,
+    });
   }
 
   if (args.command === "show") {

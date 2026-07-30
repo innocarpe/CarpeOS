@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import {
   buildConfig,
   doctorInstall,
+  doctorLocalStoreActivity,
   formatSetupHelp,
   formatSetupPlanHuman,
   installLocal,
@@ -124,6 +126,101 @@ describe("install-core", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("doctorLocalStoreActivity reports missing store as warning-only", () => {
+    const activity = doctorLocalStoreActivity({
+      storePath: "/tmp/carpeos-does-not-exist-doctor.sqlite",
+      exists: () => false,
+    });
+    assert.equal(activity.store, "missing");
+    assert.ok(activity.warnings.length > 0);
+    assert.equal(activity.observation_count, 0);
+  });
+
+  it("doctorLocalStoreActivity counts evidence and meaningful units", () => {
+    const dir = mkdtempSync(join(tmpdir(), "carpeos-store-doctor-"));
+    try {
+      const dbPath = join(dir, "carpeos.sqlite");
+      const db = new DatabaseSync(dbPath);
+      db.exec(`
+        CREATE TABLE canonical_events (
+          local_sequence INTEGER PRIMARY KEY,
+          event_id TEXT,
+          event_type TEXT,
+          trust_zone_id TEXT,
+          idempotency_key TEXT,
+          request_fingerprint TEXT,
+          protected_value_id TEXT,
+          event_json TEXT,
+          recorded_at TEXT
+        );
+      `);
+      const nowIso = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO canonical_events
+         (event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint, protected_value_id, event_json, recorded_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_evi_doctor01",
+        "EvidenceArtifact",
+        "tz_local_default",
+        "idem_doctor_evi_0001",
+        "fp1",
+        null,
+        "{}",
+        nowIso,
+      );
+      db.prepare(
+        `INSERT INTO canonical_events
+         (event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint, protected_value_id, event_json, recorded_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_obs_doctor01",
+        "Observation",
+        "tz_local_default",
+        "idem_doctor_obs_0001",
+        "fp2",
+        null,
+        "{}",
+        nowIso,
+      );
+      db.close();
+
+      const activity = doctorLocalStoreActivity({ storePath: dbPath });
+      assert.equal(activity.store, "ok");
+      assert.equal(activity.evidence_count, 1);
+      assert.equal(activity.observation_count, 1);
+      assert.ok(activity.recent_evidence_count >= 1);
+      assert.equal(activity.warnings.length, 0);
+
+      const config = buildConfig({
+        repoRoot: join(dir, "repo"),
+        home: dir,
+        binDir: join(dir, "bin"),
+        trustZoneId: "tz_local_default",
+        workspaceRoot: dir,
+        nodePath: process.execPath,
+      });
+      config.store_path = dbPath;
+      const doctor = doctorInstall({
+        config,
+        exists: (p) => p === dbPath || p === dir,
+        skipHostProbe: true,
+        run: () => ({ status: 0, stdout: "", stderr: "" }),
+      });
+      assert.ok(doctor.checks.some((c) => c.includes("meaningful_units: ok")));
+      assert.ok(doctor.checks.some((c) => c.includes("recent_capture: ok")));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("parseSetupArgs accepts require-capture and require-units", () => {
+    const args = parseSetupArgs(["doctor", "--require-capture", "--require-units"]);
+    assert.equal(args.command, "doctor");
+    assert.equal(args.requireCapture, true);
+    assert.equal(args.requireUnits, true);
   });
 
   it("parseSetupArgs defaults empty argv to help", () => {

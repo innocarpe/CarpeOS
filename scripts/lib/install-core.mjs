@@ -3,11 +3,12 @@
  * Pure helpers + injectable side effects for tests and install-local.mjs.
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
 import {
   doctorCaptureHooks,
   installCaptureHooks,
@@ -544,6 +545,11 @@ export function registerHostMcp(input) {
  *   exists?: typeof existsSync,
  *   skipHostProbe?: boolean,
  *   requireHooks?: boolean,
+ *   requireCapture?: boolean,
+ *   requireUnits?: boolean,
+ *   openStoreDb?: (path: string) => { prepare: Function, close?: () => void },
+ *   now?: () => Date,
+ *   captureMaxAgeMs?: number,
  * }} input
  */
 export function doctorInstall(input) {
@@ -632,13 +638,179 @@ export function doctorInstall(input) {
     }
   }
 
+  // Local store: recent EvidenceArtifact + Observation/Claim counts (warnings only).
+  const storePath = input.config.store_path ?? join(input.config.home, "carpeos.sqlite");
+  const storeActivity = doctorLocalStoreActivity({
+    storePath,
+    exists,
+    openDb: input.openStoreDb,
+    now: input.now,
+    maxAgeMs: input.captureMaxAgeMs,
+  });
+  checks.push(...storeActivity.checks);
+  /** @type {string[]} */
+  const storeWarnings = [...storeActivity.warnings];
+  if (input.requireCapture && storeActivity.recent_evidence_count === 0) {
+    failures.push("no recent EvidenceArtifact in local store (product capture loop not exercised)");
+  }
+  if (input.requireUnits && storeActivity.observation_count + storeActivity.claim_count === 0) {
+    failures.push("no Observation/Claim events in local store (run capture-hook with extract)");
+  }
+
   return {
     ok: failures.length === 0,
     failures,
     checks,
     hook_warnings: hookWarnings,
     hooks: hookDoctor.probes,
+    store_warnings: storeWarnings,
+    store: storeActivity,
   };
+}
+
+/** Default window for "recent capture" doctor signal (7 days). */
+export const DOCTOR_RECENT_CAPTURE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Read-only probe of local SQLite for product-loop signals.
+ * Counts only — never decrypts protected values or dumps event JSON.
+ *
+ * @param {{
+ *   storePath: string,
+ *   exists?: typeof existsSync,
+ *   openDb?: (path: string) => { prepare: (sql: string) => { all: (...a: unknown[]) => unknown[]; get: (...a: unknown[]) => unknown }, close?: () => void },
+ *   now?: () => Date,
+ *   maxAgeMs?: number,
+ * }} input
+ */
+export function doctorLocalStoreActivity(input) {
+  const exists = input.exists ?? existsSync;
+  const now = input.now ?? (() => new Date());
+  const maxAgeMs = input.maxAgeMs ?? DOCTOR_RECENT_CAPTURE_MAX_AGE_MS;
+  /** @type {string[]} */
+  const checks = [];
+  /** @type {string[]} */
+  const warnings = [];
+
+  if (!exists(input.storePath)) {
+    checks.push(`store_sqlite: missing (${input.storePath})`);
+    warnings.push("local store missing — run carpeos setup run --apply / carpeos init");
+    return {
+      store: "missing",
+      evidence_count: 0,
+      observation_count: 0,
+      claim_count: 0,
+      recent_evidence_count: 0,
+      last_evidence_at: null,
+      last_observation_at: null,
+      checks,
+      warnings,
+    };
+  }
+
+  try {
+    const openDb = input.openDb ?? ((path) => new DatabaseSync(path, { readOnly: true }));
+    const db = openDb(input.storePath);
+    try {
+      const rows = db
+        .prepare(
+          `
+            SELECT event_type AS event_type, COUNT(*) AS n, MAX(recorded_at) AS last_at
+            FROM canonical_events
+            GROUP BY event_type
+          `,
+        )
+        .all();
+      let evidence = 0;
+      let observation = 0;
+      let claim = 0;
+      /** @type {string | null} */
+      let lastEvidence = null;
+      /** @type {string | null} */
+      let lastObservation = null;
+      for (const row of rows) {
+        const type = String(/** @type {{ event_type?: string }} */ (row).event_type ?? "");
+        const n = Number(/** @type {{ n?: number }} */ (row).n ?? 0);
+        const lastAt = /** @type {{ last_at?: string | null }} */ (row).last_at ?? null;
+        if (type === "EvidenceArtifact") {
+          evidence = n;
+          lastEvidence = lastAt;
+        } else if (type === "Observation") {
+          observation = n;
+          lastObservation = lastAt;
+        } else if (type === "Claim") {
+          claim = n;
+        }
+      }
+
+      const cutoff = new Date(now().getTime() - maxAgeMs).toISOString();
+      const recentRow = db
+        .prepare(
+          `
+            SELECT COUNT(*) AS n
+            FROM canonical_events
+            WHERE event_type = 'EvidenceArtifact'
+              AND recorded_at >= ?
+          `,
+        )
+        .get(cutoff);
+      const recentEvidence = Number(/** @type {{ n?: number }} */ (recentRow)?.n ?? 0);
+
+      checks.push(
+        `store_sqlite: ok (${input.storePath})`,
+        `recent_capture: ${recentEvidence > 0 ? `ok (${recentEvidence} EvidenceArtifact in window, last=${lastEvidence ?? "n/a"})` : `none (window=${Math.round(maxAgeMs / 86400000)}d)`}`,
+        `meaningful_units: ${observation + claim > 0 ? `ok (Observation=${observation}, Claim=${claim})` : "none"}`,
+      );
+
+      if (evidence === 0) {
+        warnings.push(
+          "no EvidenceArtifact yet — install hooks (`carpeos setup hooks install --apply`) and run a host session or capture-hook",
+        );
+      } else if (recentEvidence === 0) {
+        warnings.push(
+          `no recent EvidenceArtifact (last=${lastEvidence ?? "n/a"}) — product capture loop idle`,
+        );
+      }
+      if (observation + claim === 0) {
+        warnings.push(
+          "no Observation/Claim units — capture eligible hooks (SessionEnd/Stop) with extract, or: carpeos extract --event-id …",
+        );
+      }
+
+      return {
+        store: "ok",
+        evidence_count: evidence,
+        observation_count: observation,
+        claim_count: claim,
+        recent_evidence_count: recentEvidence,
+        last_evidence_at: lastEvidence,
+        last_observation_at: lastObservation,
+        checks,
+        warnings,
+      };
+    } finally {
+      try {
+        db.close?.();
+      } catch {
+        // ignore
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(`store_sqlite: unreadable (${message.slice(0, 120)})`);
+    warnings.push(`local store unreadable: ${message.slice(0, 160)}`);
+    return {
+      store: "unreadable",
+      evidence_count: 0,
+      observation_count: 0,
+      claim_count: 0,
+      recent_evidence_count: 0,
+      last_evidence_at: null,
+      last_observation_at: null,
+      checks,
+      warnings,
+    };
+  }
 }
 
 /**
@@ -680,6 +852,8 @@ export function parseSetupArgs(argv) {
    *  help: boolean,
    *  deprecatedYes: boolean,
    *  requireHooks: boolean,
+   *  requireCapture: boolean,
+   *  requireUnits: boolean,
    * }} */
   const out = {
     command: "run",
@@ -698,6 +872,8 @@ export function parseSetupArgs(argv) {
     help: false,
     deprecatedYes: false,
     requireHooks: false,
+    requireCapture: false,
+    requireUnits: false,
   };
 
   const args = [...argv];
@@ -791,6 +967,10 @@ export function parseSetupArgs(argv) {
       }
     } else if (arg === "--require-hooks") {
       out.requireHooks = true;
+    } else if (arg === "--require-capture") {
+      out.requireCapture = true;
+    } else if (arg === "--require-units") {
+      out.requireUnits = true;
     } else if (arg === "--repo-root") {
       out.repoRoot = need("--repo-root");
     } else if (arg === "--doctor") {
@@ -861,6 +1041,8 @@ OPTIONS
   --hosts <spec>              With "hooks *": same as --register-hooks host list
                               With "run": alias for --register-mcp (legacy)
   --require-hooks             Doctor fails if capture hooks are missing
+  --require-capture           Doctor fails if no recent EvidenceArtifact in store
+  --require-units             Doctor fails if no Observation/Claim events exist
 ${repoLine}  --apply                     Apply changes (required for "run" / hooks install|uninstall)
   --dry-run                   Alias for plan (no changes)
   --json                      Machine-readable JSON on stdout
@@ -990,6 +1172,8 @@ export function resolveSetupPlan(args, ctx = {}) {
     registerHooksEnabled,
     hookHostList: hookSpec.hosts,
     requireHooks: Boolean(args.requireHooks),
+    requireCapture: Boolean(args.requireCapture),
+    requireUnits: Boolean(args.requireUnits),
     hostList,
     repoRoot,
     nodePath: ctx.nodePath ?? process.execPath,
