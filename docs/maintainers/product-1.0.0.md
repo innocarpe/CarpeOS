@@ -82,18 +82,18 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 | P3 | Extraction policy documented + implemented (lifecycle defaults; PostToolUse off by default; privacy rules) | **done** | ADR 0011 + `packages/capture/src/meaningful-unit-policy.ts` (G003) |
 | P4 | Extraction pipeline MVP: Evidence → Observation and/or Claim (idempotent, trust-zone aware) | **done** | `extractFromEvidenceArtifact` + CLI (G004); Claim auto still policy-gated off |
 | P5 | Search + context-pack (CLI + MCP) rank meaningful units first-class; evidence metadata secondary | **done** | Kind priority + diversity (G005); smoke asserts Observation |
-| P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **todo** | Ultragoal G006 |
+| P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` / `scripts/smoke-product-loop.mjs` + CI (G006) |
 | P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **todo** | Ultragoal G007 |
 | P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **todo** | Ultragoal G008 |
 | P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **todo** | Ultragoal G009 |
 | P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **partial** | G1–G8 done; G9 Defer |
 | P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **blocked** | Ultragoal G010 — only after explicit Approve |
 
-Baseline note (2026-07-30, do not re-litigate): public package `0.2.2`; local
-contract gates largely done; capture-hook exists for codex|claude|grok; retrieval
-can project metadata-only excerpts. **Gaps:** setup does not install hooks; no
-automatic Evidence→Observation/Claim extraction; search is not yet “meaningful
-knowledge first”; no product E2E gate for the full loop.
+Baseline note (2026-07-30, updated through G006): public package `0.2.2`; local
+contract gates largely done; capture-hook + setup hooks install; Evidence→
+Observation extraction MVP; meaningful-first search; **`pnpm smoke:product`**
+CI gate. Remaining product gaps: doctor/README polish (P7), scenario dogfood
+(P8), freeze Approve (P9–P11).
 
 ---
 

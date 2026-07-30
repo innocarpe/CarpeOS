@@ -49,6 +49,7 @@ Run and record exact results before a release-ready PR is marked ready:
 | `pnpm public-boundary` | Yes |
 | `pnpm check` | Preferred aggregate check |
 | `pnpm smoke:mcp` | Yes for G5 MCP smoke (tool list / search / context-pack); CI step “Run MCP smoke (G5)” |
+| `pnpm smoke:product` | Yes for product 1.0 loop (capture → extract → rebuild → search/context-pack); CI step “Run product loop smoke (1.0)” |
 | `pnpm --filter @carpeos/sync-worker test:e2e` | Yes for G008 local end-to-end evidence and configured CI gate evidence |
 
 If a command is skipped, the PR must say why and must not claim that evidence.

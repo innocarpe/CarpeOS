@@ -37,5 +37,8 @@ jobs:
       - name: Run MCP smoke (G5)
         run: pnpm smoke:mcp
 
+      - name: Run product loop smoke (1.0)
+        run: pnpm smoke:product
+
       - name: Run sync worker G008 E2E
         run: pnpm --filter @carpeos/sync-worker test:e2e
