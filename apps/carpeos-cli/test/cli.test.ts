@@ -153,10 +153,7 @@ describe("carpeos CLI", () => {
     expect(captured.stdout.extraction?.observation_event_id).toMatch(/^evt_/);
     expect(captured.rawStdout).not.toContain("SYNTHETIC_EXTRACT_SENTINEL");
 
-    const extract = runJson(
-      ["extract", "--event-id", String(captured.stdout.event_id)],
-      context,
-    );
+    const extract = runJson(["extract", "--event-id", String(captured.stdout.event_id)], context);
     expect(extract.status).toBe(0);
     expect(extract.stdout.status).toBe("replay");
 
@@ -249,20 +246,24 @@ describe("carpeos CLI", () => {
     expect(fromConfig.status).toBe(0);
     expect(fromConfig.stdout.trust_zone_id).toBe("tz_local_default");
 
-    const fromEnv = spawnSync(process.execPath, [cliPath, "capture-hook", "--no-extract", "--provider", "codex"], {
-      cwd: context.cwd,
-      env: {
-        ...process.env,
-        CARPEOS_HOME: context.home,
-        CARPEOS_MCP_TRUST_ZONE: "tz_from_env_zone",
+    const fromEnv = spawnSync(
+      process.execPath,
+      [cliPath, "capture-hook", "--no-extract", "--provider", "codex"],
+      {
+        cwd: context.cwd,
+        env: {
+          ...process.env,
+          CARPEOS_HOME: context.home,
+          CARPEOS_MCP_TRUST_ZONE: "tz_from_env_zone",
+        },
+        input: JSON.stringify({
+          hook_event_name: "SessionEnd",
+          session_id: "session_env_tz",
+          message: "env zone",
+        }),
+        encoding: "utf8",
       },
-      input: JSON.stringify({
-        hook_event_name: "SessionEnd",
-        session_id: "session_env_tz",
-        message: "env zone",
-      }),
-      encoding: "utf8",
-    });
+    );
     expect(fromEnv.status).toBe(0);
     const envStdout = JSON.parse(fromEnv.stdout.trim()) as { trust_zone_id?: string };
     expect(envStdout.trust_zone_id).toBe("tz_from_env_zone");
@@ -402,7 +403,15 @@ describe("carpeos CLI", () => {
       message: "synthetic second value",
     });
     const captured = runJson(
-      ["capture-hook", "--no-extract", "--provider", "codex", "--idempotency-key", idempotencyKey, "--quiet"],
+      [
+        "capture-hook",
+        "--no-extract",
+        "--provider",
+        "codex",
+        "--idempotency-key",
+        idempotencyKey,
+        "--quiet",
+      ],
       context,
       first,
     );
