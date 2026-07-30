@@ -25,6 +25,11 @@ into one chat log.
   <img src="docs/assets/architecture-flow.svg" alt="Capture, store, sync, then use from MCP, CLI, and Obsidian" width="920" />
 </p>
 
+## Website
+
+Visit **[the CarpeOS website](https://innocarpe.github.io/carpeos-website/)** for
+the product overview, system model, install path, and public documentation guide.
+
 ---
 
 ## Why this exists

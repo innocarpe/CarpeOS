@@ -24,6 +24,11 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
   <img src="docs/assets/architecture-flow.svg" alt="Capture, store, sync 후 MCP·CLI·Obsidian 사용" width="920" />
 </p>
 
+## 웹사이트
+
+**[CarpeOS 웹사이트](https://innocarpe.github.io/carpeos-website/)**에서 제품
+개요, 시스템 모델, 설치 경로, 공개 문서 안내를 확인할 수 있습니다.
+
 ---
 
 ## 왜 만들었나
