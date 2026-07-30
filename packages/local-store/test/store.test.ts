@@ -905,6 +905,50 @@ describe("project identity", () => {
   });
 });
 
+describe("LocalCaptureStore extraction", () => {
+  it("extracts Observation after eligible capture when extract:true", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(
+      makeEnvelope({
+        hook_event_name: "SessionEnd",
+        payload: { transcript: "secret should not appear in observation" },
+      }),
+      { extract: true },
+    );
+    expect(result.status).toBe("captured");
+    expect(result.extraction?.status).toBe("extracted");
+    if (result.extraction?.status !== "extracted" && result.extraction?.status !== "replay") {
+      throw new Error("expected extraction");
+    }
+    expect(result.extraction.event.event_type).toBe("Observation");
+    expect(result.extraction.event.payload.statement).toContain("SessionEnd");
+    expect(result.extraction.event.payload.statement).not.toContain("secret should not appear");
+    expect(result.extraction.event.payload.evidence_artifact_refs).toEqual([
+      result.event.payload.artifact_id,
+    ]);
+    expect(store.countRows("canonical_events")).toBe(2);
+
+    const again = store.extractFromEventId(result.event.event_id);
+    expect(again.status).toBe("replay");
+  });
+
+  it("skips extraction for PostToolUse under default policy", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(makeEnvelope({ hook_event_name: "PostToolUse" }), {
+      extract: true,
+    });
+    expect(result.extraction?.status).toBe("skipped");
+    expect(store.countRows("canonical_events")).toBe(1);
+  });
+
+  it("does not extract when extract option is omitted (low-level default)", () => {
+    const { store } = makeStore();
+    const result = store.captureHook(makeEnvelope({ hook_event_name: "Stop" }));
+    expect(result.extraction).toBeUndefined();
+    expect(store.countRows("canonical_events")).toBe(1);
+  });
+});
+
 function makeStore(): { store: LocalCaptureStore; runtimeDir: string } {
   const runtimeDir = tempDir();
   return {

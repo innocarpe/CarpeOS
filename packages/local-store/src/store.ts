@@ -6,11 +6,14 @@ import {
   buildSyncPushRequest,
   type CaptureEnvelope,
   deriveIdempotencyKey,
+  extractionObservationIdempotencyKey,
   fingerprintEnvelope,
   fingerprintObject,
   hashHex,
   isIdempotencyKey,
+  planObservationExtraction,
   stableJson,
+  type MeaningfulUnitPolicyConfig,
 } from "@carpeos/capture";
 import type {
   CanonicalEvent,
@@ -58,7 +61,36 @@ export type LocalStoreSqlDatabase = {
 
 export type CaptureRequestOptions = {
   failAfter?: "capture_request" | "protected_value" | "canonical_event";
+  /**
+   * When true, run meaningful-unit extraction after capture when the hook is
+   * eligible. Product CLI/MCP pass true by default; low-level callers opt in.
+   */
+  extract?: boolean;
+  /** Optional policy overrides for post-capture extraction. */
+  extractionPolicy?: Partial<MeaningfulUnitPolicyConfig>;
 };
+
+export type ExtractionResult =
+  | {
+      status: "extracted" | "replay";
+      event: CanonicalEvent<"Observation">;
+      local_sequence: number;
+      outbox_id: number;
+      request_fingerprint: string;
+      protected_value_id: string;
+      source_event_id: string;
+    }
+  | {
+      status: "skipped";
+      reason: string;
+      source_event_id?: string;
+      hook_event_name?: string;
+    }
+  | {
+      status: "failed";
+      error: string;
+      source_event_id?: string;
+    };
 
 export type CaptureResult =
   | {
@@ -68,6 +100,7 @@ export type CaptureResult =
       outbox_id: number;
       request_fingerprint: string;
       protected_value_id: string;
+      extraction?: ExtractionResult;
     }
   | {
       status: "replay";
@@ -76,7 +109,20 @@ export type CaptureResult =
       outbox_id: number;
       request_fingerprint: string;
       protected_value_id: string;
+      extraction?: ExtractionResult;
     };
+
+export type ProposeObservationDraftInput = {
+  statement: string;
+  evidenceArtifactRefs: readonly string[];
+  sourceEventId?: string;
+  subjectRef?: string;
+  validTime?: CanonicalEvent["valid_time"];
+  observedAt?: string;
+  confidence?: number;
+  idempotencyKey?: string;
+  provenance?: readonly ProvenanceRef[];
+};
 
 export type ProposeClaimDraftInput = {
   statement: string;
@@ -406,7 +452,10 @@ export class LocalCaptureStore {
     this.db.close();
   }
 
-  captureHook(envelope: CaptureEnvelope, options: CaptureRequestOptions = {}): CaptureResult {
+  private captureHookWrite(
+    envelope: CaptureEnvelope,
+    options: CaptureRequestOptions = {},
+  ): CaptureResult {
     const capturedAt = normalizeTimestamp(envelope.captured_at);
     const recordedAt = this.clock.now().toISOString();
     const normalizedEnvelope: CaptureEnvelope = { ...envelope, captured_at: capturedAt };
@@ -579,6 +628,36 @@ export class LocalCaptureStore {
         protected_value_id: protectedValueId,
       };
     });
+  }
+
+  /**
+   * Capture then optionally extract Observation (default on for product loop).
+   * Extraction runs after the capture transaction so evidence always lands.
+   */
+  captureHook(envelope: CaptureEnvelope, options: CaptureRequestOptions = {}): CaptureResult {
+    const capture = this.captureHookWrite(envelope, options);
+    if (options.extract !== true) {
+      return capture;
+    }
+    try {
+      const extraction = this.extractFromEvidenceArtifact({
+        event: capture.event,
+        envelope,
+        ...(options.extractionPolicy === undefined
+          ? {}
+          : { policyOverrides: options.extractionPolicy }),
+      });
+      return { ...capture, extraction };
+    } catch (error) {
+      return {
+        ...capture,
+        extraction: {
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+          source_event_id: capture.event.event_id,
+        },
+      };
+    }
   }
 
   proposeClaimDraft(input: ProposeClaimDraftInput): ProposeClaimDraftResult {
@@ -764,6 +843,366 @@ export class LocalCaptureStore {
         valid_time_defaulted: input.validTime === undefined,
       };
     });
+  }
+
+  /**
+   * Append an Observation derived from evidence (idempotent, append-only).
+   */
+  proposeObservationDraft(input: ProposeObservationDraftInput): ExtractionResult {
+    const recordedAt = this.clock.now().toISOString();
+    const statement = input.statement.trim();
+    if (statement.length === 0) {
+      throw new Error("observation statement is required");
+    }
+    if (input.evidenceArtifactRefs.length === 0) {
+      throw new Error("evidence_artifact_refs is required");
+    }
+    if (input.confidence !== undefined && (input.confidence < 0 || input.confidence > 1)) {
+      throw new Error("observation confidence must be between 0 and 1");
+    }
+    if (input.idempotencyKey !== undefined && !isIdempotencyKey(input.idempotencyKey)) {
+      throw new Error("idempotency_key must match idem_[A-Za-z0-9_-]{16,128}");
+    }
+
+    // Ensure artifacts exist in this trust zone (or as known artifact_id on events).
+    for (const artifactId of input.evidenceArtifactRefs) {
+      if (!this.artifactExistsInZone(artifactId, this.trustZone.trust_zone_id)) {
+        throw new Error(`evidence artifact not found in trust zone: ${artifactId}`);
+      }
+    }
+
+    const observedAt = input.observedAt ?? recordedAt;
+    const validTime = input.validTime ?? { start: observedAt, end: null };
+    if (!isBitemporalInterval(validTime)) {
+      throw new Error("valid_time.start must be before or equal to valid_time.end");
+    }
+
+    const provenance: ProvenanceRef[] =
+      input.provenance !== undefined
+        ? [...input.provenance]
+        : input.sourceEventId !== undefined
+          ? [
+              {
+                ref_type: "event",
+                ref_id: input.sourceEventId,
+                relationship: "derived_from",
+              },
+              ...input.evidenceArtifactRefs.map(
+                (artifactId): ProvenanceRef => ({
+                  ref_type: "artifact",
+                  ref_id: artifactId,
+                  relationship: "derived_from",
+                }),
+              ),
+            ]
+          : input.evidenceArtifactRefs.map(
+              (artifactId): ProvenanceRef => ({
+                ref_type: "artifact",
+                ref_id: artifactId,
+                relationship: "derived_from",
+              }),
+            );
+
+    const normalizedInput = {
+      statement,
+      evidence_artifact_refs: [...input.evidenceArtifactRefs],
+      source_event_id: input.sourceEventId,
+      confidence: input.confidence,
+      subject_ref: input.subjectRef ?? this.projectId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      valid_time: validTime,
+      observed_at: observedAt,
+    };
+    const requestFingerprint = fingerprintObject({
+      tool: "extract_observation",
+      ...normalizedInput,
+    });
+    const idempotencyKey =
+      input.idempotencyKey ??
+      (input.sourceEventId !== undefined
+        ? extractionObservationIdempotencyKey(input.sourceEventId)
+        : `idem_${hashHex(stableJson(normalizedInput)).slice(0, 32)}`);
+    const eventDigest = hashHex(
+      stableJson({
+        trust_zone_id: this.trustZone.trust_zone_id,
+        idempotency_key: idempotencyKey,
+        request_fingerprint: requestFingerprint,
+      }),
+    );
+    const protectedValueId = `pv_${eventDigest.slice(0, 24)}`;
+    const protectedPayload = Buffer.from(
+      stableJson({
+        tool: "extract_observation",
+        extracted_at: recordedAt,
+        statement,
+        evidence_artifact_refs: normalizedInput.evidence_artifact_refs,
+        source_event_id: normalizedInput.source_event_id,
+      }),
+      "utf8",
+    );
+    const encrypted = encrypt(protectedPayload, this.keyBytes);
+    const event: CanonicalEvent<"Observation"> = {
+      schema_version: "v1",
+      event_id: `evt_${eventDigest.slice(0, 32)}`,
+      event_type: "Observation",
+      subject_ref: normalizeIdentifier(normalizedInput.subject_ref),
+      valid_time: validTime,
+      recorded_time: { start: recordedAt, end: null },
+      lifecycle_status: "active",
+      epistemic_authority: "observed",
+      trust_zone: this.trustZone,
+      provenance,
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      payload: {
+        observation_id: `obs_${eventDigest.slice(32, 56)}`,
+        observed_at: observedAt,
+        statement,
+        evidence_artifact_refs: [...normalizedInput.evidence_artifact_refs],
+        ...(normalizedInput.confidence === undefined
+          ? {}
+          : { confidence: normalizedInput.confidence }),
+      },
+    };
+    assertCanonicalEventConformance(event);
+    const eventJson = stableJson(event);
+    const syncRequest: SyncPushRequest = {
+      schema_version: "v1",
+      request_id: `req_${hashHex(stableJson({ event_id: event.event_id, client_id: this.clientId })).slice(0, 32)}`,
+      client_id: this.clientId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      events: [event],
+      erasures: [],
+    };
+    const syncConformance = validateConformance("syncApi", syncRequest);
+    if (!syncConformance.valid) {
+      throw new Error(`invalid sync push request: ${syncConformance.errors.join("; ")}`);
+    }
+
+    return this.withImmediateTransaction(() => {
+      const existing = this.findEventByIdempotency(this.trustZone.trust_zone_id, idempotencyKey);
+      if (existing !== undefined) {
+        const existingEvent = JSON.parse(existing.event_json) as CanonicalEvent<"Observation">;
+        if (existingEvent.request_fingerprint !== requestFingerprint) {
+          throw new IdempotencyConflictError({
+            idempotencyKey,
+            existingFingerprint: existingEvent.request_fingerprint,
+            incomingFingerprint: requestFingerprint,
+          });
+        }
+        return {
+          status: "replay",
+          event: existingEvent,
+          local_sequence: Number(existing.local_sequence),
+          outbox_id: this.findOutboxIdForEvent(existingEvent.event_id),
+          request_fingerprint: requestFingerprint,
+          protected_value_id: existing.protected_value_id,
+          source_event_id: input.sourceEventId ?? existingEvent.event_id,
+        };
+      }
+
+      this.db
+        .prepare(`
+          INSERT INTO protected_values (
+            protected_value_id, vault_ref, key_ref, nonce_ref, tag_ref,
+            nonce, tag, ciphertext, plaintext_digest, size_bytes, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          protectedValueId,
+          "vault_local",
+          "key_local_active",
+          `nonce_${protectedValueId.slice(3)}`,
+          `tag_${protectedValueId.slice(3)}`,
+          encrypted.nonce,
+          encrypted.tag,
+          encrypted.ciphertext,
+          hashHex(protectedPayload),
+          protectedPayload.byteLength,
+          recordedAt,
+        );
+
+      const eventInsert = this.db
+        .prepare(`
+          INSERT INTO canonical_events (
+            event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+            protected_value_id, event_json, recorded_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          event.event_id,
+          event.event_type,
+          this.trustZone.trust_zone_id,
+          idempotencyKey,
+          requestFingerprint,
+          protectedValueId,
+          eventJson,
+          recordedAt,
+        );
+
+      const outboxInsert = this.db
+        .prepare(`
+          INSERT INTO outbox (
+            event_id, state, attempts, available_at, push_request_json, created_at, updated_at
+          )
+          VALUES (?, 'pending', 0, ?, ?, ?, ?)
+        `)
+        .run(event.event_id, recordedAt, stableJson(syncRequest), recordedAt, recordedAt);
+
+      return {
+        status: "extracted",
+        event,
+        local_sequence: Number(eventInsert.lastInsertRowid),
+        outbox_id: Number(outboxInsert.lastInsertRowid),
+        request_fingerprint: requestFingerprint,
+        protected_value_id: protectedValueId,
+        source_event_id: input.sourceEventId ?? event.event_id,
+      };
+    });
+  }
+
+  /**
+   * Extract Observation from an EvidenceArtifact using product policy + metadata heuristic.
+   */
+  extractFromEvidenceArtifact(input: {
+    event: CanonicalEvent<"EvidenceArtifact">;
+    envelope?: CaptureEnvelope;
+    policyOverrides?: Partial<MeaningfulUnitPolicyConfig>;
+  }): ExtractionResult {
+    const evidence = input.event;
+    if (evidence.event_type !== "EvidenceArtifact") {
+      return {
+        status: "skipped",
+        reason: "not an EvidenceArtifact",
+        source_event_id: evidence.event_id,
+      };
+    }
+
+    const metaFromEnvelope = input.envelope;
+    const metaFromRequest = this.getCaptureRequestMeta(evidence.event_id);
+    const provider = metaFromEnvelope?.provider ?? metaFromRequest?.provider ?? "unknown";
+    const hookEventName =
+      metaFromEnvelope?.hook_event_name ?? metaFromRequest?.hook_event_name ?? "";
+    if (!hookEventName) {
+      return {
+        status: "skipped",
+        reason: "missing hook_event_name for policy gate",
+        source_event_id: evidence.event_id,
+      };
+    }
+
+    const plan = planObservationExtraction(
+      {
+        provider,
+        hook_event_name: hookEventName,
+        kind: evidence.payload.kind,
+        media_type: evidence.payload.media_type,
+        subject_ref: evidence.subject_ref,
+        artifact_id: evidence.payload.artifact_id,
+        source_event_id: evidence.event_id,
+      },
+      input.policyOverrides,
+    );
+
+    if (plan.status === "skip") {
+      return {
+        status: "skipped",
+        reason: plan.reason,
+        source_event_id: evidence.event_id,
+        hook_event_name: plan.hook_event_name,
+      };
+    }
+
+    return this.proposeObservationDraft({
+      statement: plan.statement,
+      evidenceArtifactRefs: [evidence.payload.artifact_id],
+      sourceEventId: evidence.event_id,
+      subjectRef: evidence.subject_ref,
+      validTime: evidence.valid_time,
+      observedAt: evidence.valid_time.start,
+      idempotencyKey: extractionObservationIdempotencyKey(evidence.event_id),
+    });
+  }
+
+  /**
+   * Explicit extract by evidence event id (CLI backfill).
+   */
+  extractFromEventId(
+    eventId: string,
+    options: { policyOverrides?: Partial<MeaningfulUnitPolicyConfig> } = {},
+  ): ExtractionResult {
+    const row = this.db
+      .prepare(
+        `
+          SELECT event_json
+          FROM canonical_events
+          WHERE event_id = ? AND trust_zone_id = ?
+        `,
+      )
+      .get(eventId, this.trustZone.trust_zone_id) as { event_json: string } | undefined;
+    if (row === undefined) {
+      return {
+        status: "failed",
+        error: `event not found in trust zone: ${eventId}`,
+        source_event_id: eventId,
+      };
+    }
+    const event = JSON.parse(row.event_json) as CanonicalEvent;
+    if (event.event_type !== "EvidenceArtifact") {
+      return {
+        status: "skipped",
+        reason: `event type is ${event.event_type}, expected EvidenceArtifact`,
+        source_event_id: eventId,
+      };
+    }
+    return this.extractFromEvidenceArtifact({
+      event: event as CanonicalEvent<"EvidenceArtifact">,
+      ...(options.policyOverrides === undefined
+        ? {}
+        : { policyOverrides: options.policyOverrides }),
+    });
+  }
+
+  private getCaptureRequestMeta(
+    eventId: string,
+  ): { provider: string; hook_event_name: string } | undefined {
+    const row = this.db
+      .prepare(
+        `
+          SELECT provider, hook_event_name
+          FROM capture_requests
+          WHERE event_id = ?
+        `,
+      )
+      .get(eventId) as { provider: string; hook_event_name: string } | undefined;
+    return row;
+  }
+
+  private artifactExistsInZone(artifactId: string, trustZoneId: string): boolean {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT event_json
+          FROM canonical_events
+          WHERE trust_zone_id = ? AND event_type = 'EvidenceArtifact'
+        `,
+      )
+      .all(trustZoneId) as { event_json: string }[];
+    for (const row of rows) {
+      try {
+        const event = JSON.parse(row.event_json) as CanonicalEvent<"EvidenceArtifact">;
+        if (event.payload?.artifact_id === artifactId) {
+          return true;
+        }
+      } catch {
+        // ignore malformed
+      }
+    }
+    return false;
   }
 
   outboxStatus(): OutboxStatus {

@@ -69,6 +69,8 @@ export async function runCli(
         return runProject(rest, env);
       case "capture-hook":
         return await runCaptureHook(rest, env);
+      case "extract":
+        return runExtract(rest, env);
       case "outbox":
         return runOutbox(rest, env);
       case "sync":
@@ -395,6 +397,7 @@ async function runCaptureHook(argv: readonly string[], env: NodeJS.ProcessEnv): 
       "project-id": { type: "string" },
       "trust-zone": { type: "string" },
       "idempotency-key": { type: "string" },
+      "no-extract": { type: "boolean", default: false },
     },
   });
   const provider = parsed.values.provider;
@@ -428,7 +431,10 @@ async function runCaptureHook(argv: readonly string[], env: NodeJS.ProcessEnv): 
       fallbackCapturedAt: new Date().toISOString(),
       ...(explicitIdempotencyKey === undefined ? {} : { explicitIdempotencyKey }),
     });
-    const result = store.captureHook(envelope);
+    // Product default: extract meaningful Observation when hook is eligible.
+    const result = store.captureHook(envelope, {
+      extract: parsed.values["no-extract"] !== true,
+    });
     if (!parsed.values.quiet) {
       writeJson(process.stdout, {
         ok: true,
@@ -441,9 +447,66 @@ async function runCaptureHook(argv: readonly string[], env: NodeJS.ProcessEnv): 
         request_fingerprint: result.request_fingerprint,
         trust_zone_id: result.event.trust_zone.trust_zone_id,
         project_id: store.projectId,
+        ...(result.extraction === undefined
+          ? {}
+          : {
+              extraction: {
+                status: result.extraction.status,
+                ...(result.extraction.status === "extracted" ||
+                result.extraction.status === "replay"
+                  ? {
+                      observation_event_id: result.extraction.event.event_id,
+                      observation_id: result.extraction.event.payload.observation_id,
+                    }
+                  : {}),
+                ...(result.extraction.status === "skipped"
+                  ? { reason: result.extraction.reason }
+                  : {}),
+                ...(result.extraction.status === "failed"
+                  ? { error: result.extraction.error }
+                  : {}),
+              },
+            }),
       });
     }
     return 0;
+  } finally {
+    store.close();
+  }
+}
+
+function runExtract(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const parsed = parseArgs({
+    args: [...argv],
+    allowPositionals: false,
+    strict: true,
+    options: {
+      "event-id": { type: "string" },
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+    },
+  });
+  const eventId = parsed.values["event-id"];
+  if (eventId === undefined || eventId.trim().length === 0) {
+    throw new CliUsageError("extract requires --event-id <evt_…>");
+  }
+  const store = openStore(
+    compactCommonOptions(
+      parsed.values.home,
+      parsed.values["project-id"],
+      parsed.values["trust-zone"],
+    ),
+    env,
+  );
+  try {
+    const result = store.extractFromEventId(eventId.trim());
+    writeJson(process.stdout, {
+      ok: result.status !== "failed",
+      command: "extract",
+      ...result,
+    });
+    return result.status === "failed" ? 1 : 0;
   } finally {
     store.close();
   }
@@ -908,6 +971,7 @@ COMMANDS
   init                 Initialize local runtime store (~/.carpeos by default)
   project identify     Print resolved project_id / client_id / trust zone
   capture-hook         Ingest a provider hook envelope (codex|claude|grok)
+  extract              Extract Observation from an EvidenceArtifact event
   outbox               Local durable outbox (status|lease|ack|retry)
   sync                 Push/pull with a remote sync edge (status|push|pull|once)
   retrieval            Rebuild local retrieval index or run embed jobs
@@ -1002,6 +1066,23 @@ OPTIONS
   --project-id <id>
   --trust-zone <id>
 `;
+    case "extract":
+      return `carpeos extract — EvidenceArtifact → Observation (metadata heuristic)
+
+USAGE
+  carpeos extract --event-id <evt_…> [options]
+
+OPTIONS
+  --event-id <id>           EvidenceArtifact event_id to extract from
+  --home <path>             Runtime home (default: $CARPEOS_HOME or ~/.carpeos)
+  --project-id <id>         Project identity
+  --trust-zone <id>         Trust zone
+
+NOTES
+  Uses product meaningful-unit policy (PostToolUse off by default).
+  Statement text is metadata-only (no decrypted transcript).
+  Idempotent: re-running the same event_id replays the Observation.
+`;
     case "capture-hook":
       return `carpeos capture-hook — ingest a provider session hook (no plaintext secrets in stdout)
 
@@ -1020,6 +1101,8 @@ OPTIONS
   --trust-zone <id>
 
 EXAMPLES
+  --no-extract              Skip Observation extraction (default: extract when eligible)
+
   cat hook.json | carpeos capture-hook --provider codex --fail-open
   carpeos capture-hook --provider claude --input argv '{"hook_event_name":"Stop"}'
 `;

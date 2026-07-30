@@ -112,7 +112,7 @@ describe("carpeos CLI", () => {
       timestamp: "2026-01-01T00:00:00Z",
       message: "SYNTHETIC_CLI_PRIVATE_SENTINEL",
     });
-    const first = runJson(["capture-hook", "--provider", "codex"], context, raw);
+    const first = runJson(["capture-hook", "--no-extract", "--provider", "codex"], context, raw);
     expect(first.status).toBe(0);
     expect(first.stdout).toMatchObject({
       ok: true,
@@ -122,7 +122,7 @@ describe("carpeos CLI", () => {
     });
     expect(first.rawStdout).not.toContain("SYNTHETIC_CLI_PRIVATE_SENTINEL");
 
-    const replay = runJson(["capture-hook", "--provider", "codex"], context, raw);
+    const replay = runJson(["capture-hook", "--no-extract", "--provider", "codex"], context, raw);
     expect(replay.status).toBe(0);
     expect(replay.stdout.status).toBe("replay");
     expect(replay.stdout.event_id).toBe(first.stdout.event_id);
@@ -135,10 +135,40 @@ describe("carpeos CLI", () => {
     });
   });
 
+  it("extracts Observation by default on eligible capture-hook", () => {
+    const context = makeContext();
+    runJson(["init"], context);
+    const captured = runJson(
+      ["capture-hook", "--provider", "codex"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_extract",
+        timestamp: "2026-01-01T00:00:00Z",
+        message: "SYNTHETIC_EXTRACT_SENTINEL",
+      }),
+    );
+    expect(captured.status).toBe(0);
+    const capturedOut = captured.stdout as {
+      event_id?: string;
+      extraction?: { status?: string; observation_event_id?: string };
+    };
+    expect(capturedOut.extraction?.status).toBe("extracted");
+    expect(capturedOut.extraction?.observation_event_id).toMatch(/^evt_/);
+    expect(captured.rawStdout).not.toContain("SYNTHETIC_EXTRACT_SENTINEL");
+
+    const extract = runJson(["extract", "--event-id", String(capturedOut.event_id)], context);
+    expect(extract.status).toBe(0);
+    expect((extract.stdout as { status?: string }).status).toBe("replay");
+
+    const status = runJson(["outbox", "status"], context);
+    expect((status.stdout as { status?: { pending?: number } }).status?.pending).toBe(2);
+  });
+
   it("surfaces outbox last_error on outbox status and sync status", () => {
     const context = makeContext();
     const captured = runJson(
-      ["capture-hook", "--provider", "codex", "--trust-zone", "tz_error_surface"],
+      ["capture-hook", "--no-extract", "--provider", "codex", "--trust-zone", "tz_error_surface"],
       context,
       JSON.stringify({
         hook_event_name: "SessionEnd",
@@ -209,7 +239,7 @@ describe("carpeos CLI", () => {
     );
 
     const fromConfig = runJson(
-      ["capture-hook", "--provider", "codex"],
+      ["capture-hook", "--no-extract", "--provider", "codex"],
       context,
       JSON.stringify({
         hook_event_name: "SessionEnd",
@@ -220,26 +250,30 @@ describe("carpeos CLI", () => {
     expect(fromConfig.status).toBe(0);
     expect(fromConfig.stdout.trust_zone_id).toBe("tz_local_default");
 
-    const fromEnv = spawnSync(process.execPath, [cliPath, "capture-hook", "--provider", "codex"], {
-      cwd: context.cwd,
-      env: {
-        ...process.env,
-        CARPEOS_HOME: context.home,
-        CARPEOS_MCP_TRUST_ZONE: "tz_from_env_zone",
+    const fromEnv = spawnSync(
+      process.execPath,
+      [cliPath, "capture-hook", "--no-extract", "--provider", "codex"],
+      {
+        cwd: context.cwd,
+        env: {
+          ...process.env,
+          CARPEOS_HOME: context.home,
+          CARPEOS_MCP_TRUST_ZONE: "tz_from_env_zone",
+        },
+        input: JSON.stringify({
+          hook_event_name: "SessionEnd",
+          session_id: "session_env_tz",
+          message: "env zone",
+        }),
+        encoding: "utf8",
       },
-      input: JSON.stringify({
-        hook_event_name: "SessionEnd",
-        session_id: "session_env_tz",
-        message: "env zone",
-      }),
-      encoding: "utf8",
-    });
+    );
     expect(fromEnv.status).toBe(0);
     const envStdout = JSON.parse(fromEnv.stdout.trim()) as { trust_zone_id?: string };
     expect(envStdout.trust_zone_id).toBe("tz_from_env_zone");
 
     const fromFlag = runJson(
-      ["capture-hook", "--provider", "codex", "--trust-zone", "tz_from_flag_zone"],
+      ["capture-hook", "--no-extract", "--provider", "codex", "--trust-zone", "tz_from_flag_zone"],
       context,
       JSON.stringify({
         hook_event_name: "SessionEnd",
@@ -276,7 +310,7 @@ describe("carpeos CLI", () => {
       sessionId: "session_synthetic",
       workspaceRoot: "synthetic-workspace",
     });
-    runJson(["capture-hook", "--provider", "grok"], context, raw);
+    runJson(["capture-hook", "--no-extract", "--provider", "grok"], context, raw);
     const leased = runJson(["outbox", "lease", "--limit", "1", "--lease-ms", "30000"], context);
     const lease = leased.stdout.lease as {
       lease_id: string;
@@ -315,7 +349,7 @@ describe("carpeos CLI", () => {
 
   it("returns structured input errors and fails open for provider hooks", () => {
     const context = makeContext();
-    const invalid = runJson(["capture-hook", "--provider", "claude"], context, "{");
+    const invalid = runJson(["capture-hook", "--no-extract", "--provider", "claude"], context, "{");
     expect(invalid.status).toBe(2);
     expect(invalid.stderr).toMatchObject({
       ok: false,
@@ -323,7 +357,7 @@ describe("carpeos CLI", () => {
     });
 
     const failOpen = runJson(
-      ["capture-hook", "--provider", "claude", "--fail-open"],
+      ["capture-hook", "--no-extract", "--provider", "claude", "--fail-open"],
       context,
       "{}",
     );
@@ -348,7 +382,7 @@ describe("carpeos CLI", () => {
     });
 
     const invalidIdempotency = runJson(
-      ["capture-hook", "--provider", "codex", "--idempotency-key", "bad"],
+      ["capture-hook", "--no-extract", "--provider", "codex", "--idempotency-key", "bad"],
       context,
       JSON.stringify({ hook_event_name: "Stop" }),
     );
@@ -373,7 +407,15 @@ describe("carpeos CLI", () => {
       message: "synthetic second value",
     });
     const captured = runJson(
-      ["capture-hook", "--provider", "codex", "--idempotency-key", idempotencyKey, "--quiet"],
+      [
+        "capture-hook",
+        "--no-extract",
+        "--provider",
+        "codex",
+        "--idempotency-key",
+        idempotencyKey,
+        "--quiet",
+      ],
       context,
       first,
     );
@@ -381,7 +423,7 @@ describe("carpeos CLI", () => {
     expect(captured.rawStdout).toBe("");
 
     const conflict = runJson(
-      ["capture-hook", "--provider", "codex", "--idempotency-key", idempotencyKey],
+      ["capture-hook", "--no-extract", "--provider", "codex", "--idempotency-key", idempotencyKey],
       context,
       second,
     );
@@ -395,7 +437,7 @@ describe("carpeos CLI", () => {
   it("returns leased items to pending state through outbox retry", () => {
     const context = makeContext();
     runJson(
-      ["capture-hook", "--provider", "claude"],
+      ["capture-hook", "--no-extract", "--provider", "claude"],
       context,
       JSON.stringify({
         hook_event_name: "Stop",
@@ -437,7 +479,7 @@ describe("carpeos CLI", () => {
       cwd: "synthetic-workspace",
     });
     const result = runJson(
-      ["capture-hook", "--provider", "codex", "--input", "argv", notify],
+      ["capture-hook", "--no-extract", "--provider", "codex", "--input", "argv", notify],
       context,
     );
     expect(result.status).toBe(0);
@@ -487,7 +529,7 @@ describe("carpeos CLI", () => {
     const secrets = writeSyncSecrets(context.home);
 
     const captured = runJson(
-      ["capture-hook", "--provider", "codex", "--trust-zone", "tz_outbox_zone"],
+      ["capture-hook", "--no-extract", "--provider", "codex", "--trust-zone", "tz_outbox_zone"],
       context,
       JSON.stringify({
         hook_event_name: "SessionEnd",
@@ -626,7 +668,7 @@ describe("carpeos CLI", () => {
     const context = makeContext();
     const secrets = writeSyncSecrets(context.home);
     const captured = runJson(
-      ["capture-hook", "--provider", "codex"],
+      ["capture-hook", "--no-extract", "--provider", "codex"],
       context,
       JSON.stringify({
         hook_event_name: "SessionEnd",
@@ -826,7 +868,7 @@ describe("carpeos CLI", () => {
     const results = await Promise.all(
       Array.from({ length: 8 }, (_, index) =>
         runProcess(
-          ["capture-hook", "--provider", "codex"],
+          ["capture-hook", "--no-extract", "--provider", "codex"],
           context,
           JSON.stringify({
             hook_event_name: "PostToolUse",
@@ -1017,7 +1059,7 @@ async function expectSyncPushNoAck(status: 401 | 409): Promise<void> {
   const context = makeContext();
   const secrets = writeSyncSecrets(context.home);
   runJson(
-    ["capture-hook", "--provider", "codex"],
+    ["capture-hook", "--no-extract", "--provider", "codex"],
     context,
     JSON.stringify({
       hook_event_name: "SessionEnd",
