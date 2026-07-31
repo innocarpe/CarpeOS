@@ -26,8 +26,21 @@ import {
   storeLocalVector,
 } from "@carpeos/retrieval";
 import type { RetrievalChunk, RetrievalQuery } from "@carpeos/schema";
-import { OutboxSyncCoordinator, SyncHttpError, SyncHttpTransport } from "@carpeos/sync-client";
+import {
+  type FetchLike,
+  OutboxSyncCoordinator,
+  SyncHttpError,
+  SyncHttpTransport,
+} from "@carpeos/sync-client";
 import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
+import {
+  CycleFailure,
+  hashPath,
+  hashText,
+  runSyncCycle,
+  type CyclePreflight,
+  type CycleSyncResult,
+} from "./cycle.js";
 import { packageName, packageVersion } from "./package-version.js";
 
 type JsonObject = Record<string, unknown>;
@@ -767,7 +780,7 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
     throw new CliUsageError(
-      "sync requires status, push, pull, once, or credential-hash (see: carpeos help sync)",
+      "sync requires status, push, pull, once, cycle, or credential-hash (see: carpeos help sync)",
     );
   }
 
@@ -787,6 +800,7 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
       "lease-ms": { type: "string", default: "30000" },
       "retry-delay-ms": { type: "string", default: "1000" },
       "pull-limit": { type: "string", default: "100" },
+      json: { type: "boolean", default: false },
     },
   });
   const store = openStore(
@@ -899,38 +913,86 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
         const coordinator = createSyncCoordinator(parsed.values, env, store);
         const limit = parseInteger(parsed.values.limit, "--limit", 1);
         const maxPages = parseInteger(parsed.values["max-pages"], "--max-pages", 1);
-        const pushed = [];
-        let exitCode = 0;
-        for (let index = 0; index < limit; index += 1) {
-          const result = await coordinator.pushOne();
-          if (result === undefined) {
-            break;
-          }
-          pushed.push(redactPushResult(result));
-          if (result.status !== "acked") {
-            exitCode = result.status === "retried" ? Math.max(exitCode, 1) : 4;
-            break;
-          }
-        }
-        const pulled = [];
-        if (exitCode === 0) {
-          for (let index = 0; index < maxPages; index += 1) {
-            const page = await coordinator.pullPage();
-            pulled.push(page);
-            if (!page.has_more) {
-              break;
-            }
-          }
-        }
+        const once = await runBoundedSyncOnce(coordinator, store, { limit, maxPages });
         writeJson(process.stdout, {
-          ok: exitCode === 0,
+          ok: once.exitCode === 0,
           command: "sync once",
-          pushed,
-          pulled,
+          pushed: once.pushed,
+          pulled: once.pulled,
           status: store.outboxStatus(),
           cursor: store.getSyncCursor(),
         });
-        return exitCode;
+        return once.exitCode;
+      }
+      case "cycle": {
+        const limit = parseInteger(parsed.values.limit, "--limit", 1);
+        const maxPages = parseInteger(parsed.values["max-pages"], "--max-pages", 1);
+        const pullLimit = parseInteger(parsed.values["pull-limit"], "--pull-limit", 1);
+        let coordinator: OutboxSyncCoordinator | undefined;
+        let transportCounts: Record<string, number> = {};
+        const result = await runSyncCycle({
+          home: store.runtimeDir,
+          projectId: store.projectId,
+          trustZoneId: store.trustZone.trust_zone_id,
+          bounds: { limit, maxPages, pullLimit },
+          commandArgv: ["sync", subcommand, ...rest],
+          distribution: "unknown",
+          preflight: () => {
+            const resolved = resolveCycleSyncConfig(parsed.values, env, store.runtimeDir);
+            transportCounts = {};
+            coordinator = createSyncCoordinatorFromConfig(
+              parsed.values,
+              store,
+              resolved,
+              (input: string | URL | Request, init?: RequestInit) => {
+                const method = init?.method ?? "GET";
+                transportCounts[method] = (transportCounts[method] ?? 0) + 1;
+                return globalThis.fetch(input, init);
+              },
+            );
+            return resolved.preflight;
+          },
+          syncOnce: async (): Promise<CycleSyncResult> => {
+            if (coordinator === undefined) {
+              throw new CycleFailure(
+                "config_invalid",
+                "preflight",
+                3,
+                "sync config was not resolved",
+              );
+            }
+            const once = await runBoundedSyncOnce(coordinator, store, { limit, maxPages });
+            if (once.exitCode !== 0) {
+              throw new CycleFailure("sync_failed", "sync", 7, "bounded sync push or pull failed");
+            }
+            return {
+              pushed: once.pushed,
+              pulled: once.pulled,
+              pushedCount: once.pushed.length,
+              pulledPages: once.pulled.length,
+              cursor: store.getSyncCursor(),
+              outboxStatus: store.outboxStatus(),
+              transportCounts,
+            };
+          },
+          rebuildRetrieval: () => {
+            try {
+              const rebuilt = withLocalRetrievalDatabase(store, (db) =>
+                rebuildLocalRetrievalIndex(db, new Date()),
+              );
+              return { chunks: rebuilt.chunks.length, freshness: rebuilt.freshness };
+            } catch (error) {
+              throw new CycleFailure(
+                "retrieval_failed",
+                "retrieval",
+                8,
+                error instanceof Error ? error.message : "retrieval rebuild failed",
+              );
+            }
+          },
+        });
+        writeJson(process.stdout, result);
+        return result.health.exit_code;
       }
       case "credential-hash": {
         const credentialFile =
@@ -1134,7 +1196,7 @@ COMMANDS
   extract              Extract Observation from an EvidenceArtifact event (via adjudicate)
   adjudicate           Knowledge adjudication: promote | hold | reject (+ --stats)
   outbox               Local durable outbox (status|lease|ack|retry)
-  sync                 Push/pull with a remote sync edge (status|push|pull|once)
+  sync                 Push/pull with a remote sync edge (status|push|pull|once|cycle)
   retrieval            Rebuild local retrieval index or run embed jobs
   memory               Search / get / context-pack over local memory
   help                 Show this help or help for a command
@@ -1331,13 +1393,14 @@ EXAMPLES
       return `carpeos sync — push/pull against a remote sync edge
 
 USAGE
-  carpeos sync <status|push|pull|once|credential-hash> [options]
+  carpeos sync <status|push|pull|once|cycle|credential-hash> [options]
 
 SUBCOMMANDS
   status               Local outbox + cursor + whether credentials are configured
   push                 Push leased outbox items
   pull                 Pull remote pages into the local store
   once                 push then pull
+  cycle                Bounded fail-closed one-run sync + retrieval rebuild
   credential-hash      SHA-256 of the sync credential file (for operator checks)
 
 OPTIONS
@@ -1347,15 +1410,20 @@ OPTIONS
   --url <url>          Or $CARPEOS_SYNC_URL
   --credential-file <path>
   --sync-key-file <path>
-  --limit <n>          push/once iterations (default 1)
-  --max-pages <n>      pull/once pages (default 1)
+  --limit <n>          push/once/cycle iterations (default 1)
+  --max-pages <n>      pull/once/cycle pages (default 1)
   --lease-ms <n>
   --retry-delay-ms <n>
   --pull-limit <n>
+  --json               cycle accepts this as an explicit JSON-output no-op
 
 EXAMPLES
   carpeos sync status
   carpeos sync once --url https://… --credential-file … --sync-key-file …
+  carpeos sync cycle --url https://… --credential-file … --sync-key-file … --limit 1 --max-pages 1
+
+NOTES
+  cycle is one foreground run. Launch scheduling is planned separately.
 `;
     case "retrieval":
       return `carpeos retrieval — local retrieval index maintenance
@@ -1454,6 +1522,12 @@ type SyncParsedValues = {
   "pull-limit"?: string;
 };
 
+type ResolvedCycleSyncConfig = Extract<ResolvedSyncConfig, { baseUrl: string }> & {
+  credentialFile: string;
+  syncKeyFile: string;
+  preflight: CyclePreflight;
+};
+
 type ResolvedSyncConfig =
   | {
       urlConfigured: boolean;
@@ -1478,19 +1552,81 @@ function createSyncCoordinator(
   if (!("baseUrl" in config)) {
     throw new CliUsageError("sync credentials are required");
   }
+  return createSyncCoordinatorFromConfig(values, store, config, globalThis.fetch);
+}
+
+function createSyncCoordinatorFromConfig(
+  values: SyncParsedValues,
+  store: LocalCaptureStore,
+  config: Extract<ResolvedSyncConfig, { baseUrl: string }>,
+  fetch: FetchLike,
+): OutboxSyncCoordinator {
   return new OutboxSyncCoordinator({
     store,
     transport: new SyncHttpTransport({
       baseUrl: config.baseUrl,
       bearerCredential: config.bearerCredential,
       clientId: store.clientId,
-      fetch: globalThis.fetch,
+      fetch,
     }),
     trustZoneSyncKey: config.trustZoneSyncKey,
     leaseMs: parseInteger(values["lease-ms"], "--lease-ms", 1),
     retryDelayMs: parseInteger(values["retry-delay-ms"], "--retry-delay-ms", 0),
     pullLimit: parseInteger(values["pull-limit"], "--pull-limit", 1),
   });
+}
+
+function resolveCycleSyncConfig(
+  values: SyncParsedValues,
+  env: NodeJS.ProcessEnv,
+  runtimeDir: string,
+): ResolvedCycleSyncConfig {
+  const url = firstConfigured(values.url, env.CARPEOS_SYNC_URL);
+  if (url === undefined) {
+    throw new CycleFailure("config_invalid", "preflight", 3, "sync URL is not configured");
+  }
+  const credentialFile =
+    firstConfigured(
+      values["credential-file"],
+      env.CARPEOS_SYNC_CREDENTIAL_FILE,
+      join(runtimeDir, "sync-credential"),
+    ) ?? join(runtimeDir, "sync-credential");
+  const syncKeyFile =
+    firstConfigured(
+      values["sync-key-file"],
+      env.CARPEOS_SYNC_KEY_FILE,
+      join(runtimeDir, "trust-zone-sync.key"),
+    ) ?? join(runtimeDir, "trust-zone-sync.key");
+  let baseUrl: string;
+  try {
+    baseUrl = normalizeSyncUrl(url);
+  } catch {
+    throw new CycleFailure("config_invalid", "preflight", 3, "sync URL is invalid");
+  }
+  let bearerCredential: string;
+  let trustZoneSyncKey: Uint8Array;
+  try {
+    bearerCredential = readCredentialFile(credentialFile);
+    trustZoneSyncKey = readSyncKeyFile(syncKeyFile);
+  } catch {
+    throw new CycleFailure("secret_invalid", "preflight", 4, "sync secret files are invalid");
+  }
+  return {
+    baseUrl,
+    bearerCredential,
+    trustZoneSyncKey,
+    urlConfigured: true,
+    credentialFileConfigured: true,
+    syncKeyFileConfigured: true,
+    credentialFile,
+    syncKeyFile,
+    preflight: {
+      syncUrlHashSha256: hashText(baseUrl),
+      credentialFileHashSha256: hashPath(credentialFile),
+      credentialSecretHashSha256: hashText(bearerCredential),
+      syncKeyFileHashSha256: hashPath(syncKeyFile),
+    },
+  };
 }
 
 function resolveSyncConfig(
@@ -1686,6 +1822,44 @@ function fileExists(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+async function runBoundedSyncOnce(
+  coordinator: OutboxSyncCoordinator,
+  store: LocalCaptureStore,
+  bounds: { limit: number; maxPages: number },
+): Promise<{
+  exitCode: number;
+  pushed: unknown[];
+  pulled: Awaited<ReturnType<OutboxSyncCoordinator["pullPage"]>>[];
+}> {
+  const pushed = [];
+  let exitCode = 0;
+  for (let index = 0; index < bounds.limit; index += 1) {
+    const result = await coordinator.pushOne();
+    if (result === undefined) {
+      break;
+    }
+    pushed.push(redactPushResult(result));
+    if (result.status !== "acked") {
+      exitCode = result.status === "retried" ? Math.max(exitCode, 1) : 4;
+      break;
+    }
+  }
+  const pulled = [];
+  if (exitCode === 0) {
+    for (let index = 0; index < bounds.maxPages; index += 1) {
+      const page = await coordinator.pullPage();
+      pulled.push(page);
+      if (!page.has_more) {
+        break;
+      }
+    }
+  }
+  // Keep the store parameter explicit because the helper is the shared boundary for
+  // store-mutating sync phases.
+  void store;
+  return { exitCode, pushed, pulled };
 }
 
 function redactPushResult(result: Awaited<ReturnType<OutboxSyncCoordinator["pushOne"]>>): unknown {
