@@ -11,6 +11,8 @@ knowledge adjudication. That thesis is SSOT under
 
 Related:
 
+- [PRD v1](../PRD-v1.md) — major-version product requirements snapshot
+
 - **[Product 2.0.0 DoD](product-2.0.0.md)** — knowledge adjudication (next major product)
 - [v1 Readiness](v1-readiness.md) — contract freeze gates G1–G9 (necessary packaging)
 - [v1 Freeze Decision](v1-freeze-decision.md) — Approve recorded; tag cut

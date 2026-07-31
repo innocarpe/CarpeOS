@@ -5,6 +5,8 @@ This document remains the SSOT for what 2.0 does and does not claim.
 
 Related:
 
+- [PRD v2](../PRD-v2.md) — major-version product requirements snapshot
+
 - [Product 3.0.0 DoD](product-3.0.0.md) — **next major**: retrieval-first knowledge graph
 - [Product 1.0.0 DoD](product-1.0.0.md) — **what shipped before** (honest scope)
 - [ADR 0012](../adr/0012-knowledge-adjudication.md) — adjudication model
