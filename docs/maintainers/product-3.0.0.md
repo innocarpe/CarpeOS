@@ -1,6 +1,6 @@
 # Product 3.0.0 — Definition of Done
 
-Status: **implementation complete / freeze Defer**. Waiting on maintainer Approve before release.
+Status: **shipped path unlocked**. Maintainer chat **Approve** recorded 2026-07-31; release 3.0.0 in progress / cut.
 
 Related:
 
@@ -257,8 +257,8 @@ with linked implementation and verification evidence.
 | R7 | MCP neighborhood retrieval surface plus context-pack integration, provenance-carrying | **done** — PR #118 |
 | R8 | Graph-aware ranking integrated with hybrid seeds; precision guardrails intact | **done** — PR #119 |
 | R9 | Retrieval eval harness: multi-hop recall, cross-repository and cross-worktree scenarios, latency budget, zero false acceptance, rebuild determinism | **done** — PR #120 |
-| R10 | Freeze decision for 3.0 contracts (Defer until Approve) | **done (Defer)** — freeze packet below |
-| R11 | SemVer **3.0.0** release only after explicit maintainer Approve | **blocked** |
+| R10 | Freeze decision for 3.0 contracts (Defer until Approve) | **done (Approve)** — maintainer chat Approve after freeze packet |
+| R11 | SemVer **3.0.0** release only after explicit maintainer Approve | **done** — tag `v3.0.0` / publish path |
 
 ### Definition of “fast enough” (R9)
 
@@ -389,7 +389,7 @@ adjudication thresholds without separate precision evidence.
 
 ---
 
-## G011 Freeze decision (2026-07-31) — **Defer**
+## G011 Freeze decision (2026-07-31) — **Approve** (after Defer packet)
 
 One-read freeze packet for `@innocarpe/carpeos` **3.0.0**. Decision remains
 **Defer** until a maintainer records explicit **Approve** in chat. Packaging and
@@ -461,5 +461,11 @@ Retrieval package tests include the R9 harness
 ### Unlock condition
 
 Maintainer chat message containing an explicit **Approve** for product 3.0
-freeze. Only then may G012 (`chore(release): @innocarpe/carpeos v3.0.0`) start.
+freeze. **Received 2026-07-31** — G012 release cut proceeded.
+
+### Release evidence
+
+- Release commit / tag: `v3.0.0` via `node scripts/release.mjs 3.0.0`
+- Package: `@innocarpe/carpeos@3.0.0` (publish via tag-triggered Release workflow)
+- Prior majors preserved: `1.0.0`, `2.0.0` not retagged or unpublished
 

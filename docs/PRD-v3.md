@@ -1,7 +1,6 @@
 # PRD v3 — CarpeOS 3.0
 
-Status: **Implementation complete on `main` / freeze Defer** — package release
-`@innocarpe/carpeos@3.0.0` blocked until maintainer **Approve**  
+Status: **Shipped path** — maintainer **Approve** recorded; `@innocarpe/carpeos@3.0.0` release cut  
 DoD SSOT: [maintainers/product-3.0.0.md](maintainers/product-3.0.0.md)  
 ADR: [0013-retrieval-first-projection.md](adr/0013-retrieval-first-projection.md)  
 Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md)
@@ -194,7 +193,7 @@ primary neighborhood path (snapshot BFS vs indexed walk).
 | R8 Graph-aware ranking | PR #119 |
 | R9 Eval harness | PR #120 |
 | R10 Freeze Defer | PR #121 |
-| R11 Release 3.0.0 | **blocked on Approve** |
+| R11 Release 3.0.0 | **Approve + release cut** |
 
 ---
 
