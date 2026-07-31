@@ -15,16 +15,23 @@ Implemented local projections include:
 - retrieval metadata indexes;
 - local vector records;
 - projection freshness records;
+- graph nodes and edges (product 3.0);
 - MCP context packs;
 - Obsidian Markdown notes and manifests.
 
 Planned future projections include:
 
+- **OKF export bundles** (product 3.1 — ADR 0014; rebuildable portable exchange
+  surface, not authority);
 - accepted-fact views;
-- graph indexes;
 - dashboards;
 - session timelines;
 - open-loop lists.
+
+OKF export (when implemented) is rebuilt by `@carpeos/okf-projection` and the
+`carpeos okf export` / `carpeos okf rebuild` CLI. It does not mutate canonical
+events. See [ADR 0014](../adr/0014-okf-export-projection.md) and
+[product-3.1.0](../maintainers/product-3.1.0.md).
 
 All projections MUST be rebuildable from visible canonical events, erasure
 records, configuration, and authorization policy.
