@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import type { CanonicalEvent, ErasureLedgerRecord, ProvenanceRef } from "@carpeos/schema";
 import { stableJson } from "./provenance.js";
 
-export const GRAPH_PROJECTION_VERSION = "graph_v1";
-export const GRAPH_PROJECTION_MIGRATION_ID = "graph_projection_v1";
+export const GRAPH_PROJECTION_VERSION = "graph_v2";
+export const GRAPH_PROJECTION_MIGRATION_ID = "graph_projection_v2";
 
 export type GraphNodeKind =
   | "project"
@@ -10,7 +11,9 @@ export type GraphNodeKind =
   | "meaning_unit"
   | "evidence"
   | "acceptance"
-  | "supersession";
+  | "supersession"
+  | "subject"
+  | "decision_thread";
 
 export type GraphEdgeKind =
   | "belongs_to"
@@ -19,7 +22,9 @@ export type GraphEdgeKind =
   | "supports"
   | "contradicts"
   | "supersedes"
-  | "accepted_by";
+  | "accepted_by"
+  | "about"
+  | "in_thread";
 
 export type GraphNode = {
   node_id: string;
@@ -380,6 +385,10 @@ export function buildGraphProjection(input: {
     }
   }
 
+  // Entity resolution (deterministic): subjects from subject_ref, decision threads
+  // from connected components of meaning units under the same subject.
+  resolveEntities({ events: input.events, nodes, edges, putNode, putEdge });
+
   return {
     projection_version: GRAPH_PROJECTION_VERSION,
     nodes: [...nodes.values()].sort((a, b) => a.node_id.localeCompare(b.node_id)),
@@ -482,4 +491,164 @@ function makeEdge(input: {
     source_event_id: input.sourceEventId,
     properties: {},
   };
+}
+
+/**
+ * Deterministic entity resolution for product 3.0 R5.
+ *
+ * Rules (stable, testable, no acceptance semantics):
+ * 1. Every event with a non-empty `subject_ref` links to a `subject` node
+ *    (`subj:<normalized>`). Meaning units get an `about` edge.
+ * 2. Decision threads are connected components of Observation/Claim nodes under
+ *    the same subject, joined by derived_from / supports / contradicts /
+ *    supersedes edges. Thread id is `thr:<sha256(sorted member ids)[:24]>`.
+ * 3. Clustering never creates AcceptanceDecision edges or implies acceptance.
+ */
+function resolveEntities(input: {
+  events: readonly CanonicalEvent[];
+  nodes: Map<string, GraphNode>;
+  edges: Map<string, GraphEdge>;
+  putNode: (node: GraphNode) => void;
+  putEdge: (edge: GraphEdge) => void;
+}): void {
+  const meaningUnitIds = new Set(
+    [...input.nodes.values()]
+      .filter((node) => node.node_kind === "meaning_unit")
+      .map((node) => node.node_id),
+  );
+
+  // 1) subject nodes + about edges
+  for (const event of input.events) {
+    const subjectRef = event.subject_ref?.trim();
+    if (!subjectRef) continue;
+    const subjectNodeId = subjectNodeIdFor(subjectRef);
+    const trustZoneId = event.trust_zone.trust_zone_id;
+    input.putNode({
+      node_id: subjectNodeId,
+      node_kind: "subject",
+      trust_zone_id: trustZoneId,
+      label: subjectRef,
+      properties: { subject_ref: subjectRef },
+    });
+    const unitNodeId = `evt:${event.event_id}`;
+    if (input.nodes.has(unitNodeId) && meaningUnitIds.has(unitNodeId)) {
+      input.putEdge(
+        makeEdge({
+          edgeKind: "about",
+          from: unitNodeId,
+          to: subjectNodeId,
+          trustZoneId,
+          sourceEventId: event.event_id,
+        }),
+      );
+    }
+  }
+
+  // 2) decision threads by subject-scoped connected components
+  const adjacency = new Map<string, Set<string>>();
+  const addAdj = (a: string, b: string): void => {
+    if (!meaningUnitIds.has(a) || !meaningUnitIds.has(b)) return;
+    if (!adjacency.has(a)) adjacency.set(a, new Set());
+    if (!adjacency.has(b)) adjacency.set(b, new Set());
+    adjacency.get(a)!.add(b);
+    adjacency.get(b)!.add(a);
+  };
+  for (const edge of input.edges.values()) {
+    if (
+      edge.edge_kind === "derived_from" ||
+      edge.edge_kind === "supports" ||
+      edge.edge_kind === "contradicts" ||
+      edge.edge_kind === "supersedes"
+    ) {
+      addAdj(edge.from_node_id, edge.to_node_id);
+    }
+  }
+
+  const subjectOf = new Map<string, string>();
+  for (const event of input.events) {
+    if (event.event_type !== "Observation" && event.event_type !== "Claim") continue;
+    const ref = event.subject_ref?.trim();
+    if (!ref) continue;
+    subjectOf.set(`evt:${event.event_id}`, ref);
+  }
+
+  const visited = new Set<string>();
+  for (const start of [...meaningUnitIds].sort()) {
+    if (visited.has(start)) continue;
+    const subjectRef = subjectOf.get(start);
+    if (subjectRef === undefined) continue;
+
+    const component: string[] = [];
+    const queue = [start];
+    visited.add(start);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      // Only walk members that share this subject.
+      if (subjectOf.get(current) !== subjectRef) continue;
+      component.push(current);
+      for (const next of adjacency.get(current) ?? []) {
+        if (visited.has(next)) continue;
+        if (subjectOf.get(next) !== subjectRef) continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+    if (component.length === 0) continue;
+    component.sort();
+    const threadId = threadNodeIdFor(subjectRef, component);
+    const trustZoneId =
+      input.nodes.get(component[0]!)?.trust_zone_id ??
+      input.events[0]?.trust_zone.trust_zone_id ??
+      "tz_unknown";
+    input.putNode({
+      node_id: threadId,
+      node_kind: "decision_thread",
+      trust_zone_id: trustZoneId,
+      label: subjectRef,
+      properties: {
+        subject_ref: subjectRef,
+        member_count: String(component.length),
+        root_event_id: component[0]!.replace(/^evt:/, ""),
+      },
+    });
+    // Link thread to subject.
+    input.putEdge(
+      makeEdge({
+        edgeKind: "about",
+        from: threadId,
+        to: subjectNodeIdFor(subjectRef),
+        trustZoneId,
+        sourceEventId: component[0]!.replace(/^evt:/, ""),
+      }),
+    );
+    for (const member of component) {
+      input.putEdge(
+        makeEdge({
+          edgeKind: "in_thread",
+          from: member,
+          to: threadId,
+          trustZoneId,
+          sourceEventId: member.replace(/^evt:/, ""),
+        }),
+      );
+    }
+  }
+}
+
+function subjectNodeIdFor(subjectRef: string): string {
+  const normalized = subjectRef
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, "_");
+  return `subj:${normalized.slice(0, 96) || "unknown"}`;
+}
+
+function threadNodeIdFor(subjectRef: string, memberNodeIds: readonly string[]): string {
+  const material = `${subjectRef.trim().toLowerCase()}|${memberNodeIds.join(",")}`;
+  // Inline sha256 via stableJson path is overkill; use node crypto.
+  return `thr:${sha256Hex(material).slice(0, 24)}`;
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
 }
