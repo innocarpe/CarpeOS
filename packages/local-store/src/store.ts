@@ -33,7 +33,8 @@ import type {
   WrappedDeviceKeyEnvelope,
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
-import { resolveProjectIdentity } from "./project-identity.js";
+import { resolveProjectIdentity, resolveWorktreeIdentity } from "./project-identity.js";
+import type { WorktreeIdentity } from "./project-identity.js";
 
 export type Clock = {
   now(): Date;
@@ -46,6 +47,8 @@ export type KeyProvider = {
 export type LocalStoreOptions = {
   runtimeDir: string;
   workspaceRoot: string;
+  /** Injectable git runner for deterministic identity tests. */
+  execGit?: (args: string[], cwd: string) => string;
   dbPath?: string;
   trustZoneId?: string;
   explicitProjectId?: string;
@@ -454,6 +457,7 @@ export const LOCAL_STORE_MIGRATION_IDS = [
   "003_knowledge_dispositions",
   "004_knowledge_disposition_reviews",
   "005_knowledge_dispositions_policy_key",
+  "006_capture_worktree_identity",
 ] as const;
 
 export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
@@ -462,6 +466,7 @@ const MIGRATION_ID: LocalStoreMigrationId = "001_local_capture_store";
 const SYNC_MIGRATION_ID: LocalStoreMigrationId = "002_sync_transfer_imports";
 const DISPOSITION_MIGRATION_ID: LocalStoreMigrationId = "003_knowledge_dispositions";
 const DISPOSITION_REVIEW_MIGRATION_ID: LocalStoreMigrationId = "004_knowledge_disposition_reviews";
+const WORKTREE_IDENTITY_MIGRATION_ID: LocalStoreMigrationId = "006_capture_worktree_identity";
 const DISPOSITION_POLICY_KEY_MIGRATION_ID: LocalStoreMigrationId =
   "005_knowledge_dispositions_policy_key";
 
@@ -578,6 +583,7 @@ export class LocalCaptureStore {
   readonly trustZone: TrustZone;
   readonly clientId: string;
   readonly projectId: string;
+  readonly worktree: WorktreeIdentity;
   private readonly db: DatabaseSync;
   private readonly clock: Clock;
   private readonly keyBytes: Uint8Array;
@@ -604,9 +610,16 @@ export class LocalCaptureStore {
       runtimeDir: this.runtimeDir,
       workspaceRoot: options.workspaceRoot,
       explicitProjectId: options.explicitProjectId,
+      ...(options.execGit === undefined ? {} : { execGit: options.execGit }),
     });
     this.clientId = identity.device_client_id;
     this.projectId = identity.project_id;
+    // Facet, not a partition: sibling worktrees of one repository share knowledge.
+    this.worktree = resolveWorktreeIdentity({
+      runtimeDir: this.runtimeDir,
+      workspaceRoot: options.workspaceRoot,
+      ...(options.execGit === undefined ? {} : { execGit: options.execGit }),
+    });
     this.trustZone = {
       trust_zone_id: options.trustZoneId ?? defaultTrustZoneId(this.clientId),
       isolation: "local_device",
@@ -711,9 +724,10 @@ export class LocalCaptureStore {
           INSERT INTO capture_requests (
             event_id, provider, hook_event_name, trust_zone_id, idempotency_key,
             request_fingerprint, envelope_metadata_json, protected_value_id, captured_at,
-            recorded_at
+            recorded_at, project_id, worktree_id, worktree_name, git_branch,
+            is_linked_worktree
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           built.event.event_id,
@@ -737,6 +751,11 @@ export class LocalCaptureStore {
           protectedValueId,
           normalizedEnvelope.captured_at,
           recordedAt,
+          this.projectId,
+          this.worktree.worktree_id,
+          this.worktree.worktree_name,
+          this.worktree.git_branch ?? null,
+          this.worktree.is_linked_worktree ? 1 : 0,
         );
       maybeFail(options, "capture_request");
 
@@ -3025,6 +3044,32 @@ export class LocalCaptureStore {
         this.db
           .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
           .run(DISPOSITION_POLICY_KEY_MIGRATION_ID, this.clock.now().toISOString());
+      }
+
+      const worktreeIdentityExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(WORKTREE_IDENTITY_MIGRATION_ID);
+      if (worktreeIdentityExisting === undefined) {
+        // Additive columns only; capture_requests stays append-only.
+        // Absolute workspace paths are never stored here (ADR 0013 privacy shape).
+        for (const column of [
+          "project_id TEXT",
+          "worktree_id TEXT",
+          "worktree_name TEXT",
+          "git_branch TEXT",
+          "is_linked_worktree INTEGER",
+        ]) {
+          this.db.exec(`ALTER TABLE capture_requests ADD COLUMN ${column}`);
+        }
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_capture_requests_project
+            ON capture_requests (project_id, captured_at);
+          CREATE INDEX IF NOT EXISTS idx_capture_requests_worktree
+            ON capture_requests (worktree_id, captured_at);
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(WORKTREE_IDENTITY_MIGRATION_ID, this.clock.now().toISOString());
       }
     });
   }

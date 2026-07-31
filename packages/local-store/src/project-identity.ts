@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { hashHex } from "@carpeos/capture";
 
 export type ProjectIdentity = {
@@ -16,6 +16,53 @@ export type ResolveProjectIdentityOptions = {
   explicitProjectId?: string | undefined;
   execGit?: (args: string[], cwd: string) => string;
 };
+
+/**
+ * Where work happened, as a retrieval **facet**.
+ *
+ * Knowledge partitions by `project_id`; a worktree never partitions knowledge,
+ * so sibling checkouts of one repository share one brain. See ADR 0013.
+ *
+ * `worktree_id` is a stable hash and `worktree_name` is a bare directory name.
+ * The absolute worktree root is deliberately not part of this record: the public
+ * boundary check rejects absolute home paths, and directory names get renamed.
+ */
+export type WorktreeIdentity = {
+  worktree_id: string;
+  worktree_name: string;
+  git_branch?: string;
+  is_linked_worktree: boolean;
+  basis_kind: "git_worktree" | "workspace_root";
+};
+
+export type ResolveWorktreeIdentityOptions = {
+  runtimeDir: string;
+  workspaceRoot: string;
+  execGit?: (args: string[], cwd: string) => string;
+};
+
+/**
+ * Resolve the worktree facet for a workspace.
+ *
+ * Git supplies the checkout root, branch, and linked-worktree flag. Outside a
+ * repository the workspace root itself is the only available basis, which is
+ * recorded as `basis_kind: "workspace_root"` so callers can tell the cases apart.
+ */
+export function resolveWorktreeIdentity(options: ResolveWorktreeIdentityOptions): WorktreeIdentity {
+  const deviceClientId = readOrCreateDeviceClientId(options.runtimeDir);
+  const execGit = options.execGit ?? defaultExecGit;
+  const gitRoot = readGitWorktreeRoot(options.workspaceRoot, execGit);
+  const root = gitRoot ?? resolve(options.workspaceRoot);
+  const branch = gitRoot === undefined ? undefined : readGitBranch(root, execGit);
+
+  return {
+    worktree_id: `wt_${hashHex(`${deviceClientId}:${root}`).slice(0, 24)}`,
+    worktree_name: sanitizeWorktreeName(basename(root)),
+    ...(branch === undefined ? {} : { git_branch: branch }),
+    is_linked_worktree: gitRoot === undefined ? false : isLinkedWorktree(root, execGit),
+    basis_kind: gitRoot === undefined ? "workspace_root" : "git_worktree",
+  };
+}
 
 export function resolveProjectIdentity(options: ResolveProjectIdentityOptions): ProjectIdentity {
   const deviceClientId = readOrCreateDeviceClientId(options.runtimeDir);
@@ -74,6 +121,53 @@ function readSanitizedGitRemoteIdentity(
   } catch {
     return undefined;
   }
+}
+
+function readGitWorktreeRoot(
+  workspaceRoot: string,
+  execGit: (args: string[], cwd: string) => string,
+): string | undefined {
+  try {
+    const top = execGit(["rev-parse", "--show-toplevel"], workspaceRoot).trim();
+    return top.length > 0 ? resolve(top) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readGitBranch(
+  root: string,
+  execGit: (args: string[], cwd: string) => string,
+): string | undefined {
+  try {
+    const branch = execGit(["rev-parse", "--abbrev-ref", "HEAD"], root).trim();
+    // Detached HEAD reports "HEAD"; record no branch rather than a misleading one.
+    return branch.length > 0 && branch !== "HEAD" ? branch : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A linked worktree resolves its own git dir separately from the shared common dir. */
+function isLinkedWorktree(root: string, execGit: (args: string[], cwd: string) => string): boolean {
+  try {
+    const gitDir = resolve(root, execGit(["rev-parse", "--git-dir"], root).trim());
+    const commonDir = resolve(root, execGit(["rev-parse", "--git-common-dir"], root).trim());
+    return gitDir !== commonDir;
+  } catch {
+    return false;
+  }
+}
+
+/** Bare directory label for operator recall; never an absolute path. */
+function sanitizeWorktreeName(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 64);
+  return normalized.length > 0 ? normalized : "workspace";
 }
 
 function defaultExecGit(args: string[], cwd: string): string {

@@ -355,6 +355,76 @@ describe("LocalCaptureStore", () => {
     expect(store.countRows("protected_values")).toBe(2);
   });
 
+  it("records worktree facet on capture without storing absolute paths", () => {
+    const runtimeDir = tempDir();
+    const store = new LocalCaptureStore({
+      runtimeDir,
+      workspaceRoot: runtimeDir,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+      clock: { now: () => now },
+    });
+    const captured = store.captureHook(makeEnvelope());
+
+    expect(store.worktree.worktree_id).toMatch(/^wt_[a-f0-9]{24}$/);
+    expect(store.worktree.worktree_name.length).toBeGreaterThan(0);
+    expect(store.worktree.worktree_name).not.toContain("/");
+
+    const db = new DatabaseSync(store.dbPath);
+    const row = db
+      .prepare(
+        "SELECT project_id, worktree_id, worktree_name, git_branch, is_linked_worktree FROM capture_requests WHERE event_id = ?",
+      )
+      .get(captured.event.event_id) as {
+      project_id: string;
+      worktree_id: string;
+      worktree_name: string;
+      git_branch: string | null;
+      is_linked_worktree: number;
+    };
+    expect(row.project_id).toBe(store.projectId);
+    expect(row.worktree_id).toBe(store.worktree.worktree_id);
+    expect(row.worktree_name).toBe(store.worktree.worktree_name);
+    expect([0, 1]).toContain(Number(row.is_linked_worktree));
+
+    // Privacy shape: the absolute workspace root must never be persisted here.
+    const serialized = JSON.stringify(row);
+    expect(serialized).not.toContain(runtimeDir);
+    db.close();
+    store.close();
+  });
+
+  it("keeps the same project partition across sibling worktrees of one repository", () => {
+    const runtimeDir = tempDir();
+    const remote = "git@github.com:example/synthetic-repo.git";
+    const makeAt = (root: string) =>
+      new LocalCaptureStore({
+        runtimeDir,
+        dbPath: join(runtimeDir, "carpeos.sqlite"),
+        workspaceRoot: root,
+        keyProvider: new StaticKeyProvider(staticMaterial),
+        clock: { now: () => now },
+        // Both checkouts report the same remote; only the checkout root differs.
+        execGit: (args: string[], cwd: string) => {
+          if (args[0] === "config") return remote;
+          if (args[1] === "--show-toplevel") return cwd;
+          if (args[1] === "--abbrev-ref") return "main";
+          if (args[1] === "--git-dir") return cwd + "/.git";
+          if (args[1] === "--git-common-dir") return cwd + "/.git";
+          throw new Error("unexpected git call");
+        },
+      });
+
+    const primary = makeAt(join(runtimeDir, "repo-main"));
+    const linked = makeAt(join(runtimeDir, "repo-feature"));
+
+    expect(linked.projectId).toBe(primary.projectId);
+    expect(linked.worktree.worktree_id).not.toBe(primary.worktree.worktree_id);
+    expect(primary.worktree.worktree_name).toBe("repo-main");
+    expect(linked.worktree.worktree_name).toBe("repo-feature");
+    primary.close();
+    linked.close();
+  });
+
   it("keeps migrations idempotent across reopen", () => {
     const runtimeDir = tempDir();
     const dbPath = join(runtimeDir, "carpeos.sqlite");
