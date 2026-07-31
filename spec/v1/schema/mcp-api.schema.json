@@ -37,7 +37,13 @@
       "$ref": "#/$defs/memoryRelatedInput"
     },
     {
+      "$ref": "#/$defs/memoryNeighborhoodInput"
+    },
+    {
       "$ref": "#/$defs/memoryRelatedOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryNeighborhoodOutput"
     },
     {
       "$ref": "#/$defs/memoryCaptureInput"
@@ -63,7 +69,8 @@
         "memory_timeline",
         "memory_related",
         "memory_capture",
-        "memory_propose_claim"
+        "memory_propose_claim",
+        "memory_neighborhood"
       ]
     },
     "contextBudget": {
@@ -910,6 +917,118 @@
           "$ref": "#/$defs/safeError"
         }
       }
+    },
+    "memoryNeighborhoodInput": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonInput"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
+          "properties": {
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_neighborhood"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "record_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            },
+            "max_nodes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "edge_kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            }
+          }
+        }
+      ]
+    },
+    "memoryNeighborhoodOutput": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/budgetedRecordOutput"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "const": "memory_neighborhood"
+            },
+            "graph": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "root_id",
+                "nodes_used",
+                "edges_used",
+                "max_depth",
+                "max_nodes",
+                "omissions",
+                "edges"
+              ],
+              "properties": {
+                "root_id": {
+                  "type": "string"
+                },
+                "nodes_used": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "edges_used": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "max_depth": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "max_nodes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "omissions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

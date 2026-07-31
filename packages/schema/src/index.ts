@@ -654,6 +654,7 @@ export type McpToolName =
   | "memory_trace"
   | "memory_timeline"
   | "memory_related"
+  | "memory_neighborhood"
   | "memory_capture"
   | "memory_propose_claim";
 
@@ -727,6 +728,14 @@ export type MemoryTimelineInput = McpCommonInput<"memory_timeline"> & {
 export type MemoryRelatedInput = McpCommonInput<"memory_related"> & {
   record_id: string;
   max_depth?: number;
+  context_budget: ContextBudget;
+};
+
+export type MemoryNeighborhoodInput = McpCommonInput<"memory_neighborhood"> & {
+  record_id: string;
+  max_depth?: number;
+  max_nodes?: number;
+  edge_kinds?: string[];
   context_budget: ContextBudget;
 };
 
@@ -824,11 +833,28 @@ export type McpApiMessage =
       error?: McpSafeError;
     }
   | MemoryRelatedInput
+  | MemoryNeighborhoodInput
   | {
       schema_version: SchemaVersion;
       tool: "memory_related";
       records: McpRecordRef[];
       budget: ContextBudgetUsage;
+      error?: McpSafeError;
+    }
+  | {
+      schema_version: SchemaVersion;
+      tool: "memory_neighborhood";
+      records: McpRecordRef[];
+      budget: ContextBudgetUsage;
+      graph?: {
+        root_id: string;
+        nodes_used: number;
+        edges_used: number;
+        max_depth: number;
+        max_nodes: number;
+        omissions: Array<Record<string, unknown>>;
+        edges: Array<Record<string, unknown>>;
+      };
       error?: McpSafeError;
     }
   | MemoryCaptureInput

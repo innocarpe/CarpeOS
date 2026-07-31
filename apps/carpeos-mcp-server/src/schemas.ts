@@ -32,6 +32,7 @@ const inputDefByTool = {
   memory_trace: "memoryTraceInput",
   memory_timeline: "memoryTimelineInput",
   memory_related: "memoryRelatedInput",
+  memory_neighborhood: "memoryNeighborhoodInput",
   memory_capture: "memoryCaptureInput",
   memory_propose_claim: "memoryProposeClaimInput",
 } as const;

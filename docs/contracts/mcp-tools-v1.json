@@ -73,6 +73,15 @@
       "summary": "Deterministic related-record graph neighborhood."
     },
     {
+      "name": "memory_neighborhood",
+      "kind": "read",
+      "requires_context_budget": true,
+      "required_input": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
+      "optional_input": ["edge_kinds", "max_depth", "max_nodes"],
+      "success_output_keys": ["budget", "graph", "records", "schema_version", "tool"],
+      "summary": "Bounded graph neighborhood walk over materialized edges; returns budgeted records plus graph provenance."
+    },
+    {
       "name": "memory_capture",
       "kind": "write",
       "requires_context_budget": false,

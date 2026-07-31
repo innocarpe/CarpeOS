@@ -12,6 +12,7 @@ import {
   rebuildLocalRetrievalIndex,
   searchLocalRetrievalIndex,
   sha256Hex,
+  walkGraphNeighborhood,
 } from "@carpeos/retrieval";
 import { validateConformance } from "@carpeos/schema";
 import type {
@@ -32,6 +33,7 @@ import type {
   MemoryProposeClaimInput,
   MemoryProposeClaimOutput,
   MemoryRelatedInput,
+  MemoryNeighborhoodInput,
   MemorySearchInput,
   MemoryTimelineInput,
   MemoryTraceInput,
@@ -50,6 +52,7 @@ export const CARPEOS_MCP_TOOLS = [
   "memory_trace",
   "memory_timeline",
   "memory_related",
+  "memory_neighborhood",
   "memory_capture",
   "memory_propose_claim",
 ] as const satisfies readonly McpToolName[];
@@ -178,6 +181,8 @@ export class CarpeosMcpApplication {
         return this.memoryTimeline(input as MemoryTimelineInput);
       case "memory_related":
         return this.memoryRelated(input as MemoryRelatedInput);
+      case "memory_neighborhood":
+        return this.memoryNeighborhood(input as MemoryNeighborhoodInput);
       case "memory_capture":
         return this.memoryCapture(input as MemoryCaptureInput);
       case "memory_propose_claim":
@@ -341,6 +346,84 @@ export class CarpeosMcpApplication {
       tool: "memory_related",
       records: budgeted.items,
       budget: budgeted.budget,
+    };
+  }
+
+  private memoryNeighborhood(input: MemoryNeighborhoodInput): Record<string, unknown> {
+    const visibility = this.requireVisibility(input.visibility);
+    const rootId = requireString(input.record_id, "record_id");
+    const walk = withLocalRetrievalDatabase(this.store, (db) => {
+      rebuildLocalRetrievalIndex(db, fixedProjectionNow());
+      return walkGraphNeighborhood(db, {
+        root_id: rootId,
+        max_depth: input.max_depth ?? 2,
+        max_nodes: input.max_nodes ?? 64,
+        visible_trust_zone_ids: visibility.visible_trust_zone_ids,
+        ...(input.edge_kinds === undefined || input.edge_kinds.length === 0
+          ? {}
+          : {
+              edge_kinds: input.edge_kinds as Array<
+                | "belongs_to"
+                | "observed_in"
+                | "derived_from"
+                | "supports"
+                | "contradicts"
+                | "supersedes"
+                | "accepted_by"
+                | "about"
+                | "in_thread"
+              >,
+            }),
+      });
+    });
+
+    const snapshot = this.snapshot(visibility.visible_trust_zone_ids);
+    const records = walk.nodes
+      .map((node) => {
+        const eventId =
+          node.source_event_id ??
+          (node.node_id.startsWith("evt:") ? node.node_id.slice(4) : undefined);
+        if (eventId === undefined) {
+          return {
+            record_id: node.node_id,
+            record_kind: "projection" as const,
+            trust_zone_id: node.trust_zone_id,
+            lifecycle_status: "active" as const,
+            epistemic_authority: "derived" as const,
+            redactions: [
+              `graph_node_kind:${node.node_kind}`,
+              ...(node.label ? [`label:${node.label.slice(0, 120)}`] : []),
+            ],
+          };
+        }
+        const found = snapshot.events.find((item) => item.event_id === eventId);
+        if (found === undefined) {
+          return undefined;
+        }
+        return snapshotToRecordRef(found, visibility.protected_value_policy);
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== undefined);
+
+    const budgeted = applyBudget(records, input.context_budget);
+    return {
+      schema_version: "v1",
+      tool: "memory_neighborhood",
+      records: budgeted.items,
+      budget: budgeted.budget,
+      graph: {
+        root_id: walk.root_id,
+        nodes_used: walk.budgets.nodes_used,
+        edges_used: walk.budgets.edges_used,
+        max_depth: walk.budgets.max_depth,
+        max_nodes: walk.budgets.max_nodes,
+        omissions: walk.omissions,
+        edges: walk.edges.map((edge) => ({
+          edge_id: edge.edge_id,
+          edge_kind: edge.edge_kind,
+          from_node_id: edge.from_node_id,
+          to_node_id: edge.to_node_id,
+        })),
+      },
     };
   }
 
