@@ -1,3 +1,4 @@
+import { ADJUDICATION_POLICY_VERSION } from "@carpeos/capture";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -198,7 +199,7 @@ describe("carpeos CLI", () => {
     expect(first.stdout).toMatchObject({
       ok: true,
       command: "adjudicate",
-      policy_version: "adj_v1",
+      policy_version: ADJUDICATION_POLICY_VERSION,
     });
 
     const second = runJson(
@@ -229,7 +230,9 @@ describe("carpeos CLI", () => {
       count: 2,
     });
     const rows = history.stdout.history as Array<{ policy_version: string }>;
-    expect(rows.map((row) => row.policy_version).sort()).toEqual(["adj_test_v2", "adj_v1"]);
+    expect(rows.map((row) => row.policy_version).sort()).toEqual(
+      ["adj_test_v2", ADJUDICATION_POLICY_VERSION].sort(),
+    );
   });
 
   it("defaults memory search to active-only and opts into draft/held with --include-held", () => {

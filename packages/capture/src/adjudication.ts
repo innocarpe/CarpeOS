@@ -11,7 +11,7 @@ import {
 } from "./meaningful-unit-policy.js";
 import { buildMetadataObservationStatement } from "./extract-observation.js";
 
-export const ADJUDICATION_POLICY_VERSION = "adj_v1" as const;
+export const ADJUDICATION_POLICY_VERSION = "adj_v2" as const;
 
 export type KnowledgeDisposition = "promote" | "hold" | "reject";
 
@@ -78,10 +78,19 @@ const CANDIDATE_SPAN_LIMIT = 3;
 const STRUCTURED_DUMP =
   /[{}[\]]|\b(?:reasoning_content|tool_calls?|raw_payload|transcript)\s*[:=]/i;
 const CANDIDATE_KIND_PATTERNS: readonly [KnowledgeCandidateKind, RegExp][] = [
-  ["decision", /\b(decid(?:e|ed|ing|es)|decision|adopt(?:ed)?|chose|choose|selected?|default)\b/i],
-  ["preference", /\b(prefer(?:red|s|ring)?|preference|would rather|favor(?:ed|s)?)\b/i],
-  ["constraint", /\b(must(?: not)?|should not|never|always|required?|forbidden|constraint)\b/i],
-  ["procedure", /\b(procedure|workflow|runbook|playbook|steps?)\b/i],
+  [
+    "decision",
+    /\b(decid(?:e|ed|ing|es)|decision|adopt(?:ed)?|chose|choose|selected?|default to|I(?:'|’)ll|I will|we will|let(?:'|’)s|going (?:to|with)|switch to)\b|결정|하자|할게|사용하(?:자|고|는|기로)|적용하(?:자|고|는|기로)/i,
+  ],
+  [
+    "preference",
+    /\b(prefer(?:red|s|ring)?|preference|would rather|favor(?:ed|s)?|rather than)\b|선호|좋아하|원해/i,
+  ],
+  [
+    "constraint",
+    /\b(must(?: not)?|should not|never|always|required?|forbidden|constraint)\b|하면 안|금지|필수|항상|절대/i,
+  ],
+  ["procedure", /\b(procedure|workflow|runbook|playbook|steps?)\b|절차|워크플로|런북/i],
 ];
 
 /**
@@ -329,8 +338,15 @@ function finish(
 }
 
 function classifyCandidateKind(text: string): KnowledgeCandidateKind | undefined {
-  for (const [kind, pattern] of CANDIDATE_KIND_PATTERNS) {
-    if (pattern.test(text)) return kind;
+  const normalized = text.replace(
+    /^\s*(?:Message|Summary|Decision|Preference|Constraint|Procedure)\s*:\s*/i,
+    "",
+  );
+  // Prefer more specific kinds before generic decision terms.
+  const order: KnowledgeCandidateKind[] = ["preference", "constraint", "procedure", "decision"];
+  for (const kind of order) {
+    const pattern = CANDIDATE_KIND_PATTERNS.find(([k]) => k === kind)?.[1];
+    if (pattern && (pattern.test(normalized) || pattern.test(text))) return kind;
   }
   return undefined;
 }

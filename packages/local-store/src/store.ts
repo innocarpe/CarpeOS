@@ -15,6 +15,7 @@ import {
   hashHex,
   isIdempotencyKey,
   planObservationExtraction,
+  signalsFromTranscriptPath,
   stableJson,
   type AdjudicationResult,
   type KnowledgeDisposition,
@@ -209,6 +210,12 @@ type StoredHeldReview = {
 };
 
 /** Pull a bounded rule-scoring signal from supported payload fields. */
+
+function envelopePayloadTranscriptPath(payload: unknown): unknown {
+  if (payload === null || typeof payload !== "object") return undefined;
+  const record = payload as Record<string, unknown>;
+  return record.transcript_path;
+}
 function signalFromUnknownPayload(payload: unknown): string | undefined {
   return signalFromPayload(payload, false);
 }
@@ -1789,10 +1796,25 @@ export class LocalCaptureStore {
   ): { scoring?: string; candidate?: string } {
     const envelopeScoring = signalFromUnknownPayload(envelope?.payload);
     const envelopeCandidate = candidateTextFromUnknownPayload(envelope?.payload);
-    if (envelopeScoring !== undefined || envelopeCandidate !== undefined) {
+    // Host hooks (especially Claude) often only attach transcript_path. Prefer
+    // explicit inline fields when present, then recover prose from the local
+    // transcript tail so statements are not metadata-only shells.
+    const envelopeTranscript = signalsFromTranscriptPath(
+      envelopePayloadTranscriptPath(envelope?.payload),
+    );
+    if (
+      envelopeScoring !== undefined ||
+      envelopeCandidate !== undefined ||
+      envelopeTranscript.scoring !== undefined ||
+      envelopeTranscript.candidate !== undefined
+    ) {
       return {
-        ...(envelopeScoring === undefined ? {} : { scoring: envelopeScoring }),
-        ...(envelopeCandidate === undefined ? {} : { candidate: envelopeCandidate }),
+        ...(envelopeScoring === undefined && envelopeTranscript.scoring === undefined
+          ? {}
+          : { scoring: envelopeScoring ?? envelopeTranscript.scoring }),
+        ...(envelopeCandidate === undefined && envelopeTranscript.candidate === undefined
+          ? {}
+          : { candidate: envelopeCandidate ?? envelopeTranscript.candidate }),
       };
     }
     const contentRef = evidence.payload?.content_ref;
@@ -1809,12 +1831,23 @@ export class LocalCaptureStore {
       const parsed = JSON.parse(Buffer.from(plaintext).toString("utf8")) as unknown;
       if (parsed === null || typeof parsed !== "object") return {};
       const record = parsed as Record<string, unknown>;
+      const nested =
+        record.payload !== null && typeof record.payload === "object"
+          ? (record.payload as Record<string, unknown>)
+          : undefined;
       const scoring = signalFromUnknownPayload(record.payload) ?? signalFromUnknownPayload(record);
       const candidate =
         candidateTextFromUnknownPayload(record.payload) ?? candidateTextFromUnknownPayload(record);
+      const transcript = signalsFromTranscriptPath(
+        nested?.transcript_path ?? record.transcript_path,
+      );
       return {
-        ...(scoring === undefined ? {} : { scoring }),
-        ...(candidate === undefined ? {} : { candidate }),
+        ...(scoring === undefined && transcript.scoring === undefined
+          ? {}
+          : { scoring: scoring ?? transcript.scoring }),
+        ...(candidate === undefined && transcript.candidate === undefined
+          ? {}
+          : { candidate: candidate ?? transcript.candidate }),
       };
     } catch {
       return {};
