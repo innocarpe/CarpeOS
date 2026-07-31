@@ -466,6 +466,9 @@ freeze. **Received 2026-07-31** — G012 release cut proceeded.
 
 ### Release evidence
 
+- Patch: `@innocarpe/carpeos@3.0.1` / tag `v3.0.1` — observation transcript + host payload fixes (#125, #126)
+
+
 - Release commit / tag: `v3.0.0` via `node scripts/release.mjs 3.0.0`
 - Package: `@innocarpe/carpeos@3.0.0` (publish via tag-triggered Release workflow)
 - Prior majors preserved: `1.0.0`, `2.0.0` not retagged or unpublished

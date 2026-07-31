@@ -16,9 +16,27 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [3.0.1] - 2026-07-31
 
+### Notes
+
+- Patch release on the 3.0 line. Fixes live-home observation quality where most
+  statements were metadata shells (`Captured … SessionEnd evidence`). Does **not**
+  retag or unpublish `1.0.0` / `2.0.0` / `3.0.0`.
+
+### Fixed
+
+- Recover knowledge candidate prose from host transcript tails (Claude-style JSONL
+  under allowed local roots) when envelopes only carry `transcript_path`
+- Normalize host hook aliases (`user_prompt_submit` / `stop` / …) to product
+  lifecycle names so Grok/Codex captures are adjudication-eligible
+- Read camelCase host payload fields (`prompt`, `transcriptPath`, …) during
+  candidate/scoring extraction
+- Bump adjudication policy identity to `adj_v2` so prior metadata-only dispositions
+  can be re-evaluated append-only without rewriting history
+
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Docs-only OKF export projection design track for a future 3.1 major (ADR 0014,
+  product-3.1.0 DoD, PRD index row). Not a runtime feature in this patch.
 
 ## [3.0.0] - 2026-07-31
 
