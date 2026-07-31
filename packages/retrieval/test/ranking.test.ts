@@ -273,8 +273,6 @@ describe("graph-aware ranking", () => {
       semantic_score: 0.4,
       recency_score: 0.4,
     };
-    // Ensure distinct ids for map keys
-    near.chunk.chunk_id = near.chunk.chunk_id;
     const weights = { structured: 1, fts: 1, semantic: 1, recency: 0.1 };
     const proximity = new Map<string, number>([
       [near.chunk.chunk_id, 0],
