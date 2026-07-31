@@ -395,6 +395,11 @@ function runProject(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       client_id: store.clientId,
       trust_zone_id: store.trustZone.trust_zone_id,
       trust_zone_source: resolution.source,
+      worktree_id: store.worktree.worktree_id,
+      worktree_name: store.worktree.worktree_name,
+      worktree_basis: store.worktree.basis_kind,
+      is_linked_worktree: store.worktree.is_linked_worktree,
+      ...(store.worktree.git_branch === undefined ? {} : { git_branch: store.worktree.git_branch }),
     });
     return 0;
   } finally {
