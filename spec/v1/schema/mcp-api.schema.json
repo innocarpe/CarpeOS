@@ -3,22 +3,54 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CarpeOS v1 MCP API schemas",
   "oneOf": [
-    { "$ref": "#/$defs/memorySearchInput" },
-    { "$ref": "#/$defs/memorySearchOutput" },
-    { "$ref": "#/$defs/memoryGetInput" },
-    { "$ref": "#/$defs/memoryGetOutput" },
-    { "$ref": "#/$defs/memoryContextPackInput" },
-    { "$ref": "#/$defs/memoryContextPackOutput" },
-    { "$ref": "#/$defs/memoryTraceInput" },
-    { "$ref": "#/$defs/memoryTraceOutput" },
-    { "$ref": "#/$defs/memoryTimelineInput" },
-    { "$ref": "#/$defs/memoryTimelineOutput" },
-    { "$ref": "#/$defs/memoryRelatedInput" },
-    { "$ref": "#/$defs/memoryRelatedOutput" },
-    { "$ref": "#/$defs/memoryCaptureInput" },
-    { "$ref": "#/$defs/memoryCaptureOutput" },
-    { "$ref": "#/$defs/memoryProposeClaimInput" },
-    { "$ref": "#/$defs/memoryProposeClaimOutput" }
+    {
+      "$ref": "#/$defs/memorySearchInput"
+    },
+    {
+      "$ref": "#/$defs/memorySearchOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryGetInput"
+    },
+    {
+      "$ref": "#/$defs/memoryGetOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryContextPackInput"
+    },
+    {
+      "$ref": "#/$defs/memoryContextPackOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryTraceInput"
+    },
+    {
+      "$ref": "#/$defs/memoryTraceOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryTimelineInput"
+    },
+    {
+      "$ref": "#/$defs/memoryTimelineOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryRelatedInput"
+    },
+    {
+      "$ref": "#/$defs/memoryRelatedOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryCaptureInput"
+    },
+    {
+      "$ref": "#/$defs/memoryCaptureOutput"
+    },
+    {
+      "$ref": "#/$defs/memoryProposeClaimInput"
+    },
+    {
+      "$ref": "#/$defs/memoryProposeClaimOutput"
+    }
   ],
   "$defs": {
     "toolName": {
@@ -39,8 +71,16 @@
       "additionalProperties": false,
       "required": ["max_items", "max_characters"],
       "properties": {
-        "max_items": { "type": "integer", "minimum": 1, "maximum": 200 },
-        "max_characters": { "type": "integer", "minimum": 1, "maximum": 200000 }
+        "max_items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "max_characters": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200000
+        }
       }
     },
     "budgetUsage": {
@@ -53,18 +93,32 @@
           "additionalProperties": false,
           "required": ["items", "characters"],
           "properties": {
-            "items": { "type": "integer", "minimum": 0 },
-            "characters": { "type": "integer", "minimum": 0 }
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "characters": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
-        "truncated": { "type": "boolean" },
+        "truncated": {
+          "type": "boolean"
+        },
         "omitted": {
           "type": "object",
           "additionalProperties": false,
           "required": ["items", "characters"],
           "properties": {
-            "items": { "type": "integer", "minimum": 0 },
-            "characters": { "type": "integer", "minimum": 0 }
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "characters": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         }
       }
@@ -92,10 +146,18 @@
       "type": "object",
       "required": ["schema_version", "tool", "visibility"],
       "properties": {
-        "schema_version": { "const": "v1" },
-        "tool": { "$ref": "#/$defs/toolName" },
-        "visibility": { "$ref": "#/$defs/visibility" },
-        "context_budget": { "$ref": "#/$defs/contextBudget" },
+        "schema_version": {
+          "const": "v1"
+        },
+        "tool": {
+          "$ref": "#/$defs/toolName"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "context_budget": {
+          "$ref": "#/$defs/contextBudget"
+        },
         "valid_time": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
         },
@@ -121,8 +183,16 @@
             "internal_error"
           ]
         },
-        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
-        "ref_id": { "type": "string", "minLength": 1, "maxLength": 160 }
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "ref_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
       }
     },
     "recordRef": {
@@ -136,8 +206,15 @@
         "epistemic_authority"
       ],
       "properties": {
-        "record_id": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "record_kind": { "type": "string", "enum": ["event", "erasure", "projection"] },
+        "record_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "record_kind": {
+          "type": "string",
+          "enum": ["event", "erasure", "projection"]
+        },
         "event_type": {
           "type": "string",
           "enum": ["EvidenceArtifact", "Observation", "Claim", "AcceptanceDecision", "Supersession"]
@@ -159,7 +236,11 @@
         },
         "redactions": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
         }
       }
     },
@@ -179,7 +260,10 @@
         "acceptance_decision_event_id": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
         },
-        "statement": { "type": "string", "minLength": 1 },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
         "source_event_ids": {
           "type": "array",
           "minItems": 2,
@@ -197,7 +281,10 @@
         "claim_event_id": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
         },
-        "statement": { "type": "string", "minLength": 1 },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
         "support_event_ids": {
           "type": "array",
           "minItems": 1,
@@ -205,22 +292,38 @@
             "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
           }
         },
-        "status": { "const": "draft" }
+        "status": {
+          "const": "draft"
+        }
       }
     },
     "memorySearchInput": {
       "allOf": [
-        { "$ref": "#/$defs/commonInput" },
+        {
+          "$ref": "#/$defs/commonInput"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["schema_version", "tool", "visibility", "query", "context_budget"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_search" },
-            "visibility": { "$ref": "#/$defs/visibility" },
-            "context_budget": { "$ref": "#/$defs/contextBudget" },
-            "query": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_search"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
             "include_held": {
               "type": "boolean",
               "default": false,
@@ -231,43 +334,99 @@
             },
             "recorded_time": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
+            },
+            "project_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "uniqueItems": true,
+              "description": "Optional project partition scope. Unknown-origin chunks are not excluded."
+            },
+            "worktree_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^wt_[a-f0-9]{24}$"
+              },
+              "uniqueItems": true,
+              "description": "Optional worktree facet scope. Unknown-origin chunks are not excluded."
+            },
+            "boost_worktree_id": {
+              "type": "string",
+              "pattern": "^wt_[a-f0-9]{24}$",
+              "description": "Rank results from this worktree higher without hiding others."
             }
           }
         }
       ]
     },
-    "memorySearchOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memorySearchOutput": {
+      "$ref": "#/$defs/budgetedRecordOutput"
+    },
     "memoryGetInput": {
       "allOf": [
-        { "$ref": "#/$defs/commonInput" },
+        {
+          "$ref": "#/$defs/commonInput"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["schema_version", "tool", "visibility", "record_id"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_get" },
-            "visibility": { "$ref": "#/$defs/visibility" },
-            "context_budget": { "$ref": "#/$defs/contextBudget" },
-            "record_id": { "type": "string", "minLength": 1, "maxLength": 160 }
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_get"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            },
+            "record_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
           }
         }
       ]
     },
-    "memoryGetOutput": { "$ref": "#/$defs/recordOutput" },
+    "memoryGetOutput": {
+      "$ref": "#/$defs/recordOutput"
+    },
     "memoryContextPackInput": {
       "allOf": [
-        { "$ref": "#/$defs/commonInput" },
+        {
+          "$ref": "#/$defs/commonInput"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["schema_version", "tool", "visibility", "task", "context_budget"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_context_pack" },
-            "visibility": { "$ref": "#/$defs/visibility" },
-            "context_budget": { "$ref": "#/$defs/contextBudget" },
-            "task": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_context_pack"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            },
+            "task": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
             "include_held": {
               "type": "boolean",
               "default": false,
@@ -302,53 +461,143 @@
         "budget"
       ],
       "properties": {
-        "schema_version": { "const": "v1" },
-        "tool": { "const": "memory_context_pack" },
-        "accepted_facts": { "type": "array", "items": { "$ref": "#/$defs/acceptedFact" } },
-        "draft_claims": { "type": "array", "items": { "$ref": "#/$defs/draftClaim" } },
-        "rejected_claims": { "type": "array", "items": { "$ref": "#/$defs/draftClaim" } },
-        "observations": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
-        "evidence_summaries": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
-        "conflicts": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
-        "supersessions": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
-        "erasures": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
-        "verification_gaps": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "redactions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "budget": { "$ref": "#/$defs/budgetUsage" },
-        "error": { "$ref": "#/$defs/safeError" }
+        "schema_version": {
+          "const": "v1"
+        },
+        "tool": {
+          "const": "memory_context_pack"
+        },
+        "accepted_facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/acceptedFact"
+          }
+        },
+        "draft_claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/draftClaim"
+          }
+        },
+        "rejected_claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/draftClaim"
+          }
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordRef"
+          }
+        },
+        "evidence_summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordRef"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordRef"
+          }
+        },
+        "supersessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordRef"
+          }
+        },
+        "erasures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordRef"
+          }
+        },
+        "verification_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "redactions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "budget": {
+          "$ref": "#/$defs/budgetUsage"
+        },
+        "error": {
+          "$ref": "#/$defs/safeError"
+        }
       }
     },
     "memoryTraceInput": {
       "allOf": [
-        { "$ref": "#/$defs/commonInput" },
+        {
+          "$ref": "#/$defs/commonInput"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_trace" },
-            "visibility": { "$ref": "#/$defs/visibility" },
-            "record_id": { "type": "string", "minLength": 1, "maxLength": 160 },
-            "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
-            "context_budget": { "$ref": "#/$defs/contextBudget" }
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_trace"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "record_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            }
           }
         }
       ]
     },
-    "memoryTraceOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryTraceOutput": {
+      "$ref": "#/$defs/budgetedRecordOutput"
+    },
     "memoryTimelineInput": {
       "allOf": [
-        { "$ref": "#/$defs/commonInput" },
+        {
+          "$ref": "#/$defs/commonInput"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["schema_version", "tool", "visibility", "context_budget"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_timeline" },
-            "visibility": { "$ref": "#/$defs/visibility" },
-            "context_budget": { "$ref": "#/$defs/contextBudget" },
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_timeline"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            },
             "valid_time": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
             },
@@ -359,26 +608,48 @@
         }
       ]
     },
-    "memoryTimelineOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryTimelineOutput": {
+      "$ref": "#/$defs/budgetedRecordOutput"
+    },
     "memoryRelatedInput": {
       "allOf": [
-        { "$ref": "#/$defs/commonInput" },
+        {
+          "$ref": "#/$defs/commonInput"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["schema_version", "tool", "visibility", "record_id", "context_budget"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_related" },
-            "visibility": { "$ref": "#/$defs/visibility" },
-            "record_id": { "type": "string", "minLength": 1, "maxLength": 160 },
-            "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
-            "context_budget": { "$ref": "#/$defs/contextBudget" }
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_related"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "record_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "context_budget": {
+              "$ref": "#/$defs/contextBudget"
+            }
           }
         }
       ]
     },
-    "memoryRelatedOutput": { "$ref": "#/$defs/budgetedRecordOutput" },
+    "memoryRelatedOutput": {
+      "$ref": "#/$defs/budgetedRecordOutput"
+    },
     "memoryCaptureInput": {
       "type": "object",
       "additionalProperties": false,
@@ -394,17 +665,41 @@
         "payload"
       ],
       "properties": {
-        "schema_version": { "const": "v1" },
-        "tool": { "const": "memory_capture" },
-        "visibility": { "$ref": "#/$defs/visibility" },
-        "provider": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "hook_event_name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "schema_version": {
+          "const": "v1"
+        },
+        "tool": {
+          "const": "memory_capture"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "hook_event_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
         "captured_at": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
         },
-        "media_type": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "subject_ref": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "payload": { "type": "object" },
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "subject_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "payload": {
+          "type": "object"
+        },
         "idempotency_key": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/idempotencyKey"
         }
@@ -417,9 +712,16 @@
           "additionalProperties": false,
           "required": ["schema_version", "tool", "status", "event_id", "recorded_time"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_capture" },
-            "status": { "type": "string", "enum": ["captured", "replay"] },
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_capture"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["captured", "replay"]
+            },
             "event_id": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
             },
@@ -433,9 +735,15 @@
           "additionalProperties": false,
           "required": ["schema_version", "tool", "error"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_capture" },
-            "error": { "$ref": "#/$defs/safeError" }
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_capture"
+            },
+            "error": {
+              "$ref": "#/$defs/safeError"
+            }
           }
         }
       ]
@@ -445,11 +753,24 @@
       "additionalProperties": false,
       "required": ["schema_version", "tool", "visibility", "statement", "support"],
       "properties": {
-        "schema_version": { "const": "v1" },
-        "tool": { "const": "memory_propose_claim" },
-        "visibility": { "$ref": "#/$defs/visibility" },
-        "statement": { "type": "string", "minLength": 1, "maxLength": 20000 },
-        "claim_type": { "type": "string", "enum": ["factual", "inference", "decision"] },
+        "schema_version": {
+          "const": "v1"
+        },
+        "tool": {
+          "const": "memory_propose_claim"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "claim_type": {
+          "type": "string",
+          "enum": ["factual", "inference", "decision"]
+        },
         "support": {
           "type": "array",
           "minItems": 1,
@@ -457,8 +778,16 @@
             "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/provenanceRef"
           }
         },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "subject_ref": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "subject_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
         "valid_time": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
         },
@@ -485,22 +814,39 @@
             "acceptance_decision_event_ids"
           ],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_propose_claim" },
-            "status": { "type": "string", "enum": ["proposed", "replay"] },
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_propose_claim"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["proposed", "replay"]
+            },
             "event_id": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/eventId"
             },
-            "claim_id": { "type": "string", "pattern": "^claim_[a-z0-9][a-z0-9_-]{7,127}$" },
-            "lifecycle_status": { "const": "draft" },
+            "claim_id": {
+              "type": "string",
+              "pattern": "^claim_[a-z0-9][a-z0-9_-]{7,127}$"
+            },
+            "lifecycle_status": {
+              "const": "draft"
+            },
             "valid_time": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
             },
             "recorded_time": {
               "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/bitemporalInterval"
             },
-            "valid_time_defaulted": { "type": "boolean" },
-            "acceptance_decision_event_ids": { "type": "array", "maxItems": 0 }
+            "valid_time_defaulted": {
+              "type": "boolean"
+            },
+            "acceptance_decision_event_ids": {
+              "type": "array",
+              "maxItems": 0
+            }
           }
         },
         {
@@ -508,9 +854,15 @@
           "additionalProperties": false,
           "required": ["schema_version", "tool", "error"],
           "properties": {
-            "schema_version": { "const": "v1" },
-            "tool": { "const": "memory_propose_claim" },
-            "error": { "$ref": "#/$defs/safeError" }
+            "schema_version": {
+              "const": "v1"
+            },
+            "tool": {
+              "const": "memory_propose_claim"
+            },
+            "error": {
+              "$ref": "#/$defs/safeError"
+            }
           }
         }
       ]
@@ -520,10 +872,18 @@
       "additionalProperties": false,
       "required": ["schema_version", "tool", "record"],
       "properties": {
-        "schema_version": { "const": "v1" },
-        "tool": { "$ref": "#/$defs/toolName" },
-        "record": { "$ref": "#/$defs/recordRef" },
-        "error": { "$ref": "#/$defs/safeError" }
+        "schema_version": {
+          "const": "v1"
+        },
+        "tool": {
+          "$ref": "#/$defs/toolName"
+        },
+        "record": {
+          "$ref": "#/$defs/recordRef"
+        },
+        "error": {
+          "$ref": "#/$defs/safeError"
+        }
       }
     },
     "budgetedRecordOutput": {
@@ -531,11 +891,24 @@
       "additionalProperties": false,
       "required": ["schema_version", "tool", "records", "budget"],
       "properties": {
-        "schema_version": { "const": "v1" },
-        "tool": { "$ref": "#/$defs/toolName" },
-        "records": { "type": "array", "items": { "$ref": "#/$defs/recordRef" } },
-        "budget": { "$ref": "#/$defs/budgetUsage" },
-        "error": { "$ref": "#/$defs/safeError" }
+        "schema_version": {
+          "const": "v1"
+        },
+        "tool": {
+          "$ref": "#/$defs/toolName"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordRef"
+          }
+        },
+        "budget": {
+          "$ref": "#/$defs/budgetUsage"
+        },
+        "error": {
+          "$ref": "#/$defs/safeError"
+        }
       }
     }
   }

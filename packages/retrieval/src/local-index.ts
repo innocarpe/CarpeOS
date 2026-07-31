@@ -4,6 +4,7 @@ import type {
   ErasureLedgerRecord,
   ProjectionFreshness,
   RetrievalChunk,
+  RetrievalOrigin,
   RetrievalQuery,
   RetrievalResult,
 } from "@carpeos/schema";
@@ -131,9 +132,10 @@ export function rebuildLocalRetrievalIndex(
   migrateLocalRetrievalIndex(db, now);
   const events = readCanonicalEventsForProjection(db);
   const erasures = readErasuresForProjection(db);
-  const chunks = buildMeaningfulChunks({ events, erasures, createdAt: now.toISOString() }).map(
-    (chunk) => applyProjectionStatus(chunk),
-  );
+  const origins = readCaptureOriginsForProjection(db);
+  const chunks = buildMeaningfulChunks({ events, erasures, createdAt: now.toISOString() })
+    .map((chunk) => applyProjectionStatus(chunk))
+    .map((chunk) => attachChunkOrigin(chunk, events, origins));
   const currentIds = new Set(chunks.map((chunk) => chunk.chunk_id));
   const existing = db.prepare("SELECT chunk_json FROM retrieval_chunks").all() as ChunkRow[];
 
@@ -559,3 +561,90 @@ function tokenize(value: string): string[] {
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 }
+
+/**
+ * Capture origin facets keyed by the captured event id.
+ *
+ * Only hashed and label-shaped fields are read; absolute workspace paths are
+ * never stored in `capture_requests` (ADR 0013 privacy shape).
+ */
+function readCaptureOriginsForProjection(db: SqlDatabase): Map<string, RetrievalOrigin> {
+  const origins = new Map<string, RetrievalOrigin>();
+  let rows: CaptureOriginRow[];
+  try {
+    rows = db
+      .prepare(
+        `SELECT event_id, project_id, worktree_id, worktree_name, git_branch
+         FROM capture_requests`,
+      )
+      .all() as CaptureOriginRow[];
+  } catch {
+    // Store predates the capture identity migration; origin stays unknown.
+    return origins;
+  }
+
+  for (const row of rows) {
+    const origin: RetrievalOrigin = {
+      ...(row.project_id ? { project_id: row.project_id } : {}),
+      ...(row.worktree_id ? { worktree_id: row.worktree_id } : {}),
+      ...(row.worktree_name ? { worktree_name: row.worktree_name } : {}),
+      ...(row.git_branch ? { git_branch: row.git_branch } : {}),
+    };
+    if (Object.keys(origin).length > 0) {
+      origins.set(row.event_id, origin);
+    }
+  }
+  return origins;
+}
+
+/**
+ * Attach the capture origin of a chunk's primary source event.
+ *
+ * Derived units (Observation, Claim) inherit origin by following provenance back
+ * to the captured evidence event. Chunks that cannot resolve an origin keep it
+ * undefined, which retrieval treats as unknown rather than excluded.
+ */
+function attachChunkOrigin(
+  chunk: RetrievalChunk,
+  events: readonly CanonicalEvent[],
+  origins: Map<string, RetrievalOrigin>,
+): RetrievalChunk {
+  if (origins.size === 0) {
+    return chunk;
+  }
+  const byId = new Map(events.map((event) => [event.event_id, event]));
+  for (const record of chunk.source_records) {
+    if (record.source_record_kind !== "event") continue;
+    const direct = origins.get(record.source_record_id);
+    if (direct !== undefined) {
+      return { ...chunk, origin: direct };
+    }
+    const inherited = inheritOriginFromProvenance(byId.get(record.source_record_id), origins);
+    if (inherited !== undefined) {
+      return { ...chunk, origin: inherited };
+    }
+  }
+  return chunk;
+}
+
+function inheritOriginFromProvenance(
+  event: CanonicalEvent | undefined,
+  origins: Map<string, RetrievalOrigin>,
+): RetrievalOrigin | undefined {
+  if (event === undefined) return undefined;
+  for (const ref of event.provenance ?? []) {
+    const origin = origins.get(ref.ref_id);
+    if (origin !== undefined) {
+      return origin;
+    }
+  }
+  return undefined;
+}
+
+type CaptureOriginRow = {
+  event_id: string;
+  project_id: string | null;
+  worktree_id: string | null;
+  worktree_name: string | null;
+  git_branch: string | null;
+};

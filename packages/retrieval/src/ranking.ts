@@ -45,10 +45,11 @@ export type Vector = readonly number[];
 export function rankHybrid(
   candidates: readonly RetrievalCandidate[],
   weights: RankWeights,
+  options: { boostWorktreeId?: string } = {},
 ): RankedCandidate[] {
   return candidates
     .map((candidate) => {
-      const score = scoreCandidate(candidate, weights);
+      const score = scoreCandidate(candidate, weights, options);
       return { ...candidate, score };
     })
     .sort(compareRankedCandidates);
@@ -171,14 +172,23 @@ function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number 
   return union === 0 ? 0 : intersection / union;
 }
 
+/** Same-worktree results rank higher without hiding sibling checkouts (ADR 0013). */
+const WORKTREE_BOOST_FACTOR = 0.25;
+
 export function scoreCandidate(
   candidate: RetrievalCandidate,
   weights: RankWeights,
+  options: { boostWorktreeId?: string } = {},
 ): RetrievalScore {
   // Fold kind priority into structured so schema score shape stays unchanged.
   const kindBoost =
     chunkKindPriority(candidate.chunk.chunk_kind) * Math.max(weights.structured, 0) * 0.4;
-  const structured = candidate.structured_score * weights.structured + kindBoost;
+  const worktreeBoost =
+    options.boostWorktreeId !== undefined &&
+    candidate.chunk.origin?.worktree_id === options.boostWorktreeId
+      ? Math.max(weights.structured, 0) * WORKTREE_BOOST_FACTOR
+      : 0;
+  const structured = candidate.structured_score * weights.structured + kindBoost + worktreeBoost;
   const fts = candidate.fts_score * weights.fts;
   const semantic = candidate.semantic_score * weights.semantic;
   const recency = candidate.recency_score * weights.recency;
