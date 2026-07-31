@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { CaptureEnvelope } from "@carpeos/capture";
-import { hashHex } from "@carpeos/capture";
+import { ADJUDICATION_POLICY_VERSION, hashHex } from "@carpeos/capture";
 import type {
   CanonicalEvent,
   ErasureLedgerRecord,
@@ -1165,7 +1165,7 @@ describe("LocalCaptureStore adjudication", () => {
     expect(held[0]).toMatchObject({
       source_event_id: captured.event.event_id,
       artifact_id: captured.event.payload.artifact_id,
-      policy_version: "adj_v1",
+      policy_version: ADJUDICATION_POLICY_VERSION,
     });
 
     const reviewed = store.reviewHeldDisposition(captured.event.event_id, "promote");
@@ -1297,7 +1297,7 @@ describe("LocalCaptureStore adjudication", () => {
     if (first.status !== "promoted" && first.status !== "held" && first.status !== "replay") {
       throw new Error("expected first promote");
     }
-    expect(first.policy_version).toBe("adj_v1");
+    expect(first.policy_version).toBe(ADJUDICATION_POLICY_VERSION);
     expect(first.extraction?.status).toBe("extracted");
     const firstObservationId =
       first.extraction &&
@@ -1309,9 +1309,9 @@ describe("LocalCaptureStore adjudication", () => {
     const replay = store.adjudicateFromEventId(captured.event.event_id);
     expect(replay.status).toBe("replay");
     if (replay.status !== "replay") {
-      throw new Error("expected adj_v1 replay");
+      throw new Error("expected current-policy replay");
     }
-    expect(replay.policy_version).toBe("adj_v1");
+    expect(replay.policy_version).toBe(ADJUDICATION_POLICY_VERSION);
     if (replay.extraction !== undefined) {
       expect(replay.extraction.status).toBe("replay");
       if (replay.extraction.status === "extracted" || replay.extraction.status === "replay") {
@@ -1320,7 +1320,7 @@ describe("LocalCaptureStore adjudication", () => {
     }
     expect(store.countRows("knowledge_dispositions")).toBe(1);
 
-    // Force a second disposition under a synthetic later policy without changing adj_v1 code.
+    // Force a second disposition under a synthetic later policy without changing current policy code.
     const second = store.adjudicateFromEventId(captured.event.event_id, {
       policyVersion: "adj_test_v2",
       signalText: "thanks",
@@ -1335,7 +1335,9 @@ describe("LocalCaptureStore adjudication", () => {
 
     const history = store.listDispositionHistory(captured.event.event_id);
     expect(history).toHaveLength(2);
-    expect(history.map((row) => row.policy_version).sort()).toEqual(["adj_test_v2", "adj_v1"]);
+    expect(history.map((row) => row.policy_version).sort()).toEqual(
+      ["adj_test_v2", ADJUDICATION_POLICY_VERSION].sort(),
+    );
     expect(history.every((row) => row.source_event_id === captured.event.event_id)).toBe(true);
 
     const secondReplay = store.adjudicateFromEventId(captured.event.event_id, {
@@ -1349,9 +1351,9 @@ describe("LocalCaptureStore adjudication", () => {
     expect(secondReplay.policy_version).toBe("adj_test_v2");
     expect(store.countRows("knowledge_dispositions")).toBe(2);
 
-    // Current-policy stats remain scoped to adj_v1.
+    // Current-policy stats remain scoped to the active product policy.
     const counts = store.listDispositionCounts();
-    expect(counts.policy_version).toBe("adj_v1");
+    expect(counts.policy_version).toBe(ADJUDICATION_POLICY_VERSION);
     expect(counts.promote + counts.hold + counts.reject).toBe(1);
   });
 

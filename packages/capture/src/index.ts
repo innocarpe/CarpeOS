@@ -60,6 +60,14 @@ export {
   type KnowledgeEvidenceRef,
 } from "./adjudication.js";
 
+export {
+  isAllowedTranscriptPath,
+  readTranscriptTail,
+  signalsFromTranscriptPath,
+  signalsFromTranscriptText,
+  type TranscriptSignals,
+} from "./transcript-signals.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 
