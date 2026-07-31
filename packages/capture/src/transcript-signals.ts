@@ -36,11 +36,7 @@ export function isAllowedTranscriptPath(filePath: string): boolean {
     return false;
   }
   const home = homedir();
-  const allowedRoots = [
-    resolve(home, ".claude", "projects"),
-    resolve(home, ".codex"),
-    resolve(home, ".grok"),
-  ];
+  const allowedRoots = [resolve(home, ".claude"), resolve(home, ".codex"), resolve(home, ".grok")];
   return allowedRoots.some(
     (root) =>
       resolved === root || resolved.startsWith(`${root}/`) || resolved.startsWith(`${root}\\`),

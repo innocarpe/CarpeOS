@@ -14,6 +14,7 @@ import {
   fingerprintObject,
   hashHex,
   isIdempotencyKey,
+  normalizeCaptureHookEventName,
   planObservationExtraction,
   signalsFromTranscriptPath,
   stableJson,
@@ -214,7 +215,11 @@ type StoredHeldReview = {
 function envelopePayloadTranscriptPath(payload: unknown): unknown {
   if (payload === null || typeof payload !== "object") return undefined;
   const record = payload as Record<string, unknown>;
-  return record.transcript_path;
+  return record.transcript_path ?? record.transcriptPath;
+}
+
+function toCamel(key: string): string {
+  return key.replace(/_([a-z])/g, (_, ch: string) => ch.toUpperCase());
 }
 function signalFromUnknownPayload(payload: unknown): string | undefined {
   return signalFromPayload(payload, false);
@@ -233,6 +238,7 @@ function signalFromPayload(payload: unknown, candidateOnly: boolean): string | u
   if (typeof payload !== "object") return undefined;
 
   const record = payload as Record<string, unknown>;
+  // Host payloads mix snake_case and camelCase (Claude/Grok).
   const candidateKeys = [
     "decision",
     "preference",
@@ -240,17 +246,39 @@ function signalFromPayload(payload: unknown, candidateOnly: boolean): string | u
     "procedure",
     "summary",
     "message",
+    "prompt",
+    "user_message",
+    "last_assistant_message",
   ] as const;
-  const scoringKeys = ["transcript", "text", "content", "prompt"] as const;
+  const scoringKeys = [
+    "transcript",
+    "text",
+    "content",
+    "prompt",
+    "input",
+    "output",
+    "last_prompt",
+  ] as const;
   for (const key of candidateKeys) {
-    const signal = boundedSignal(record[key]);
+    const signal = boundedSignal(record[key]) ?? boundedSignal(record[toCamel(key)]);
     if (signal !== undefined) {
-      return candidateOnly ? labelCandidateField(key, signal) : signal;
+      const labelKey =
+        key === "prompt" || key === "user_message" || key === "last_assistant_message"
+          ? "message"
+          : key === "decision" ||
+              key === "preference" ||
+              key === "constraint" ||
+              key === "procedure" ||
+              key === "summary" ||
+              key === "message"
+            ? key
+            : "message";
+      return candidateOnly ? labelCandidateField(labelKey, signal) : signal;
     }
   }
   if (!candidateOnly) {
     for (const key of scoringKeys) {
-      const signal = boundedSignal(record[key]);
+      const signal = boundedSignal(record[key]) ?? boundedSignal(record[toCamel(key)]);
       if (signal !== undefined) return signal;
     }
   }
@@ -1291,8 +1319,9 @@ export class LocalCaptureStore {
     const metaFromEnvelope = input.envelope;
     const metaFromRequest = this.getCaptureRequestMeta(evidence.event_id);
     const provider = metaFromEnvelope?.provider ?? metaFromRequest?.provider ?? "unknown";
-    const hookEventName =
-      metaFromEnvelope?.hook_event_name ?? metaFromRequest?.hook_event_name ?? "";
+    const hookEventName = normalizeCaptureHookEventName(
+      metaFromEnvelope?.hook_event_name ?? metaFromRequest?.hook_event_name ?? "",
+    );
     if (!hookEventName) {
       return {
         status: "skipped",
@@ -1839,7 +1868,10 @@ export class LocalCaptureStore {
       const candidate =
         candidateTextFromUnknownPayload(record.payload) ?? candidateTextFromUnknownPayload(record);
       const transcript = signalsFromTranscriptPath(
-        nested?.transcript_path ?? record.transcript_path,
+        nested?.transcript_path ??
+          nested?.transcriptPath ??
+          record.transcript_path ??
+          record.transcriptPath,
       );
       return {
         ...(scoring === undefined && transcript.scoring === undefined

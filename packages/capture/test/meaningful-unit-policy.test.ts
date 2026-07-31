@@ -9,6 +9,7 @@ import {
   containsSecretLikeMaterial,
   defaultMeaningfulUnitPolicySnapshot,
   isHookEligibleForExtraction,
+  normalizeCaptureHookEventName,
   recommendExtractionTarget,
   resolveMeaningfulUnitPolicy,
 } from "../src/meaningful-unit-policy.js";
@@ -120,5 +121,14 @@ describe("meaningful-unit-policy", () => {
     expect(resolved.enabled_hook_events).toEqual(["Stop"]);
     expect(resolved.allow_auto_claim).toBe(false);
     expect(DEFAULT_MEANINGFUL_UNIT_POLICY.post_tool_use).toBe("off");
+  });
+});
+
+describe("normalizeCaptureHookEventName", () => {
+  it("maps grok snake_case hooks to product lifecycle names", () => {
+    expect(normalizeCaptureHookEventName("user_prompt_submit")).toBe("UserPromptSubmit");
+    expect(normalizeCaptureHookEventName("session_end")).toBe("SessionEnd");
+    expect(normalizeCaptureHookEventName("stop")).toBe("Stop");
+    expect(normalizeCaptureHookEventName("SessionEnd")).toBe("SessionEnd");
   });
 });

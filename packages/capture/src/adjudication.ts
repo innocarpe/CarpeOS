@@ -7,6 +7,7 @@ import {
   assertSafeMeaningfulUnitText,
   containsSecretLikeMaterial,
   isHookEligibleForExtraction,
+  normalizeCaptureHookEventName,
   type MeaningfulUnitPolicyConfig,
 } from "./meaningful-unit-policy.js";
 import { buildMetadataObservationStatement } from "./extract-observation.js";
@@ -178,7 +179,7 @@ export function adjudicateKnowledgeCandidate(
   policyOverrides?: Partial<MeaningfulUnitPolicyConfig>,
 ): AdjudicationResult {
   const reasons: string[] = [];
-  const hook = String(candidate.hook_event_name ?? "").trim();
+  const hook = normalizeCaptureHookEventName(candidate.hook_event_name ?? "");
   let statement: string;
   try {
     statement = buildCandidateStatement(candidate);
