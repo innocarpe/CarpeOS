@@ -45,7 +45,11 @@ export type Vector = readonly number[];
 export function rankHybrid(
   candidates: readonly RetrievalCandidate[],
   weights: RankWeights,
-  options: { boostWorktreeId?: string } = {},
+  options: {
+    boostWorktreeId?: string;
+    /** chunk_id -> hop distance from hybrid seed (0 = seed). */
+    graphProximity?: ReadonlyMap<string, number>;
+  } = {},
 ): RankedCandidate[] {
   return candidates
     .map((candidate) => {
@@ -175,10 +179,16 @@ function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number 
 /** Same-worktree results rank higher without hiding sibling checkouts (ADR 0013). */
 const WORKTREE_BOOST_FACTOR = 0.25;
 
+/** Graph hop boost decays with distance; structure never implies acceptance. */
+const GRAPH_HOP_BOOST = [0.2, 0.12, 0.06] as const;
+
 export function scoreCandidate(
   candidate: RetrievalCandidate,
   weights: RankWeights,
-  options: { boostWorktreeId?: string } = {},
+  options: {
+    boostWorktreeId?: string;
+    graphProximity?: ReadonlyMap<string, number>;
+  } = {},
 ): RetrievalScore {
   // Fold kind priority into structured so schema score shape stays unchanged.
   const kindBoost =
@@ -188,7 +198,13 @@ export function scoreCandidate(
     candidate.chunk.origin?.worktree_id === options.boostWorktreeId
       ? Math.max(weights.structured, 0) * WORKTREE_BOOST_FACTOR
       : 0;
-  const structured = candidate.structured_score * weights.structured + kindBoost + worktreeBoost;
+  const hop = options.graphProximity?.get(candidate.chunk.chunk_id);
+  const graphBoost =
+    hop === undefined || hop < 0 || hop >= GRAPH_HOP_BOOST.length
+      ? 0
+      : Math.max(weights.structured, 0) * GRAPH_HOP_BOOST[hop]!;
+  const structured =
+    candidate.structured_score * weights.structured + kindBoost + worktreeBoost + graphBoost;
   const fts = candidate.fts_score * weights.fts;
   const semantic = candidate.semantic_score * weights.semantic;
   const recency = candidate.recency_score * weights.recency;

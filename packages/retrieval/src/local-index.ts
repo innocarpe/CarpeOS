@@ -10,7 +10,7 @@ import type {
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
 import { buildMeaningfulChunks } from "./chunks.js";
-import { rebuildGraphProjection } from "./graph-projection.js";
+import { rebuildGraphProjection, walkGraphNeighborhood } from "./graph-projection.js";
 import {
   defaultEmbeddingProvider,
   isVectorCompatibleWithProvider,
@@ -245,7 +245,13 @@ export function searchLocalRetrievalIndex(
   const candidateLimit = Math.max(input.query.limit * 4, 32);
   const ftsChunkIds = ftsCandidateChunkIds(db, input.query, candidateLimit);
   const structuredChunkIds = structuredCandidateChunkIds(db, input.query, candidateLimit);
-  const chunkIds = [...new Set([...ftsChunkIds, ...structuredChunkIds])].sort();
+  const seedChunkIds = [...new Set([...ftsChunkIds, ...structuredChunkIds])].sort();
+  const seedChunks = readChunks(db, seedChunkIds);
+  const { chunkIds, graphProximity } = expandChunksWithGraphNeighborhood(db, seedChunks, {
+    visibleTrustZoneIds: input.query.filters.visible_trust_zone_ids,
+    maxDepth: 2,
+    maxNodes: Math.max(candidateLimit, 64),
+  });
   const chunks = readChunks(db, chunkIds);
   const storedVectors = readVectors(db, chunkIds, provider);
   const queryVector = embedSync(provider, input.query.query_text);
@@ -263,6 +269,7 @@ export function searchLocalRetrievalIndex(
     erasures: input.erasures ?? readErasuresForProjection(db),
     freshness: readFreshness(db),
     semanticScores,
+    graphProximity,
     embeddingProvider: {
       id: provider.info.id,
       model: provider.info.model,
@@ -271,6 +278,107 @@ export function searchLocalRetrievalIndex(
       semantic_quality: provider.info.semantic_quality,
     },
   });
+}
+
+/**
+ * Expand hybrid seeds with a bounded graph neighborhood.
+ *
+ * Graph structure only adds candidates and proximity ranks; acceptance is never
+ * implied (ADR 0013). Missing graph tables/nodes fail open to seeds only.
+ */
+function expandChunksWithGraphNeighborhood(
+  db: SqlDatabase,
+  seedChunks: readonly RetrievalChunk[],
+  options: {
+    visibleTrustZoneIds: readonly string[];
+    maxDepth: number;
+    maxNodes: number;
+  },
+): { chunkIds: string[]; graphProximity: Map<string, number> } {
+  const graphProximity = new Map<string, number>();
+  const eventToChunks = new Map<string, string[]>();
+  for (const chunk of seedChunks) {
+    graphProximity.set(chunk.chunk_id, 0);
+    for (const record of chunk.source_records) {
+      if (record.source_record_kind !== "event") continue;
+      const list = eventToChunks.get(record.source_record_id) ?? [];
+      list.push(chunk.chunk_id);
+      eventToChunks.set(record.source_record_id, list);
+    }
+  }
+
+  const seedEventIds = [...eventToChunks.keys()].sort();
+  const discoveredEventHops = new Map<string, number>();
+  for (const eventId of seedEventIds) {
+    discoveredEventHops.set(eventId, 0);
+    try {
+      const walk = walkGraphNeighborhood(db, {
+        root_id: eventId,
+        max_depth: options.maxDepth,
+        max_nodes: options.maxNodes,
+        visible_trust_zone_ids: options.visibleTrustZoneIds,
+      });
+      for (const node of walk.nodes) {
+        const eventIdFromNode =
+          node.source_event_id ??
+          (node.node_id.startsWith("evt:") ? node.node_id.slice(4) : undefined);
+        if (eventIdFromNode === undefined) continue;
+        // Approximate hop: 0 for seeds, 1 otherwise within this walk budget.
+        const hop = eventIdFromNode === eventId ? 0 : 1;
+        const prev = discoveredEventHops.get(eventIdFromNode);
+        if (prev === undefined || hop < prev) {
+          discoveredEventHops.set(eventIdFromNode, hop);
+        }
+      }
+    } catch {
+      // Graph not ready; keep seeds only.
+    }
+  }
+
+  // Pull chunks whose primary/source event appears in the neighborhood.
+  const extraChunkIds = new Set<string>(seedChunks.map((chunk) => chunk.chunk_id));
+  if (discoveredEventHops.size > 0) {
+    const allChunkRows = db
+      .prepare(
+        `SELECT chunk_id, chunk_json FROM retrieval_chunks
+         WHERE status IN ('active', 'projection_deleted')`,
+      )
+      .all() as Array<{ chunk_id: string; chunk_json: string }>;
+    const visibleZones = new Set(options.visibleTrustZoneIds);
+    for (const row of allChunkRows) {
+      const chunk = JSON.parse(row.chunk_json) as RetrievalChunk;
+      if (!visibleZones.has(chunk.trust_zone_id)) {
+        continue;
+      }
+      // Do not pull lineage that itself references non-visible zones.
+      if (
+        chunk.source_records.some(
+          (record) =>
+            record.source_record_kind === "event" && !visibleZones.has(record.trust_zone_id),
+        )
+      ) {
+        continue;
+      }
+      let bestHop: number | undefined;
+      for (const record of chunk.source_records) {
+        if (record.source_record_kind !== "event") continue;
+        const hop = discoveredEventHops.get(record.source_record_id);
+        if (hop === undefined) continue;
+        bestHop = bestHop === undefined ? hop : Math.min(bestHop, hop);
+      }
+      if (bestHop === undefined) continue;
+      extraChunkIds.add(chunk.chunk_id);
+      const prev = graphProximity.get(chunk.chunk_id);
+      if (prev === undefined || bestHop < prev) {
+        graphProximity.set(chunk.chunk_id, bestHop);
+      }
+    }
+  }
+
+  return {
+    chunkIds: [...extraChunkIds].sort(),
+    graphProximity,
+  };
 }
 
 /** Sync-only path for local providers; async model-backed adapters come later. */
