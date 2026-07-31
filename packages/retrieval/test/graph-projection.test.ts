@@ -5,6 +5,7 @@ import {
   buildGraphProjection,
   migrateGraphProjection,
   rebuildGraphProjection,
+  walkGraphNeighborhood,
   type CaptureOrigin,
 } from "../src/graph-projection.js";
 
@@ -263,5 +264,46 @@ describe("graph projection", () => {
     // Clustering must not invent acceptance edges beyond explicit AcceptanceDecision.
     const acceptedBy = snapshot.edges.filter((edge) => edge.edge_kind === "accepted_by");
     expect(acceptedBy).toHaveLength(1);
+  });
+
+  it("walks a bounded neighborhood over the edge index with budgets", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE schema_migrations (
+        migration_id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE capture_requests (
+        event_id TEXT PRIMARY KEY,
+        project_id TEXT,
+        worktree_id TEXT,
+        worktree_name TEXT,
+        git_branch TEXT
+      );
+    `);
+    rebuildGraphProjection(db, {
+      events: [evidence, observation, claim, acceptance],
+      now: new Date("2026-01-01T00:20:00Z"),
+    });
+
+    const walk = walkGraphNeighborhood(db, {
+      root_id: "evt_obs000001",
+      max_depth: 2,
+      max_nodes: 64,
+      visible_trust_zone_ids: [trustZone.trust_zone_id],
+    });
+    expect(walk.root_id).toBe("evt:evt_obs000001");
+    expect(walk.nodes.some((node) => node.node_id === "evt:evt_claim0001")).toBe(true);
+    expect(walk.budgets.nodes_used).toBeGreaterThan(0);
+    expect(walk.budgets.nodes_used).toBeLessThanOrEqual(64);
+
+    const tight = walkGraphNeighborhood(db, {
+      root_id: "evt:evt_obs000001",
+      max_depth: 0,
+      max_nodes: 1,
+      visible_trust_zone_ids: [trustZone.trust_zone_id],
+    });
+    expect(tight.nodes).toHaveLength(1);
+    expect(tight.omissions.some((item) => item.reason === "max_depth")).toBe(true);
   });
 });
