@@ -197,3 +197,46 @@ describe("retrieval ranking", () => {
     expect(kinds).toEqual(["claim", "decision"]);
   });
 });
+
+describe("worktree ranking boost", () => {
+  it("ranks the current worktree higher without hiding sibling checkouts", () => {
+    const makeCandidate = (label: string, worktreeId: string) => {
+      const chunk = {
+        ...buildRetrievalChunk({
+          chunkKind: "claim" as const,
+          text: `Synthetic decision ${label}`,
+          sourceRecords,
+          derivation: makeRetrievalDerivation({ sourceRecords, config: {} }),
+        }),
+        origin: { project_id: "project_alpha", worktree_id: worktreeId },
+      };
+      return {
+        chunk,
+        structured_score: 0.5,
+        fts_score: 0.5,
+        semantic_score: 0.5,
+        recency_score: 0.5,
+        label,
+      };
+    };
+
+    const current = `wt_${"a".repeat(24)}`;
+    const sibling = `wt_${"b".repeat(24)}`;
+    const siblingCandidate = makeCandidate("sibling", sibling);
+    const currentCandidate = makeCandidate("current", current);
+    const candidates = [siblingCandidate, currentCandidate];
+    const weights = { structured: 1, fts: 1, semantic: 1, recency: 0.1 };
+
+    const boosted = rankHybrid(candidates, weights, { boostWorktreeId: current });
+    expect(boosted[0]?.chunk.origin?.worktree_id).toBe(current);
+    // The sibling checkout stays retrievable; only its rank changes.
+    expect(boosted.map((item) => item.chunk.origin?.worktree_id)).toContain(sibling);
+
+    const unboosted = rankHybrid(candidates, weights);
+    const currentScore = unboosted.find((item) => item.chunk.origin?.worktree_id === current)?.score
+      .total;
+    const boostedScore = boosted.find((item) => item.chunk.origin?.worktree_id === current)?.score
+      .total;
+    expect(boostedScore ?? 0).toBeGreaterThan(currentScore ?? 0);
+  });
+});

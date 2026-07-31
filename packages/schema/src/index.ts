@@ -420,6 +420,20 @@ export type RetrievalDerivation = {
   input_manifest_digest: string;
 };
 
+/**
+ * Capture origin facets carried into the retrieval projection.
+ *
+ * `project_id` partitions knowledge; worktree fields are facets used for
+ * filtering, ranking boosts, and provenance. Absolute paths are never included.
+ * See ADR 0013.
+ */
+export type RetrievalOrigin = {
+  project_id?: string;
+  worktree_id?: string;
+  worktree_name?: string;
+  git_branch?: string;
+};
+
 export type RetrievalChunk = {
   schema_version: SchemaVersion;
   record_type: "retrieval_chunk";
@@ -437,6 +451,7 @@ export type RetrievalChunk = {
   epistemic_authority: EpistemicAuthority;
   status: "active" | "stale" | "projection_deleted";
   created_at: string;
+  origin?: RetrievalOrigin;
 };
 
 export type EmbeddingFailureKind =
@@ -523,6 +538,10 @@ export type RetrievalFilters = {
   recorded_time?: BitemporalInterval;
   protected_value_policy: "metadata_only" | "allow_decrypt" | "deny";
   conflict_policy: "surface_conflicts" | "exclude_conflicts" | "review_required";
+  /** Partition scope. Unknown-origin chunks are never excluded by this filter. */
+  project_ids?: string[];
+  /** Facet scope. Unknown-origin chunks are never excluded by this filter. */
+  worktree_ids?: string[];
 };
 
 export type RetrievalScore = {
@@ -556,6 +575,8 @@ export type RetrievalQuery = {
       semantic: number;
       recency: number;
     };
+    /** Rank results from this worktree higher without hiding others. */
+    boost_worktree_id?: string;
   };
   limit: number;
 };
@@ -664,6 +685,12 @@ export type MemorySearchInput = McpCommonInput<"memory_search"> & {
   context_budget: ContextBudget;
   /** When true, include draft/held units. Default false = active/promoted only. */
   include_held?: boolean;
+  /** Partition scope. Unknown-origin chunks are never excluded. */
+  project_ids?: string[];
+  /** Facet scope. Unknown-origin chunks are never excluded. */
+  worktree_ids?: string[];
+  /** Rank results from this worktree higher without hiding others. */
+  boost_worktree_id?: string;
 };
 
 export type MemoryGetInput = McpCommonInput<"memory_get"> & {

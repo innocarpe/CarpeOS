@@ -382,6 +382,9 @@
         },
         "created_at": {
           "$ref": "https://spec.carpeos.org/v1/schema/common.schema.json#/$defs/timestamp"
+        },
+        "origin": {
+          "$ref": "#/$defs/retrievalOrigin"
         }
       }
     },
@@ -634,6 +637,25 @@
         "conflict_policy": {
           "type": "string",
           "enum": ["surface_conflicts", "exclude_conflicts", "review_required"]
+        },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "uniqueItems": true,
+          "description": "Partition scope. Chunks with unknown project origin are not excluded, so pre-facet captures stay retrievable."
+        },
+        "worktree_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^wt_[a-f0-9]{24}$"
+          },
+          "uniqueItems": true,
+          "description": "Facet scope. Chunks with unknown worktree origin are not excluded."
         }
       }
     },
@@ -703,6 +725,11 @@
             },
             "weights": {
               "$ref": "#/$defs/rankWeights"
+            },
+            "boost_worktree_id": {
+              "type": "string",
+              "pattern": "^wt_[a-f0-9]{24}$",
+              "description": "Rank results from this worktree higher without hiding others."
             }
           }
         },
@@ -831,6 +858,32 @@
             "minLength": 1,
             "maxLength": 240
           }
+        }
+      }
+    },
+    "retrievalOrigin": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Capture origin facets. project_id partitions knowledge; worktree fields are facets used for filtering, ranking boosts, and provenance. Absolute paths are never included.",
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "worktree_id": {
+          "type": "string",
+          "pattern": "^wt_[a-f0-9]{24}$"
+        },
+        "worktree_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "git_branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
         }
       }
     }

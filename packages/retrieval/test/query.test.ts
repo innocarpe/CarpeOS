@@ -126,6 +126,65 @@ describe("canonical recheck", () => {
     expect(result.text).toBe(claimAccepted.payload.statement);
   });
 
+  it("scopes by project and worktree origin without excluding unknown origin", () => {
+    const sourceRecords = [eventSourceRecord(claimAccepted, "primary")];
+    const base = {
+      chunkKind: "claim" as const,
+      text: claimAccepted.payload.statement,
+      sourceRecords,
+      derivation: makeRetrievalDerivation({ sourceRecords, config: {} }),
+    };
+    const scored = { total: 1, structured: 1, fts: 0, semantic: 0, recency: 0 };
+    const common = {
+      score: scored,
+      events,
+      erasures: [],
+      freshness: [freshProjection],
+    };
+
+    const owned = {
+      ...buildRetrievalChunk(base),
+      origin: {
+        project_id: "project_alpha",
+        worktree_id: `wt_${"a".repeat(24)}`,
+        worktree_name: "alpha-main",
+      },
+    };
+    const foreign = {
+      ...buildRetrievalChunk(base),
+      origin: {
+        project_id: "project_beta",
+        worktree_id: `wt_${"b".repeat(24)}`,
+        worktree_name: "beta-main",
+      },
+    };
+    // Captured before the identity migration: origin is unknown.
+    const legacy = buildRetrievalChunk(base);
+
+    const projectScoped = { ...query.filters, project_ids: ["project_alpha"] };
+    expect(recheckCandidate({ ...common, chunk: owned, filters: projectScoped }).status).toBe(
+      "visible",
+    );
+    expect(recheckCandidate({ ...common, chunk: foreign, filters: projectScoped }).status).toBe(
+      "excluded",
+    );
+    // Unknown origin must stay retrievable rather than silently disappearing.
+    expect(recheckCandidate({ ...common, chunk: legacy, filters: projectScoped }).status).toBe(
+      "visible",
+    );
+
+    const worktreeScoped = { ...query.filters, worktree_ids: [`wt_${"a".repeat(24)}`] };
+    expect(recheckCandidate({ ...common, chunk: owned, filters: worktreeScoped }).status).toBe(
+      "visible",
+    );
+    expect(recheckCandidate({ ...common, chunk: foreign, filters: worktreeScoped }).status).toBe(
+      "excluded",
+    );
+    expect(recheckCandidate({ ...common, chunk: legacy, filters: worktreeScoped }).status).toBe(
+      "visible",
+    );
+  });
+
   it("excludes invisible trust zones, stale projections, and projection deletes", () => {
     const sourceRecords = [eventSourceRecord(claimAccepted, "primary")];
     const chunk = buildRetrievalChunk({

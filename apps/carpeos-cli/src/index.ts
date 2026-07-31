@@ -250,6 +250,9 @@ async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promi
       "protected-value-policy": { type: "string", default: "metadata_only" },
       "visible-trust-zone": { type: "string", multiple: true },
       "include-held": { type: "boolean", default: false },
+      "scope-project": { type: "string", multiple: true },
+      "scope-worktree": { type: "string", multiple: true },
+      "all-worktrees": { type: "boolean", default: false },
     },
   });
   const trustZone = requireStoreTrustZone(parsed.values["trust-zone"]);
@@ -272,6 +275,16 @@ async function runMemory(argv: readonly string[], env: NodeJS.ProcessEnv): Promi
               visibleTrustZones,
               limit: parseInteger(parsed.values.limit, "--limit", 1),
               includeHeld: parsed.values["include-held"] === true,
+              ...(parsed.values["scope-project"] === undefined
+                ? {}
+                : { projectIds: parsed.values["scope-project"] }),
+              ...(parsed.values["scope-worktree"] === undefined
+                ? {}
+                : { worktreeIds: parsed.values["scope-worktree"] }),
+              // Current checkout ranks higher unless the operator opts out.
+              ...(parsed.values["all-worktrees"] === true
+                ? {}
+                : { boostWorktreeId: store.worktree.worktree_id }),
             }),
           }),
         );
@@ -1478,6 +1491,9 @@ OPTIONS
                                  (default metadata_only)
   --include-held               Include draft/held knowledge units (default: off;
                                  search remains promoted/active only)
+  --scope-project <id>         Restrict to a project partition (repeatable)
+  --scope-worktree <wt_…>      Restrict to a worktree facet (repeatable)
+  --all-worktrees              Disable the current-worktree ranking boost
 
 EXAMPLES
   carpeos memory search \\
@@ -1780,6 +1796,9 @@ function makeRetrievalQuery(input: {
   visibleTrustZones: readonly string[];
   limit: number;
   includeHeld?: boolean;
+  projectIds?: readonly string[];
+  worktreeIds?: readonly string[];
+  boostWorktreeId?: string;
 }): RetrievalQuery {
   return {
     schema_version: "v1",
@@ -1801,8 +1820,19 @@ function makeRetrievalQuery(input: {
       ],
       protected_value_policy: "metadata_only",
       conflict_policy: "surface_conflicts",
+      // Partition and facet scoping; unknown-origin chunks are never excluded.
+      ...(input.projectIds === undefined || input.projectIds.length === 0
+        ? {}
+        : { project_ids: [...input.projectIds] }),
+      ...(input.worktreeIds === undefined || input.worktreeIds.length === 0
+        ? {}
+        : { worktree_ids: [...input.worktreeIds] }),
     },
-    ranking: { mode: "hybrid", weights: { structured: 1, fts: 1, semantic: 1, recency: 0.1 } },
+    ranking: {
+      mode: "hybrid",
+      weights: { structured: 1, fts: 1, semantic: 1, recency: 0.1 },
+      ...(input.boostWorktreeId === undefined ? {} : { boost_worktree_id: input.boostWorktreeId }),
+    },
     limit: input.limit,
   };
 }

@@ -197,6 +197,15 @@ export class CarpeosMcpApplication {
           includeHeld: input.include_held === true,
           ...(input.valid_time === undefined ? {} : { validTime: input.valid_time }),
           ...(input.recorded_time === undefined ? {} : { recordedTime: input.recorded_time }),
+          ...(input.project_ids === undefined || input.project_ids.length === 0
+            ? {}
+            : { projectIds: input.project_ids }),
+          ...(input.worktree_ids === undefined || input.worktree_ids.length === 0
+            ? {}
+            : { worktreeIds: input.worktree_ids }),
+          ...(input.boost_worktree_id === undefined
+            ? {}
+            : { boostWorktreeId: input.boost_worktree_id }),
         }),
       });
     });
@@ -487,6 +496,9 @@ function makeRetrievalQuery(input: {
   includeHeld?: boolean;
   validTime?: BitemporalInterval;
   recordedTime?: BitemporalInterval;
+  projectIds?: readonly string[];
+  worktreeIds?: readonly string[];
+  boostWorktreeId?: string;
 }): RetrievalQuery {
   return {
     schema_version: "v1",
@@ -509,8 +521,18 @@ function makeRetrievalQuery(input: {
       conflict_policy: "surface_conflicts",
       ...(input.validTime === undefined ? {} : { valid_time: input.validTime }),
       ...(input.recordedTime === undefined ? {} : { recorded_time: input.recordedTime }),
+      ...(input.projectIds === undefined || input.projectIds.length === 0
+        ? {}
+        : { project_ids: [...input.projectIds] }),
+      ...(input.worktreeIds === undefined || input.worktreeIds.length === 0
+        ? {}
+        : { worktree_ids: [...input.worktreeIds] }),
     },
-    ranking: { mode: "hybrid", weights: { structured: 1, fts: 1, semantic: 1, recency: 0.1 } },
+    ranking: {
+      mode: "hybrid",
+      weights: { structured: 1, fts: 1, semantic: 1, recency: 0.1 },
+      ...(input.boostWorktreeId === undefined ? {} : { boost_worktree_id: input.boostWorktreeId }),
+    },
     limit: Math.max(input.budget.max_items * 4, input.budget.max_items),
   };
 }
@@ -522,6 +544,9 @@ function stableQueryIdentity(input: {
   includeHeld?: boolean;
   validTime?: BitemporalInterval;
   recordedTime?: BitemporalInterval;
+  projectIds?: readonly string[];
+  worktreeIds?: readonly string[];
+  boostWorktreeId?: string;
 }): string {
   return JSON.stringify({
     text: input.text,
@@ -530,6 +555,9 @@ function stableQueryIdentity(input: {
     include_held: input.includeHeld === true,
     valid_time: input.validTime ?? null,
     recorded_time: input.recordedTime ?? null,
+    project_ids: input.projectIds ?? null,
+    worktree_ids: input.worktreeIds ?? null,
+    boost_worktree_id: input.boostWorktreeId ?? null,
   });
 }
 

@@ -47,7 +47,11 @@ export function searchMemory(input: SearchInput): RetrievalResult {
     semantic_score: input.semanticScores?.get(chunk.chunk_id) ?? 0,
     recency_score: scoreRecency(chunk, newestEpochMs),
   }));
-  const ranked = rankHybrid(candidates, input.query.ranking.weights);
+  const ranked = rankHybrid(candidates, input.query.ranking.weights, {
+    ...(input.query.ranking.boost_worktree_id === undefined
+      ? {}
+      : { boostWorktreeId: input.query.ranking.boost_worktree_id }),
+  });
   // Score first, then sparse diversity selection before canonical recheck.
   // Over-select slightly so excluded candidates after recheck still leave room.
   const diversified = selectWithDiversity(
@@ -123,6 +127,18 @@ export function recheckCandidate(input: {
     )
   ) {
     return { ...base, status: "excluded", reason: "lifecycle status excluded" };
+  }
+  if (
+    input.filters.project_ids !== undefined &&
+    !originMatchesScope(input.chunk.origin?.project_id, input.filters.project_ids)
+  ) {
+    return { ...base, status: "excluded", reason: "project scope excluded" };
+  }
+  if (
+    input.filters.worktree_ids !== undefined &&
+    !originMatchesScope(input.chunk.origin?.worktree_id, input.filters.worktree_ids)
+  ) {
+    return { ...base, status: "excluded", reason: "worktree scope excluded" };
   }
   if (
     input.filters.epistemic_authority !== undefined &&
@@ -342,4 +358,15 @@ function erasureTargetsChunk(erasure: ErasureLedgerRecord, chunk: RetrievalChunk
     );
   }
   return false;
+}
+
+/**
+ * Origin scope check for partition and facet filters.
+ *
+ * Unknown origin is never excluded: captures made before the identity migration
+ * carry no facet, and dropping them would silently shrink recall (ADR 0013).
+ */
+function originMatchesScope(value: string | undefined, scope: readonly string[]): boolean {
+  if (value === undefined) return true;
+  return scope.includes(value);
 }
