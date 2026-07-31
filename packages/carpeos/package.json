@@ -1,6 +1,6 @@
 {
   "name": "@innocarpe/carpeos",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "CarpeOS CLI and local MCP server — capture context, compound knowledge.",
   "license": "Apache-2.0",
   "type": "module",
