@@ -230,4 +230,38 @@ describe("graph projection", () => {
     expect(nodeCount).toBe(afterErasure.nodes.length);
     expect(edgeCount).toBe(afterErasure.edges.length);
   });
+
+  it("resolves subject and decision_thread entities deterministically", () => {
+    const origins = new Map<string, CaptureOrigin>();
+    const snapshot = buildGraphProjection({
+      events: [evidence, observation, claim, acceptance],
+      origins,
+    });
+    const subjects = snapshot.nodes.filter((node) => node.node_kind === "subject");
+    expect(subjects.length).toBeGreaterThan(0);
+    expect(subjects.every((node) => node.node_id.startsWith("subj:"))).toBe(true);
+
+    const threads = snapshot.nodes.filter((node) => node.node_kind === "decision_thread");
+    expect(threads.length).toBe(1);
+    expect(threads[0]?.node_id.startsWith("thr:")).toBe(true);
+
+    expect(snapshot.edges.some((edge) => edge.edge_kind === "about")).toBe(true);
+    expect(snapshot.edges.some((edge) => edge.edge_kind === "in_thread")).toBe(true);
+
+    // Deterministic: second build matches ids exactly.
+    const again = buildGraphProjection({
+      events: [evidence, observation, claim, acceptance],
+      origins,
+    });
+    expect(again.nodes.map((node) => node.node_id)).toEqual(
+      snapshot.nodes.map((node) => node.node_id),
+    );
+    expect(again.edges.map((edge) => edge.edge_id)).toEqual(
+      snapshot.edges.map((edge) => edge.edge_id),
+    );
+
+    // Clustering must not invent acceptance edges beyond explicit AcceptanceDecision.
+    const acceptedBy = snapshot.edges.filter((edge) => edge.edge_kind === "accepted_by");
+    expect(acceptedBy).toHaveLength(1);
+  });
 });
