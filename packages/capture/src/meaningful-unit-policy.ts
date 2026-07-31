@@ -99,6 +99,33 @@ export function resolveMeaningfulUnitPolicy(
 /**
  * Whether a captured lifecycle (or notify) event may feed extraction.
  */
+
+/** Normalize host hook names (grok snake_case → product lifecycle names). */
+export function normalizeCaptureHookEventName(hookEventName: string): string {
+  const raw = String(hookEventName ?? "").trim();
+  if (raw.length === 0) return raw;
+  const aliases: Record<string, string> = {
+    sessionstart: "SessionStart",
+    session_start: "SessionStart",
+    sessionend: "SessionEnd",
+    session_end: "SessionEnd",
+    userpromptsubmit: "UserPromptSubmit",
+    user_prompt_submit: "UserPromptSubmit",
+    posttooluse: "PostToolUse",
+    post_tool_use: "PostToolUse",
+    precompact: "PreCompact",
+    pre_compact: "PreCompact",
+    stop: "Stop",
+    notify: "Notify",
+    "agent-turn-complete": "agent-turn-complete",
+    agent_turn_complete: "agent-turn-complete",
+  };
+  const lower = raw.toLowerCase();
+  if (aliases[lower] !== undefined) return aliases[lower]!;
+  // Already PascalCase product names
+  return raw;
+}
+
 export function isHookEligibleForExtraction(
   hookEventName: string,
   overrides?: Partial<MeaningfulUnitPolicyConfig>,

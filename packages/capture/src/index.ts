@@ -29,6 +29,7 @@ export {
   containsSecretLikeMaterial,
   defaultMeaningfulUnitPolicySnapshot,
   isHookEligibleForExtraction,
+  normalizeCaptureHookEventName,
   recommendExtractionTarget,
   resolveMeaningfulUnitPolicy,
   type CaptureHookEventName,
