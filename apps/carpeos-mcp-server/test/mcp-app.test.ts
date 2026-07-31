@@ -32,6 +32,7 @@ describe("CarpeOS MCP in-process application", () => {
       "memory_trace",
       "memory_timeline",
       "memory_related",
+      "memory_neighborhood",
       "memory_capture",
       "memory_propose_claim",
     ]);

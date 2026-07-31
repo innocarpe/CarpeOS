@@ -36,7 +36,7 @@ describe("MCP tool inventory contract (G7)", () => {
 
     const inventoryNames = inventory.tools.map((tool) => tool.name);
     expect(inventoryNames).toEqual([...CARPEOS_MCP_TOOLS]);
-    expect(inventoryNames).toHaveLength(8);
+    expect(inventoryNames).toHaveLength(9);
 
     // No reserved/unimplemented tools may leak into the live list.
     for (const item of inventory.not_implemented) {
