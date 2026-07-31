@@ -240,3 +240,46 @@ describe("worktree ranking boost", () => {
     expect(boostedScore ?? 0).toBeGreaterThan(currentScore ?? 0);
   });
 });
+
+describe("graph-aware ranking", () => {
+  it("boosts nearer graph neighbors without hiding distant candidates", () => {
+    const near = {
+      chunk: {
+        ...buildRetrievalChunk({
+          chunkKind: "claim" as const,
+          text: "Synthetic near neighbor decision",
+          sourceRecords,
+          derivation: makeRetrievalDerivation({ sourceRecords, config: {} }),
+        }),
+        chunk_id: "chk_near",
+      },
+      structured_score: 0.4,
+      fts_score: 0.4,
+      semantic_score: 0.4,
+      recency_score: 0.4,
+    };
+    const far = {
+      chunk: {
+        ...buildRetrievalChunk({
+          chunkKind: "claim" as const,
+          text: "Synthetic far neighbor decision",
+          sourceRecords,
+          derivation: makeRetrievalDerivation({ sourceRecords, config: {} }),
+        }),
+        chunk_id: "chk_far",
+      },
+      structured_score: 0.4,
+      fts_score: 0.4,
+      semantic_score: 0.4,
+      recency_score: 0.4,
+    };
+    const weights = { structured: 1, fts: 1, semantic: 1, recency: 0.1 };
+    const proximity = new Map<string, number>([
+      [near.chunk.chunk_id, 0],
+      [far.chunk.chunk_id, 2],
+    ]);
+    const ranked = rankHybrid([far, near], weights, { graphProximity: proximity });
+    expect(ranked[0]?.chunk.chunk_id).toBe(near.chunk.chunk_id);
+    expect(ranked.map((item) => item.chunk.chunk_id)).toContain(far.chunk.chunk_id);
+  });
+});

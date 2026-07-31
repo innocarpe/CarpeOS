@@ -35,6 +35,8 @@ export type SearchInput = {
   freshness: readonly ProjectionFreshness[];
   semanticScores?: ReadonlyMap<string, number>;
   embeddingProvider?: RetrievalEmbeddingProviderReport;
+  /** chunk_id -> hop distance from hybrid seed neighborhood. */
+  graphProximity?: ReadonlyMap<string, number>;
 };
 
 export function searchMemory(input: SearchInput): RetrievalResult {
@@ -53,6 +55,7 @@ export function searchMemory(input: SearchInput): RetrievalResult {
     ...(input.query.ranking.boost_worktree_id === undefined
       ? {}
       : { boostWorktreeId: input.query.ranking.boost_worktree_id }),
+    ...(input.graphProximity === undefined ? {} : { graphProximity: input.graphProximity }),
   });
   // Score first, then sparse diversity selection before canonical recheck.
   // Over-select slightly so excluded candidates after recheck still leave room.
