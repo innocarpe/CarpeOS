@@ -14,6 +14,43 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [3.0.0] - 2026-07-31
+
+### Notes
+
+- Product-meaning **MAJOR**: retrieval-first knowledge graph on top of shipped 2.0
+  adjudication. Canonical events remain SSOT; graph/vector indexes are rebuildable
+  projections only. Default search stays promoted/active only. Freeze packet was
+  Defer, then maintainer chat **Approve** unlocked packaging. Does **not** retag
+  or unpublish `1.0.0` / `2.0.0`.
+
+### Added
+
+- Capture identity: `project_id` partition plus worktree facet (`worktree_id` /
+  `worktree_name` / `git_branch` / linked flag); absolute paths stay local-only
+- Retrieval filters and ranking: `project_ids` / `worktree_ids`, same-worktree boost
+- Pluggable embedding provider with offline default `local-lexical-hash`
+- Rebuildable graph projection (`graph_nodes` / `graph_edges`) with lineage edges
+- Deterministic entity resolution: `subject` and `decision_thread` nodes
+- Bounded neighborhood walk API (`walkGraphNeighborhood`) with budgets/omissions
+- MCP `memory_neighborhood` tool and inventory/contract updates
+- Graph-aware hybrid ranking (seed expansion + hop-decay boost)
+- Offline retrieval evaluation harness (multi-hop, isolation, false-acceptance)
+- Product 3.0 DoD, ADR 0013, PRD v1–v3 series, freeze packet
+
+### Changed
+
+- `memory_search` semantic leg uses non-synthetic local lexical embeddings by default
+- Hybrid search expands seeds through the local graph neighborhood before ranking
+- CLI `retrieval embed` default provider is `local-lexical-hash`
+- GraphRAG roadmap status: scheduled/executed under product 3.0 gates
+
+### Fixed
+
+- Sibling worktrees of one repository share project knowledge while retaining
+  checkout provenance
+- Unknown-origin (pre-identity) chunks are not excluded by project/worktree filters
+
 ## [2.0.0] - 2026-07-30
 
 ### Breaking
@@ -204,7 +241,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v3.0.0...HEAD
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
 [0.1.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.2
@@ -214,3 +251,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [0.2.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.2.2
 [1.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v1.0.0
 [2.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v2.0.0
+[3.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v3.0.0
