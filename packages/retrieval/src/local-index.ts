@@ -10,6 +10,7 @@ import type {
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
 import { buildMeaningfulChunks } from "./chunks.js";
+import { rebuildGraphProjection } from "./graph-projection.js";
 import {
   defaultEmbeddingProvider,
   isVectorCompatibleWithProvider,
@@ -152,6 +153,8 @@ export function rebuildLocalRetrievalIndex(
       writeChunk(db, chunk, now);
     }
     replaceFts(db, chunks);
+    // Graph projection is rebuildable and non-authoritative (ADR 0013).
+    rebuildGraphProjection(db, { events, erasures, now, transactional: false });
     // Freshness advances by max scanned event sequence for the zone, not only
     // sequences that produced chunks (capture-only homes used to stay stale).
     const freshness = writeFreshness(db, chunks, now, events);
