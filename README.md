@@ -11,13 +11,18 @@
 
 **Capture context. Compound knowledge.**
 
-CarpeOS is a personal knowledge OS for AI-assisted work that captures agent
-sessions with provenance, keeps accepted decisions searchable, and helps you
-and your agents retrieve that context later via MCP, CLI, and Obsidian — all
-local-first.
+CarpeOS is a personal knowledge OS for AI-assisted work. It captures agent
+sessions with provenance, **adjudicates** what is worth keeping as durable
+meaning (`promote` | `hold` | `reject`), keeps accepted decisions searchable,
+and helps you and your agents retrieve that context later via MCP, CLI, and
+Obsidian — all local-first.
 
-It keeps the trail of where each piece came from without dumping everything
-into one chat log.
+It keeps the trail of where each piece came from **without** turning every
+session dump into “memory.”
+
+**Latest release:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([notes](CHANGELOG.md) · [product 2.0 DoD](docs/maintainers/product-2.0.0.md)).
+**Next major (`3.0.0`)** is in active development (not frozen; no tag yet).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -48,6 +53,7 @@ once suggested X.”
 | Common problem | Approach here |
 | --- | --- |
 | Chat history disappears or is hard to trust | Append-only events with provenance |
+| Session noise floods “memory” | Post-capture adjudication; default search is **promoted only** |
 | “Memory” is mostly embeddings | Claims, acceptance, and supersession stay separate records |
 | Each tool keeps its own silo | Shared capture + MCP retrieval, provider-agnostic |
 | Generated notes become the only source of truth | Notes and indexes are rebuildable projections |
@@ -80,9 +86,23 @@ editor. Closer to plumbing for people who already live in agent workflows.
 
 ### Capture from tools you already use
 
-Hook templates map selected lifecycle events from Codex, Claude Code, and Grok
-Build into a common capture shape. Raw payloads can sit in encrypted storage;
-the event log keeps metadata and references.
+Hooks map selected lifecycle events from Codex, Claude Code, and Grok Build into
+a common capture shape. Raw payloads sit in encrypted storage; the event log
+keeps metadata and references. Host hooks stay **fail-open and fast**.
+
+### Adjudicate before “memory”
+
+After capture, a precision-first rule adjudicator (`adj_v1`) decides disposition:
+
+| Disposition | Meaning unit | Default search |
+| --- | --- | --- |
+| **promote** | Active Observation | Included |
+| **hold** | Draft Observation (review queue) | Excluded unless `--include-held` / `include_held` |
+| **reject** | Disposition only (evidence may remain) | Excluded |
+
+Operators can review holds (`carpeos adjudicate list-held|promote-held|reject-held`),
+inspect policy history, and re-run under a new policy version. Adjudication
+**never** auto-creates an `AcceptanceDecision`.
 
 ### A model that does not flatten status
 
@@ -93,7 +113,10 @@ into one paragraph of vector text.
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> O[Observation]
+  E[EvidenceArtifact] --> J[Adjudicate adj_v1]
+  J -->|promote| O[Observation active]
+  J -->|hold| H[Observation draft]
+  J -->|reject| R[Evidence only]
   O --> C[Claim]
   C --> A[AcceptanceDecision]
   C --> S[Supersession]
@@ -103,18 +126,21 @@ flowchart LR
 
 ### Interfaces for people and agents
 
-- **CLI** — rebuild, embed (dev), `memory search` / `memory get` /
-  `memory context-pack`
-- **MCP (stdio)** — eight local tools (`memory_context_pack`, `memory_trace`,
-  `memory_capture`, `memory_propose_claim`, …)
+- **CLI** — `capture-hook`, `extract`, **`adjudicate`**, `retrieval rebuild`,
+  `memory search|get|context-pack` (default promoted-only; `--include-held` opt-in),
+  `sync status|push|pull|once|cycle`
+- **MCP (stdio)** — eight local tools (`memory_search`, `memory_get`,
+  `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
+  `memory_capture`, `memory_propose_claim`)
 - **Obsidian projection** — Markdown files generated from the local store
   (projection only; not the source of truth)
 
 ### Local first, sync optional
 
 Each machine writes to a local outbox. There is deployable Cloudflare
-Worker/D1/R2 code if you want private multi-device sync. Projections can always
-be rebuilt from the event log.
+Worker/D1/R2 code if you want private multi-device sync, plus a **bounded**
+`carpeos sync cycle` for operator loops. Projections can always be rebuilt from
+the event log.
 
 ```mermaid
 flowchart TB
@@ -153,8 +179,9 @@ flowchart TB
 ```mermaid
 flowchart LR
   A[Agent hooks] --> B[Local capture]
-  B --> C[Event store]
-  C --> D[Accepted facts at query time]
+  B --> J[Adjudicate]
+  J --> C[Event store + dispositions]
+  C --> D[Promoted meaning first]
   C --> E[Projections]
   E --> F[MCP / CLI / Obsidian]
   D --> F
@@ -162,11 +189,12 @@ flowchart LR
 
 Rules worth knowing up front:
 
-1. After acceptance, the event log is append-only.
-2. “Accepted” is computed at query time — we do not rewrite a claim in place.
-3. Sensitive plaintext is not stored inside the event body.
-4. Trust zones are real isolation boundaries, not labels for show.
-5. Notes, vectors, and context packs can be deleted and rebuilt; they are not
+1. The event log is append-only; dispositions are append-only by policy version.
+2. Default search is **promoted/active** meaning — not every captured session.
+3. “Accepted” is computed at query time — we do not rewrite a claim in place.
+4. Sensitive plaintext is not stored inside the event body.
+5. Trust zones are real isolation boundaries, not labels for show.
+6. Notes, vectors, and context packs can be deleted and rebuilt; they are not
    the canonical store.
 
 More detail:
@@ -231,9 +259,9 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@0.2.2`. Changelog: [CHANGELOG.md](CHANGELOG.md).
-**SemVer `1.0.0` is not shipped yet** — see
-[product 1.0 DoD](docs/maintainers/product-1.0.0.md).
+`npm i -g @innocarpe/carpeos@2.0.0`. Changelog: [CHANGELOG.md](CHANGELOG.md).
+Product milestones: [1.0 DoD](docs/maintainers/product-1.0.0.md) (pipeline) ·
+[2.0 DoD](docs/maintainers/product-2.0.0.md) (adjudication, shipped as package 2.0.0).
 
 ### Developers (git checkout)
 
@@ -249,37 +277,49 @@ node scripts/install-local.mjs doctor
 For monorepo work without global install: `pnpm install && pnpm build`, then use
 `node apps/carpeos-cli/dist/index.js …` (see [local capture](docs/guides/local-capture.md)).
 
-### Product path: install → session → search
+### Product path: install → session → adjudicate → search
 
 ```sh
 # 1) Runtime + MCP
 carpeos setup run --apply
-# 2) Capture hooks (Claude / Codex / Grok user layers; does not wipe user hooks)
+# 2) Capture hooks (Claude / Codex / Grok; merge-safe, does not wipe user hooks)
 carpeos setup hooks install --apply
-# 3) Doctor (wrappers, MCP, hooks, store, adjudication health, promoted-only default search)
+# 3) Doctor (hooks, store, adjudication health, promoted-only default search)
 carpeos setup doctor
-# 4) After a host session (or synthetic capture-hook), rebuild + search meaning
+# 4) After a host session (or synthetic capture-hook), rebuild + search promoted meaning
 carpeos retrieval rebuild --trust-zone tz_local_default
 carpeos memory search \
-  --query "Captured SessionEnd" \
+  --query "durable decision" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
-carpeos memory context-pack \
-  --task "What did we decide?" \
-  --trust-zone tz_local_default \
-  --visible-trust-zone tz_local_default
+# optional: include held/draft
+# carpeos memory search --include-held --query "…" …
+
+# Operator review queue (held drafts)
+carpeos adjudicate --stats
+carpeos adjudicate list-held --limit 50
+# carpeos adjudicate promote-held --event-id evt_…
+# carpeos adjudicate reject-held --event-id evt_…
 ```
 
 `carpeos setup doctor` reports hook install status, recent `EvidenceArtifact`
 activity, Observation/Claim counts, **adjudication policy version + promote/hold/reject
 counts**, and that **default search is promoted/active only** (empty store → warnings,
-not fail). Automated gates: `pnpm smoke:product` · `pnpm smoke:knowledge`.
+not fail).
+
+Automated gates:
+
+| Gate | What it proves |
+| --- | --- |
+| `pnpm smoke:product` | 1.0 pipeline loop (capture → extract path → search) |
+| `pnpm smoke:knowledge` | 2.0 promote vs noise reject |
+| `pnpm smoke:dogfood` | multi-hook public-safe noise scenarios |
+| `pnpm smoke:mcp` | MCP tool surface |
 
 Advanced/manual hook templates remain under [`adapters/`](adapters/). Full notes:
 [one-stop install](docs/guides/one-stop-install.md) ·
 [MCP](docs/guides/mcp-server.md) ·
-[product smoke](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` ·
-`pnpm smoke:product`.
+[product smoke](docs/guides/mcp-context-pack-smoke.md).
 
 ### For agents installing this repo
 
@@ -303,53 +343,75 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | MCP tool contract | [docs/contracts/mcp-tools-v1.md](docs/contracts/mcp-tools-v1.md) |
-| MCP smoke | [docs/guides/mcp-context-pack-smoke.md](docs/guides/mcp-context-pack-smoke.md) · `pnpm smoke:mcp` |
-| Product loop smoke | `pnpm smoke:product` |
-| Product 1.0 DoD | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
+| Cloudflare / sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
+| Smokes | `pnpm smoke:mcp` · `smoke:product` · `smoke:knowledge` · `smoke:dogfood` |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
+| Product 1.0 DoD (pipeline) | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
+| Product 2.0 DoD (adjudication) | [docs/maintainers/product-2.0.0.md](docs/maintainers/product-2.0.0.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
-| v1.0 contract readiness | [docs/maintainers/v1-readiness.md](docs/maintainers/v1-readiness.md) |
 | Compatibility / deprecations | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
-| v1 freeze decision (G9) | [docs/maintainers/v1-freeze-decision.md](docs/maintainers/v1-freeze-decision.md) |
-| Local store migrations (G6) | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
+| Local store migrations | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
+| Memory capacity plan | [docs/plans/k3-memory-capacity-master-plan.md](docs/plans/k3-memory-capacity-master-plan.md) |
+
+---
+
+## Product line (1.0 → 2.0 → 3.0)
+
+| Package / product | Meaning | Status |
+| --- | --- | --- |
+| **1.0.0** | Local **pipeline + contract** freeze (hooks → evidence → extract shell → search) | **Shipped** — infrastructure baseline; not “finished knowledge OS” |
+| **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
+| **3.0.0** | Next major product step (in development) | **Active development** — no freeze / no tag yet |
+
+Honest residual risks after 2.0.0 (still true): golden/dogfood fixtures are synthetic;
+session de-noising is limited; adjudicated **Claim** drafts remain deferred; older-policy
+active units may need optional cleanup. Details:
+[product-2.0.0 residual risk](docs/maintainers/product-2.0.0.md).
+
+Capacity / pack economics and long-horizon structure work continue under the
+[memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md) and
+may feed **3.0** — that is **not** a freeze decision.
 
 ---
 
 ## What works today
 
 **Published:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0)).
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0) ·
+[CHANGELOG](CHANGELOG.md#200---2026-07-30)).
 
-Local path is implemented and CI-gated:
+Default local loop (CI-gated):
 
-`capture → adjudicate (promote|hold|reject) → promoted meaning → retrieval / MCP / CLI`
-(+ optional private sync, Obsidian projection).
-
-Gates: `pnpm check` · `pnpm smoke:product` · `pnpm smoke:knowledge` · opt-in
-`pnpm --filter @carpeos/sync-worker test:e2e` (local Worker+D1+R2 only).
+```text
+hooks → encrypted evidence → adjudicate (promote|hold|reject)
+  → promoted meaning → retrieval / MCP / CLI
+  (+ optional private sync, Obsidian projection)
+```
 
 | Area | Status |
 | --- | --- |
-| Specs, ontology, ADRs | In tree (incl. ADR 0012 adjudication) |
+| Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md)) |
 | Local capture + outbox | Shipped |
-| Knowledge adjudication | Shipped (rule `adj_v1`; doctor + held review + smoke) |
-| Sync Worker/client | Code + local tests; no production deploy claimed |
-| Local hybrid retrieval | Shipped (default: promoted/active only) |
+| Knowledge adjudication (`adj_v1`) | Shipped — dispositions, held review, policy history |
+| Default retrieval | **Promoted/active only**; held opt-in |
+| Doctor adjudication health | Shipped (`setup doctor`, `adjudicate --stats`) |
+| Sync Worker/client + bounded `sync cycle` | Code + local tests; no production edge claimed |
 | MCP stdio server (8 tools) | Local only |
 | Expert-slot context packs | CLI + MCP (local) |
 | `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
-| Obsidian projection package | Local only |
-| Hosted embeddings | Not built |
+| Obsidian projection | Local only |
+| Hosted embeddings / multi-tenant SaaS | Not goals of this repo |
 | GraphRAG traversal | Planned — [roadmap](docs/plans/graphrag-roadmap.md) |
-| Hosted multi-tenant SaaS | Not a goal of this repo |
+| **3.0.0 product freeze** | Not done — in development |
 
 **NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, private vault
 adoption, or hosted MCP is proven by this repository. npm publish is gated by
 SemVer tags + CI ([versioning](docs/maintainers/versioning-and-releases.md)).
 
 Do not treat adapter install, a live Cloudflare setup, hosted MCP, or
-production search quality as done until this repo says so with tests and docs.
+calibrated human-level judgment as finished until this repo says so with tests and docs.
 
 ---
 

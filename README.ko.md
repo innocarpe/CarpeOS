@@ -12,11 +12,16 @@
 **Capture context. Compound knowledge.**
 
 CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 세션을 출처와 함께
-기록하고, 수락된 결정을 검색 가능하게 유지하며, MCP·CLI·Obsidian으로 사람과
-에이전트가 나중에 다시 꺼내 쓰게 합니다. 전부 로컬 우선입니다.
+캡처하고, **무엇이 기억할 가치가 있는지 판정**하며 (`promote` | `hold` | `reject`),
+수락된 결정을 검색 가능하게 유지하고, MCP·CLI·Obsidian으로 사람과 에이전트가
+나중에 다시 꺼내 쓰게 합니다. 전부 로컬 우선입니다.
 
-채팅 창 하나에 전부 때려 넣는 방식이 아니라, 각 조각이 어디서 왔는지 흔적을
-남깁니다.
+세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
+남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
+
+**최신 릴리스:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [product 2.0 DoD](docs/maintainers/product-2.0.0.md)).
+**다음 메이저(`3.0.0`)** 는 개발 중입니다 (동결·태그 없음).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
@@ -46,6 +51,7 @@ CarpeOS는 그 맥락을 내가 통제하는 한곳에 모아 두되, “우리�
 | 자주 겪는 일 | 이쪽 접근 |
 | --- | --- |
 | 채팅 기록이 날아가거나 믿기 어렵다 | 출처가 남는 append-only 이벤트 |
+| 세션 노이즈가 “메모리”를 오염시킨다 | 캡처 후 판정; 기본 검색은 **promote만** |
 | “메모리”가 사실상 임베딩 뭉치 | claim / 수락 / supersession을 다른 레코드로 둠 |
 | 도구마다 기억이 따로 논다 | 공통 capture + MCP 검색 (특정 벤더 종속 아님) |
 | 생성된 노트가 곧 원본이 된다 | 노트·인덱스는 다시 만들 수 있는 projection |
@@ -76,18 +82,35 @@ CarpeOS는 그 맥락을 내가 통제하는 한곳에 모아 두되, “우리�
 ### 쓰던 에이전트에서 캡처
 
 Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture 형태로
-넘기는 hook 템플릿이 있습니다. raw payload는 암호화 저장소에 두고, 이벤트
-로그에는 메타데이터와 참조만 둘 수 있습니다.
+넘깁니다. raw payload는 암호화 저장소에, 이벤트 로그에는 메타데이터·참조를
+둡니다. 호스트 훅은 **fail-open·빠른 경로**를 유지합니다.
+
+### 기억하기 전에 판정
+
+캡처 뒤 precision-first 규칙 판정기(`adj_v1`)가 disposition을 정합니다.
+
+| Disposition | 의미 단위 | 기본 검색 |
+| --- | --- | --- |
+| **promote** | active Observation | 포함 |
+| **hold** | draft Observation (리뷰 큐) | 제외 (`--include-held` / `include_held` 시에만) |
+| **reject** | disposition만 (증거는 남을 수 있음) | 제외 |
+
+hold 리뷰(`carpeos adjudicate list-held|promote-held|reject-held`), policy
+history, 새 policy version 재판정이 가능합니다. 판정은 **`AcceptanceDecision`을
+자동 생성하지 않습니다**.
 
 ### 상태를 뭉개지 않는 모델
 
 Evidence는 claim이 아닙니다. claim이 있다고 해서 바로 “맞다”가 아닙니다.
-수락과 supersession은 별도 기록입니다. 그래서 검색할 때 확정된 것, 제안만
-된 것, 나중에 바뀐 것을 한 덩어리 텍스트로 뭉개지 않고 구분할 수 있습니다.
+수락과 supersession은 별도 기록입니다. 검색 시 확정·제안·교체를 한 덩어리
+벡터 텍스트로 뭉개지 않습니다.
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> O[Observation]
+  E[EvidenceArtifact] --> J[Adjudicate adj_v1]
+  J -->|promote| O[Observation active]
+  J -->|hold| H[Observation draft]
+  J -->|reject| R[Evidence only]
   O --> C[Claim]
   C --> A[AcceptanceDecision]
   C --> S[Supersession]
@@ -97,17 +120,19 @@ flowchart LR
 
 ### 사람용 / 에이전트용 인터페이스
 
-- **CLI** — rebuild, embed(개발용), `memory search` / `memory get` /
-  `memory context-pack`
-- **MCP (stdio)** — 로컬 도구 8개 (`memory_context_pack`, `memory_trace`,
-  `memory_capture`, `memory_propose_claim` 등)
+- **CLI** — `capture-hook`, `extract`, **`adjudicate`**, `retrieval rebuild`,
+  `memory search|get|context-pack` (기본 promoted only; `--include-held` 선택),
+  `sync status|push|pull|once|cycle`
+- **MCP (stdio)** — 로컬 도구 8개 (`memory_search`, `memory_get`,
+  `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
+  `memory_capture`, `memory_propose_claim`)
 - **Obsidian projection** — 로컬 스토어에서 Markdown 생성 (원본 아님, projection)
 
 ### 로컬 우선, sync는 선택
 
 기기는 로컬 outbox에 씁니다. 여러 기기가 필요하면 Cloudflare Worker/D1/R2용
-코드를 직접 띄울 수 있습니다. projection은 이벤트 로그에서 언제든 다시 만들 수
-있습니다.
+코드를 직접 띄울 수 있고, 운영용 **bounded** `carpeos sync cycle`이 있습니다.
+projection은 이벤트 로그에서 언제든 다시 만들 수 있습니다.
 
 ```mermaid
 flowchart TB
@@ -146,8 +171,9 @@ flowchart TB
 ```mermaid
 flowchart LR
   A[Agent hooks] --> B[Local capture]
-  B --> C[Event store]
-  C --> D[Query 시점 accepted facts]
+  B --> J[Adjudicate]
+  J --> C[Event store + dispositions]
+  C --> D[Promoted meaning first]
   C --> E[Projections]
   E --> F[MCP / CLI / Obsidian]
   D --> F
@@ -155,9 +181,10 @@ flowchart LR
 
 알아 둘 규칙:
 
-1. 수락 이후 이벤트 로그는 append-only입니다.
-2. “accepted”는 query 시점에 계산합니다. claim 레코드를 덮어쓰지 않습니다.
-3. 민감한 plaintext는 이벤트 body 밖에 둡니다.
+1. 이벤트 로그와 disposition은 append-only입니다 (policy version별).
+2. 기본 검색은 **promoted/active** 의미 단위입니다. 모든 세션이 메모리가 아닙니다.
+3. “accepted”는 query 시점에 계산합니다. claim 레코드를 덮어쓰지 않습니다.
+4. 민감한 plaintext는 이벤트 body 밖에 둡니다.
 4. Trust zone은 진짜 격리 경계입니다. 장식용 태그가 아닙니다.
 5. 노트·벡터·context pack은 지우고 다시 만들어도 됩니다. canonical store가
    아닙니다.
@@ -223,10 +250,10 @@ carpeos setup show              # config.json 출력
 `--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
 `--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@0.2.2`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@2.0.0`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
-**SemVer `1.0.0` 은 아직 출시되지 않았습니다** —
-[product 1.0 DoD](docs/maintainers/product-1.0.0.md) 참고.
+제품 마일스톤: [1.0 DoD](docs/maintainers/product-1.0.0.md) (파이프라인) ·
+[2.0 DoD](docs/maintainers/product-2.0.0.md) (판정, 패키지 2.0.0으로 출시).
 
 ### 개발자 (git checkout)
 
@@ -243,37 +270,47 @@ node scripts/install-local.mjs doctor
 `node apps/carpeos-cli/dist/index.js …`
 ([local capture](docs/guides/local-capture.md)).
 
-### 제품 경로: 설치 → 세션 → 검색
+### 제품 경로: 설치 → 세션 → 판정 → 검색
 
 ```sh
 # 1) 런타임 + MCP
 carpeos setup run --apply
 # 2) 캡처 훅 (사용자 훅을 지우지 않음)
 carpeos setup hooks install --apply
-# 3) doctor (wrapper, MCP, 훅, 스토어, 판정 health, 기본 검색=promoted only)
+# 3) doctor (훅, 스토어, 판정 health, 기본 검색=promoted only)
 carpeos setup doctor
-# 4) 호스트 세션(또는 capture-hook) 후 rebuild + 의미 단위 검색
+# 4) 호스트 세션(또는 capture-hook) 후 rebuild + promote 의미 검색
 carpeos retrieval rebuild --trust-zone tz_local_default
 carpeos memory search \
-  --query "Captured SessionEnd" \
+  --query "durable decision" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
-carpeos memory context-pack \
-  --task "무엇을 결정했나?" \
-  --trust-zone tz_local_default \
-  --visible-trust-zone tz_local_default
+# 선택: held/draft 포함
+# carpeos memory search --include-held --query "…" …
+
+# hold 리뷰 큐
+carpeos adjudicate --stats
+carpeos adjudicate list-held --limit 50
+# carpeos adjudicate promote-held --event-id evt_…
+# carpeos adjudicate reject-held --event-id evt_…
 ```
 
-`carpeos setup doctor` 는 훅 설치 상태, 최근 `EvidenceArtifact`, Observation/Claim
-개수, **판정 policy_version + promote/hold/reject 카운트**, 그리고 **기본 검색이
-promoted/active only** 임을 보고합니다 (빈 스토어는 warning, fail 아님).
-`@innocarpe/carpeos@2.0.0` 이 배포되어 있으며, 기본 검색은 promote된 의미 단위만 사용합니다.
-자동 게이트: `pnpm smoke:product` · `pnpm smoke:knowledge`.
+`carpeos setup doctor` 는 훅 설치, 최근 `EvidenceArtifact`, Observation/Claim 개수,
+**판정 policy_version + promote/hold/reject 카운트**, **기본 검색이 promoted/active
+only** 임을 보고합니다 (빈 스토어는 warning).
 
-수동/고급 템플릿은 [`adapters/`](adapters/) 에 있습니다. 자세한 문서:
+자동 게이트:
+
+| 게이트 | 증명 내용 |
+| --- | --- |
+| `pnpm smoke:product` | 1.0 파이프라인 루프 |
+| `pnpm smoke:knowledge` | 2.0 promote vs noise reject |
+| `pnpm smoke:dogfood` | multi-hook 공개-safe 노이즈 시나리오 |
+| `pnpm smoke:mcp` | MCP 도구 surface |
+
+수동/고급 템플릿: [`adapters/`](adapters/). 문서:
 [one-stop install](docs/guides/one-stop-install.md) ·
-[MCP](docs/guides/mcp-server.md) ·
-`pnpm smoke:mcp` · `pnpm smoke:product`.
+[MCP](docs/guides/mcp-server.md).
 
 ### 에이전트가 이 저장소를 설치할 때
 
@@ -297,48 +334,72 @@ promoted/active only** 임을 보고합니다 (빈 스토어는 warning, fail �
 | Capture & hooks | [docs/guides/local-capture.md](docs/guides/local-capture.md) |
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
-| Product 1.0 DoD | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
-| 제품 루프 smoke | `pnpm smoke:product` |
+| Cloudflare / sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
+| Smokes | `pnpm smoke:mcp` · `smoke:product` · `smoke:knowledge` · `smoke:dogfood` |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
+| Product 1.0 DoD (파이프라인) | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
+| Product 2.0 DoD (판정) | [docs/maintainers/product-2.0.0.md](docs/maintainers/product-2.0.0.md) |
 | 버전·릴리스 | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
+| Memory capacity plan | [docs/plans/k3-memory-capacity-master-plan.md](docs/plans/k3-memory-capacity-master-plan.md) |
+
+---
+
+## 제품 라인 (1.0 → 2.0 → 3.0)
+
+| 패키지 / 제품 | 의미 | 상태 |
+| --- | --- | --- |
+| **1.0.0** | 로컬 **파이프라인 + 계약** freeze | **출시** — 인프라 기준선. “완성된 지식 OS” 아님 |
+| **2.0.0** | **판정된 의미**가 기본 제품 계약 (`adj_v1`, promoted-only 검색, held 리뷰, doctor, smoke) | **출시** (npm / `v2.0.0`) — 운영 가능한 MVP. 인간 수준 판단 아님 |
+| **3.0.0** | 다음 메이저 (개발 중) | **개발 중** — freeze·태그 없음 |
+
+2.0.0 이후에도 남는 잔여 리스크: golden/dogfood는 synthetic, 세션 de-noise 한계,
+판정 경로의 Claim draft는 보류, 구 policy active 단위 optional cleanup 등.
+상세: [product-2.0.0 residual](docs/maintainers/product-2.0.0.md).
+
+용량·팩 경제·장기 구조는
+[memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md) 아래로
+이어지며 **3.0**에 반영될 수 있습니다. 이는 freeze 결정이 아닙니다.
 
 ---
 
 ## 지금 구현된 것
 
 **배포됨:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0)).
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0) ·
+[CHANGELOG](CHANGELOG.md#200---2026-07-30)).
 
-로컬 경로가 구현·CI 게이트되어 있습니다.
+기본 로컬 루프 (CI 게이트):
 
-`capture → adjudicate (promote|hold|reject) → 승격된 의미 → retrieval / MCP / CLI`
-(+ 선택적 private sync, Obsidian projection).
-
-게이트: `pnpm check` · `pnpm smoke:product` · `pnpm smoke:knowledge` · 선택
-`pnpm --filter @carpeos/sync-worker test:e2e` (로컬 Worker+D1+R2만).
+```text
+hooks → 암호화 증거 → adjudicate (promote|hold|reject)
+  → 승격된 의미 → retrieval / MCP / CLI
+  (+ 선택 private sync, Obsidian projection)
+```
 
 | 영역 | 상태 |
 | --- | --- |
-| Specs, ontology, ADRs | 있음 (ADR 0012 판정 포함) |
+| Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md) 포함) |
 | Local capture + outbox | 출시 |
-| Knowledge adjudication | 출시 (규칙 `adj_v1`; doctor·held 리뷰·smoke) |
-| Sync Worker/client | 코드 + 로컬 테스트. production 배포 주장 없음 |
-| Local hybrid retrieval | 출시 (기본: promoted/active only) |
-| MCP stdio server (도구 8개) | 로컬만 |
+| Knowledge adjudication (`adj_v1`) | 출시 — disposition, held 리뷰, policy history |
+| 기본 retrieval | **promoted/active only**; held는 opt-in |
+| Doctor 판정 health | 출시 |
+| Sync Worker/client + bounded `sync cycle` | 코드 + 로컬 테스트. production edge 주장 없음 |
+| MCP stdio (도구 8개) | 로컬만 |
 | Expert-slot context pack | CLI + MCP (로컬) |
-| `carpeos setup` / one-stop install | npm 패키지 `@innocarpe/carpeos` |
+| `carpeos setup` / one-stop install | npm `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
-| Obsidian projection package | 로컬만 |
-| Hosted embeddings | 아직 없음 |
-| GraphRAG traversal | 계획 — [로드맵](docs/plans/graphrag-roadmap.md) |
-| Hosted multi-tenant SaaS | 이 저장소 목표 아님 |
+| Obsidian projection | 로컬만 |
+| Hosted embeddings / multi-tenant SaaS | 이 저장소 목표 아님 |
+| GraphRAG | 계획 — [로드맵](docs/plans/graphrag-roadmap.md) |
+| **3.0.0 product freeze** | 미완 — 개발 중 |
 
 **NOT DEPLOYED:** hosted Worker, D1/R2 production, private vault, hosted MCP 는
-이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI 게이트를 따릅니다
+이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI
 ([versioning](docs/maintainers/versioning-and-releases.md)).
 
-어댑터 설치, 실제 Cloudflare 운영, hosted MCP, production 검색 품질을 “됐다”고
-보지 마세요. 이 저장소에 테스트와 문서가 생기기 전엔 미완입니다.
+어댑터 설치, 실제 Cloudflare 운영, hosted MCP, 인간 수준 판정 품질을 “완료”로
+보지 마세요.
 
 ---
 
