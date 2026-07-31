@@ -5,6 +5,7 @@ import type {
   RetrievalChunk,
   RetrievalFilters,
   RetrievalLineage,
+  RetrievalEmbeddingProviderReport,
   RetrievalQuery,
   RetrievalResult,
   RetrievalResultItem,
@@ -33,6 +34,7 @@ export type SearchInput = {
   erasures: readonly ErasureLedgerRecord[];
   freshness: readonly ProjectionFreshness[];
   semanticScores?: ReadonlyMap<string, number>;
+  embeddingProvider?: RetrievalEmbeddingProviderReport;
 };
 
 export function searchMemory(input: SearchInput): RetrievalResult {
@@ -78,6 +80,9 @@ export function searchMemory(input: SearchInput): RetrievalResult {
     filters_applied: input.query.filters,
     results,
     warnings: input.freshness.filter((item) => item.stale).map((item) => `stale:${item.reason}`),
+    ...(input.embeddingProvider === undefined
+      ? {}
+      : { embedding_provider: input.embeddingProvider }),
   };
   const conformance = validateConformance("retrievalProjection", result);
   if (!conformance.valid) {

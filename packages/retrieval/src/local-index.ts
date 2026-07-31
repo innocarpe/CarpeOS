@@ -11,9 +11,10 @@ import type {
 import { validateConformance } from "@carpeos/schema";
 import { buildMeaningfulChunks } from "./chunks.js";
 import {
-  deterministicLocalDevEmbedding,
-  isDeterministicLocalDevVectorCompatible,
-} from "./deterministic-local-dev.js";
+  defaultEmbeddingProvider,
+  isVectorCompatibleWithProvider,
+  type EmbeddingProvider,
+} from "./embedding-provider.js";
 import { RETRIEVAL_PROJECTION_VERSION, sha256Ref, stableJson } from "./provenance.js";
 import { searchMemory } from "./query.js";
 
@@ -230,9 +231,12 @@ export function searchLocalRetrievalIndex(
     query: RetrievalQuery;
     events?: readonly CanonicalEvent[];
     erasures?: readonly ErasureLedgerRecord[];
+    /** Defaults to the offline local-lexical-hash product provider. */
+    embeddingProvider?: EmbeddingProvider;
   },
 ): RetrievalResult {
   migrateLocalRetrievalIndex(db);
+  const provider = input.embeddingProvider ?? defaultEmbeddingProvider();
   // Over-fetch candidates so hybrid rank can prefer Observation/Claim over
   // recent evidence_excerpt rows that share FTS tokens.
   const candidateLimit = Math.max(input.query.limit * 4, 32);
@@ -240,12 +244,12 @@ export function searchLocalRetrievalIndex(
   const structuredChunkIds = structuredCandidateChunkIds(db, input.query, candidateLimit);
   const chunkIds = [...new Set([...ftsChunkIds, ...structuredChunkIds])].sort();
   const chunks = readChunks(db, chunkIds);
-  const storedVectors = readVectors(db, chunkIds);
-  const queryVector = deterministicLocalDevEmbedding(input.query.query_text);
+  const storedVectors = readVectors(db, chunkIds, provider);
+  const queryVector = embedSync(provider, input.query.query_text);
   const semanticScores = new Map(
     chunks.map((chunk) => {
       const stored = storedVectors.get(chunk.chunk_id);
-      const vector = stored ?? deterministicLocalDevEmbedding(chunk.text);
+      const vector = stored ?? embedSync(provider, chunk.text);
       return [chunk.chunk_id, cosine(queryVector, vector)] as const;
     }),
   );
@@ -256,7 +260,25 @@ export function searchLocalRetrievalIndex(
     erasures: input.erasures ?? readErasuresForProjection(db),
     freshness: readFreshness(db),
     semanticScores,
+    embeddingProvider: {
+      id: provider.info.id,
+      model: provider.info.model,
+      version: provider.info.version,
+      dimensions: provider.info.dimensions,
+      semantic_quality: provider.info.semantic_quality,
+    },
   });
+}
+
+/** Sync-only path for local providers; async model-backed adapters come later. */
+function embedSync(provider: EmbeddingProvider, text: string): number[] {
+  const value = provider.embed(text);
+  if (value instanceof Promise) {
+    throw new Error(
+      `embedding provider "${provider.info.id}" returned a Promise; async providers are not wired in the local search path yet`,
+    );
+  }
+  return value;
 }
 
 function readCanonicalEventsForProjection(db: SqlDatabase): CanonicalEvent[] {
@@ -504,7 +526,11 @@ function structuredCandidateChunkIds(
     .map((row) => row.chunk_id);
 }
 
-function readVectors(db: SqlDatabase, chunkIds: readonly string[]): Map<string, number[]> {
+function readVectors(
+  db: SqlDatabase,
+  chunkIds: readonly string[],
+  provider: EmbeddingProvider,
+): Map<string, number[]> {
   const vectors = new Map<string, number[]>();
   for (const chunkId of chunkIds) {
     const row = db
@@ -517,7 +543,7 @@ function readVectors(db: SqlDatabase, chunkIds: readonly string[]): Map<string, 
     if (row !== undefined) {
       const vector = JSON.parse(row.vector_json) as number[];
       if (
-        isDeterministicLocalDevVectorCompatible({
+        isVectorCompatibleWithProvider(provider, {
           embeddingModel: row.embedding_model,
           embeddingVersion: row.embedding_version,
           pooling: row.pooling,

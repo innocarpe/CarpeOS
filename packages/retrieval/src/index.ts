@@ -1,6 +1,7 @@
 export * from "./chunks.js";
 export * from "./compaction.js";
 export * from "./deterministic-local-dev.js";
+export * from "./embedding-provider.js";
 export * from "./embedding-jobs.js";
 export * from "./local-index.js";
 export * from "./provenance.js";

@@ -603,6 +603,14 @@ export type HiddenRetrievalResultItem = {
 
 export type RetrievalResultItem = VisibleRetrievalResultItem | HiddenRetrievalResultItem;
 
+export type RetrievalEmbeddingProviderReport = {
+  id: string;
+  model: string;
+  version: string;
+  dimensions: number;
+  semantic_quality: "synthetic-dev-only" | "local-lexical" | "model-backed";
+};
+
 export type RetrievalResult = {
   schema_version: SchemaVersion;
   record_type: "retrieval_result";
@@ -611,6 +619,8 @@ export type RetrievalResult = {
   filters_applied: RetrievalFilters;
   results: RetrievalResultItem[];
   warnings: string[];
+  /** Provider used for the semantic leg of this query. */
+  embedding_provider?: RetrievalEmbeddingProviderReport;
 };
 
 export type RetrievalProjectionMessage =

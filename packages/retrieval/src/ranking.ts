@@ -1,5 +1,5 @@
 import type { RetrievalChunk, RetrievalScore } from "@carpeos/schema";
-import { deterministicLocalDevEmbedding } from "./deterministic-local-dev.js";
+import { localLexicalHashEmbedding } from "./embedding-provider.js";
 
 export type RankWeights = {
   structured: number;
@@ -250,7 +250,7 @@ export function cosineSimilarity(left: Vector, right: Vector): number {
 }
 
 export function fakeVector(text: string): number[] {
-  return deterministicLocalDevEmbedding(text);
+  return localLexicalHashEmbedding(text);
 }
 
 export function compareRankedCandidates(left: RankedCandidate, right: RankedCandidate): number {

@@ -58,7 +58,7 @@ describe("retrieval CLI", () => {
         "retrieval",
         "embed",
         "--provider",
-        "deterministic-local-dev",
+        "local-lexical-hash",
         "--limit",
         "2",
         "--trust-zone",
@@ -70,8 +70,8 @@ describe("retrieval CLI", () => {
     expect(embedded.stdout).toMatchObject({
       ok: true,
       command: "retrieval embed",
-      provider: "deterministic-local-dev",
-      semantic_quality: "synthetic-dev-only",
+      provider: "local-lexical-hash",
+      semantic_quality: "local-lexical",
     });
 
     const search = runJson(
@@ -184,7 +184,7 @@ describe("retrieval CLI", () => {
     seedRetrievalEvents(context).close();
     const commands = [
       ["retrieval", "rebuild"],
-      ["retrieval", "embed", "--provider", "deterministic-local-dev"],
+      ["retrieval", "embed", "--provider", "local-lexical-hash"],
       ["memory", "search", "--query", "Alpha", "--visible-trust-zone", trustZone.trust_zone_id],
       [
         "memory",

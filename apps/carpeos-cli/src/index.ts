@@ -16,8 +16,7 @@ import {
 import { createCarpeosMcpApplication } from "@carpeos/mcp-server";
 import {
   ackEmbeddingJob,
-  DETERMINISTIC_LOCAL_DEV_EMBEDDING,
-  deterministicLocalDevEmbedding,
+  defaultEmbeddingProvider,
   ensureEmbeddingJob,
   leaseEmbeddingJobs,
   makeEmbeddingRecord,
@@ -139,7 +138,7 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       home: { type: "string" },
       "project-id": { type: "string" },
       "trust-zone": { type: "string" },
-      provider: { type: "string", default: "deterministic-local-dev" },
+      provider: { type: "string", default: "local-lexical-hash" },
       limit: { type: "string", default: "10" },
       "lease-ms": { type: "string", default: "30000" },
     },
@@ -165,9 +164,11 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
         return 0;
       }
       case "embed": {
-        if (parsed.values.provider !== "deterministic-local-dev") {
+        const embedProvider = defaultEmbeddingProvider();
+        const requested = String(parsed.values.provider ?? embedProvider.info.id);
+        if (requested !== embedProvider.info.id && requested !== "local-lexical-hash") {
           throw new CliUsageError(
-            "retrieval embed requires --provider deterministic-local-dev; production embedding is not configured",
+            `retrieval embed requires --provider ${embedProvider.info.id} (offline default)`,
           );
         }
         const embedded = withLocalRetrievalDatabase(store, (db) => {
@@ -175,9 +176,9 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
           for (const chunk of rebuilt.chunks.filter((item) => item.status === "active")) {
             ensureEmbeddingJob(db, {
               chunkId: chunk.chunk_id,
-              embeddingModel: DETERMINISTIC_LOCAL_DEV_EMBEDDING.model,
-              embeddingVersion: DETERMINISTIC_LOCAL_DEV_EMBEDDING.version,
-              pooling: DETERMINISTIC_LOCAL_DEV_EMBEDDING.pooling,
+              embeddingModel: embedProvider.info.model,
+              embeddingVersion: embedProvider.info.version,
+              pooling: embedProvider.info.pooling,
             });
           }
           const leased = leaseEmbeddingJobs(db, {
@@ -192,13 +193,17 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
             if (chunk === undefined) {
               continue;
             }
-            const vector = deterministicLocalDevEmbedding(chunk.text);
+            const embeddedVector = embedProvider.embed(chunk.text);
+            if (embeddedVector instanceof Promise) {
+              throw new Error("async embedding providers are not supported in CLI embed yet");
+            }
+            const vector = embeddedVector;
             const record = makeEmbeddingRecord({
               chunkId: chunk.chunk_id,
               vector,
-              embeddingModel: DETERMINISTIC_LOCAL_DEV_EMBEDDING.model,
-              embeddingVersion: DETERMINISTIC_LOCAL_DEV_EMBEDDING.version,
-              pooling: DETERMINISTIC_LOCAL_DEV_EMBEDDING.pooling,
+              embeddingModel: embedProvider.info.model,
+              embeddingVersion: embedProvider.info.version,
+              pooling: embedProvider.info.pooling,
               inputTextSha256: chunk.text_digest,
               createdAt: new Date().toISOString(),
             });
@@ -212,8 +217,8 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
         writeJson(process.stdout, {
           ok: true,
           command: "retrieval embed",
-          provider: "deterministic-local-dev",
-          semantic_quality: "synthetic-dev-only",
+          provider: embedProvider.info.id,
+          semantic_quality: embedProvider.info.semantic_quality,
           ...embedded,
         });
         return 0;
@@ -1457,13 +1462,13 @@ OPTIONS
   --trust-zone <id>    Required
   --home <path>
   --project-id <id>
-  --provider <name>    embed: only deterministic-local-dev
+  --provider <name>    embed: local-lexical-hash (offline default)
   --limit <n>
   --lease-ms <n>
 
 EXAMPLES
   carpeos retrieval rebuild --trust-zone tz_local_default
-  carpeos retrieval embed --trust-zone tz_local_default --provider deterministic-local-dev
+  carpeos retrieval embed --trust-zone tz_local_default --provider local-lexical-hash
 `;
     case "memory":
       return `carpeos memory — query local memory (search / get / context-pack)
