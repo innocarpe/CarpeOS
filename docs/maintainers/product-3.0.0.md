@@ -1,6 +1,6 @@
 # Product 3.0.0 — Definition of Done
 
-Status: **spec / not started**. This document is the SSOT for the next product major.
+Status: **implementation complete / freeze Defer**. Waiting on maintainer Approve before release.
 
 Related:
 
@@ -244,17 +244,17 @@ with linked implementation and verification evidence.
 
 | # | Criterion | Status |
 | --- | --- | --- |
-| R0 | Spec: this document plus ADR 0013 | **todo** |
-| R1 | Capture identity carries project, worktree id and name, branch, and linked-worktree flag; derivation consistent; absolute paths stay local | **todo** |
-| R2 | Retrieval chunks and queries carry project partition and worktree facet; same-worktree ranking boost; CLI and MCP filters | **todo** |
-| R3 | Pluggable embedding provider with a non-placeholder default; vector index wired; provider identity recorded in projection metadata | **todo** |
-| R4 | `graph_nodes` and `graph_edges` materialized at ingest, rebuildable, erasure and supersession aware | **todo** |
-| R5 | Entity resolution produces `subject` and `decision_thread` nodes with deterministic, testable rules | **todo** |
-| R6 | Bounded k-hop traversal over the edge index with depth and node budgets and reported omissions | **todo** |
-| R7 | MCP neighborhood retrieval surface plus context-pack integration, provenance-carrying | **todo** |
-| R8 | Graph-aware ranking integrated with hybrid seeds; precision guardrails intact | **todo** |
-| R9 | Retrieval eval harness: multi-hop recall, cross-repository and cross-worktree scenarios, latency budget, zero false acceptance, rebuild determinism | **todo** |
-| R10 | Freeze decision for 3.0 contracts (Defer until Approve) | **todo** |
+| R0 | Spec: this document plus ADR 0013 | **done** — PR #111 |
+| R1 | Capture identity carries project, worktree id and name, branch, and linked-worktree flag; derivation consistent; absolute paths stay local | **done** — PR #112 |
+| R2 | Retrieval chunks and queries carry project partition and worktree facet; same-worktree ranking boost; CLI and MCP filters | **done** — PR #113 |
+| R3 | Pluggable embedding provider with a non-placeholder default; vector index wired; provider identity recorded in projection metadata | **done** — PR #114 |
+| R4 | `graph_nodes` and `graph_edges` materialized at ingest, rebuildable, erasure and supersession aware | **done** — PR #115 |
+| R5 | Entity resolution produces `subject` and `decision_thread` nodes with deterministic, testable rules | **done** — PR #116 |
+| R6 | Bounded k-hop traversal over the edge index with depth and node budgets and reported omissions | **done** — PR #117 |
+| R7 | MCP neighborhood retrieval surface plus context-pack integration, provenance-carrying | **done** — PR #118 |
+| R8 | Graph-aware ranking integrated with hybrid seeds; precision guardrails intact | **done** — PR #119 |
+| R9 | Retrieval eval harness: multi-hop recall, cross-repository and cross-worktree scenarios, latency budget, zero false acceptance, rebuild determinism | **done** — PR #120 |
+| R10 | Freeze decision for 3.0 contracts (Defer until Approve) | **done (Defer)** — freeze packet below |
 | R11 | SemVer **3.0.0** release only after explicit maintainer Approve | **blocked** |
 
 ### Definition of “fast enough” (R9)
@@ -383,3 +383,80 @@ retrieval evaluation harness.
 
 **Do not touch:** epistemic model event types, acceptance semantics, or
 adjudication thresholds without separate precision evidence.
+
+---
+
+## G011 Freeze decision (2026-07-31) — **Defer**
+
+One-read freeze packet for `@innocarpe/carpeos` **3.0.0**. Decision remains
+**Defer** until a maintainer records explicit **Approve** in chat. Packaging and
+tagging are blocked while Defer stands.
+
+### Green gates (evidence on `main`)
+
+| Gate | PR | Evidence |
+| --- | --- | --- |
+| R0 Spec + ADR 0013 | [#111](https://github.com/innocarpe/CarpeOS/pull/111) | product-3.0.0.md + ADR 0013 |
+| R1 Capture identity | [#112](https://github.com/innocarpe/CarpeOS/pull/112) | worktree facet + migration 006 |
+| R2 Retrieval facets | [#113](https://github.com/innocarpe/CarpeOS/pull/113) | project/worktree filters + boost |
+| R3 Embedding provider | [#114](https://github.com/innocarpe/CarpeOS/pull/114) | local-lexical-hash default |
+| R4 Graph materialization | [#115](https://github.com/innocarpe/CarpeOS/pull/115) | graph_nodes / graph_edges |
+| R5 Entity resolution | [#116](https://github.com/innocarpe/CarpeOS/pull/116) | subject + decision_thread |
+| R6 Neighborhood walk | [#117](https://github.com/innocarpe/CarpeOS/pull/117) | walkGraphNeighborhood |
+| R7 MCP neighborhood | [#118](https://github.com/innocarpe/CarpeOS/pull/118) | memory_neighborhood tool |
+| R8 Graph-aware ranking | [#119](https://github.com/innocarpe/CarpeOS/pull/119) | hop-decay boost + seed expansion |
+| R9 Eval harness | [#120](https://github.com/innocarpe/CarpeOS/pull/120) | offline multi-hop / isolation suite |
+
+### Validation commands (public-safe)
+
+Run on a clean checkout of `main` after the merges above:
+
+```bash
+pnpm build
+pnpm typecheck
+pnpm test
+pnpm smoke:product
+pnpm smoke:knowledge
+pnpm smoke:dogfood
+pnpm public-boundary
+```
+
+Retrieval package tests include the R9 harness
+(`packages/retrieval/test/retrieval-eval.harness.test.ts`).
+
+### Residual risk (still true after implementation)
+
+1. **Entity resolution is deterministic, not smart.** Subjects come from
+   `subject_ref`; decision threads are subject-scoped connected components. No
+   NLP coreference, no fuzzy entity merge.
+2. **Local-lexical embeddings are offline and useful, not neural SOTA.** They
+   beat whole-text synthetic hashes; they are not a hosted model.
+3. **Graph hop distance in ranking is approximate** (seed = 0, neighborhood member ≤ 1
+   in the current expansion path). Deeper calibrated hop features can improve
+   later without a contract break.
+4. **Neighborhood MCP maps non-event nodes as projection refs.** Operators still
+   recheck canonical event records for authority.
+5. **No production latency benchmark farm.** Budgets are enforced and tested;
+   wall-clock targets remain operator-spot-check territory.
+6. **Hosted graph / Neo4j adapter is still optional and unbuilt** (G013).
+
+### Deferred work (not blockers for documenting Defer)
+
+- G013 hosted graph index adapter
+- Richer hop-distance features and eval thresholds as numeric SLOs
+- Claim-form / auto-claim still deferred from 2.0
+- Context-pack expert-slot wiring that prefers neighborhood packs by default
+
+### Hard non-actions (still)
+
+- Do **not** tag or publish `3.0.0` while this decision is Defer.
+- Do **not** retag or unpublish `1.0.0` / `2.0.0`.
+- Do **not** make graph/vector stores canonical.
+- Do **not** auto-create `AcceptanceDecision` from graph structure.
+- Do **not** partition knowledge by worktree.
+
+### Unlock condition
+
+Maintainer chat message containing an explicit **Approve** for product 3.0
+freeze. Only then may G012 (`chore(release): @innocarpe/carpeos v3.0.0`) start.
+
