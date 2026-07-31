@@ -1,6 +1,10 @@
 # GraphRAG Roadmap
 
-Status: **planned**. Not implemented as a product feature in this repository.
+Status: **scheduled for product 3.0**. Stage G-R0 (vocabulary) landed; the
+remaining stages are executed by
+[product-3.0.0.md](../maintainers/product-3.0.0.md) and
+[ADR 0013](../adr/0013-retrieval-first-projection.md), which map G-R1 through
+G-R5 onto gates R4 through R8.
 
 This roadmap stages graph-augmented retrieval for CarpeOS without weakening
 canonical authority, trust zones, or the memory capacity model (ADR 0009).
