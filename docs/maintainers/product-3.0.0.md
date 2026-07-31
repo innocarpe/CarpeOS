@@ -7,6 +7,7 @@ Related:
 - [PRD v3](../PRD-v3.md) — major-version product requirements snapshot
 - [PRD index](../PRD.md) — all majors
 
+- [Product 3.1.0 DoD](product-3.1.0.md) — next minor: OKF export interop (design)
 - [Product 2.0.0 DoD](product-2.0.0.md) — knowledge adjudication (shipped)
 - [Product 1.0.0 DoD](product-1.0.0.md) — capture pipeline freeze (shipped)
 - [ADR 0013](../adr/0013-retrieval-first-projection.md) — retrieval-first projection layer

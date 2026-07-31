@@ -9,6 +9,13 @@ One PRD file per **major** version. Do not rewrite older majors in place; add
 | **2.0** | Is this worth remembering? | [PRD-v2.md](PRD-v2.md) | [product-2.0.0.md](maintainers/product-2.0.0.md) |
 | **3.0** | Can it be found and used? | [PRD-v3.md](PRD-v3.md) | [product-3.0.0.md](maintainers/product-3.0.0.md) |
 
+Minors do **not** get a new PRD file. They extend the current major via a
+maintainer DoD (and ADRs as needed). Active minor design:
+
+| Minor | Thesis (one line) | DoD | ADR |
+| --- | --- | --- | --- |
+| **3.1** | Can accepted knowledge leave CarpeOS safely (OKF export)? | [product-3.1.0.md](maintainers/product-3.1.0.md) | [0014](adr/0014-okf-export-projection.md) |
+
 **PRD** = durable product requirements snapshot for that major’s thesis and scope.  
 **DoD** = living gates, freeze evidence, and release policy for maintainers.
 
