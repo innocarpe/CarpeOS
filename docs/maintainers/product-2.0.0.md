@@ -1,15 +1,16 @@
 # Product 2.0.0 — Definition of Done (knowledge adjudication)
 
-Status: **design SSOT** for the next major product milestone.
-Not shipped. Do not claim 2.0.0 until this document’s gates are green **and** a
-maintainer records explicit Approve.
+Status: **shipped** as `@innocarpe/carpeos@2.0.0` after maintainer Approve.
+This document remains the SSOT for what 2.0 does and does not claim.
 
 Related:
 
-- [Product 1.0.0 DoD](product-1.0.0.md) — **what already shipped** (honest scope)
+- [Product 3.0.0 DoD](product-3.0.0.md) — **next major**: retrieval-first knowledge graph
+- [Product 1.0.0 DoD](product-1.0.0.md) — **what shipped before** (honest scope)
+- [ADR 0012](../adr/0012-knowledge-adjudication.md) — adjudication model
 - [ADR 0011](../adr/0011-meaningful-unit-extraction-policy.md) — lifecycle extraction defaults (1.0)
 - [ADR 0002](../adr/0002-immutable-epistemic-model.md) — Observation / Claim / Acceptance
-- Public package line after 1.0: `@innocarpe/carpeos` stays on SemVer; **2.0.0 is a
+- Public package line: `@innocarpe/carpeos` stays on SemVer; **2.0.0 was a
   product-meaning major**, not “rename the same loop”
 
 ---
