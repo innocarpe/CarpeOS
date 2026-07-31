@@ -858,6 +858,33 @@
             "minLength": 1,
             "maxLength": 240
           }
+        },
+        "embedding_provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "model", "version", "dimensions", "semantic_quality"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dimensions": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "semantic_quality": {
+              "type": "string",
+              "enum": ["synthetic-dev-only", "local-lexical", "model-backed"]
+            }
+          }
         }
       }
     },
