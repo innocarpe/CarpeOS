@@ -652,3 +652,205 @@ function threadNodeIdFor(subjectRef: string, memberNodeIds: readonly string[]): 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
+
+export type GraphWalkInput = {
+  /** Event id, `evt:<id>`, `subj:<id>`, `thr:<id>`, `project:<id>`, or `worktree:<id>`. */
+  root_id: string;
+  max_depth?: number;
+  max_nodes?: number;
+  edge_kinds?: readonly GraphEdgeKind[];
+  visible_trust_zone_ids: readonly string[];
+};
+
+export type GraphWalkOmission = {
+  reason: "max_depth" | "max_nodes" | "edge_kind_filtered" | "trust_zone";
+  detail?: string;
+};
+
+export type GraphWalkResult = {
+  root_id: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  budgets: {
+    max_depth: number;
+    max_nodes: number;
+    nodes_used: number;
+    edges_used: number;
+  };
+  omissions: GraphWalkOmission[];
+};
+
+type EdgeRow = {
+  edge_id: string;
+  edge_kind: string;
+  from_node_id: string;
+  to_node_id: string;
+  trust_zone_id: string;
+  source_event_id: string | null;
+  properties_json: string;
+};
+
+type NodeRow = {
+  node_id: string;
+  node_kind: string;
+  trust_zone_id: string;
+  label: string | null;
+  source_event_id: string | null;
+  properties_json: string;
+};
+
+/**
+ * Bounded k-hop walk over the materialized edge index.
+ *
+ * Fail-closed on missing trust zones. Reports omissions when depth/node budgets
+ * cut the walk short. Does not perform canonical recheck — callers must.
+ */
+export function walkGraphNeighborhood(db: SqlDatabase, input: GraphWalkInput): GraphWalkResult {
+  migrateGraphProjection(db);
+  if (input.visible_trust_zone_ids.length === 0) {
+    throw new Error("visible_trust_zone_ids is required");
+  }
+  const maxDepth = input.max_depth ?? 2;
+  const maxNodes = input.max_nodes ?? 64;
+  if (maxDepth < 0 || maxNodes < 1) {
+    throw new Error("invalid walk budgets");
+  }
+
+  const rootId = normalizeRootId(input.root_id);
+  const allowEdgeKinds = input.edge_kinds === undefined ? undefined : new Set(input.edge_kinds);
+  const zoneSet = new Set(input.visible_trust_zone_ids);
+  const omissions: GraphWalkOmission[] = [];
+
+  const visited = new Set<string>();
+  const nodeMap = new Map<string, GraphNode>();
+  const edgeMap = new Map<string, GraphEdge>();
+  const queue: Array<{ id: string; depth: number }> = [{ id: rootId, depth: 0 }];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined) break;
+    if (visited.has(current.id)) continue;
+
+    if (nodeMap.size >= maxNodes && !nodeMap.has(current.id)) {
+      omissions.push({ reason: "max_nodes", detail: current.id });
+      continue;
+    }
+
+    const node = readGraphNode(db, current.id);
+    if (node === undefined) {
+      continue;
+    }
+    if (!zoneSet.has(node.trust_zone_id)) {
+      omissions.push({ reason: "trust_zone", detail: current.id });
+      continue;
+    }
+
+    visited.add(current.id);
+    nodeMap.set(node.node_id, node);
+
+    if (current.depth >= maxDepth) {
+      // Still count the node, but do not expand further.
+      if (hasOutgoing(db, current.id)) {
+        omissions.push({ reason: "max_depth", detail: current.id });
+      }
+      continue;
+    }
+
+    const incident = readIncidentEdges(db, current.id);
+    for (const edge of incident) {
+      if (!zoneSet.has(edge.trust_zone_id)) {
+        omissions.push({ reason: "trust_zone", detail: edge.edge_id });
+        continue;
+      }
+      if (allowEdgeKinds !== undefined && !allowEdgeKinds.has(edge.edge_kind as GraphEdgeKind)) {
+        omissions.push({ reason: "edge_kind_filtered", detail: edge.edge_id });
+        continue;
+      }
+      edgeMap.set(edge.edge_id, edge);
+      const nextId = edge.from_node_id === current.id ? edge.to_node_id : edge.from_node_id;
+      if (!visited.has(nextId)) {
+        if (nodeMap.size + queue.length >= maxNodes && !nodeMap.has(nextId)) {
+          omissions.push({ reason: "max_nodes", detail: nextId });
+          continue;
+        }
+        queue.push({ id: nextId, depth: current.depth + 1 });
+      }
+    }
+  }
+
+  return {
+    root_id: rootId,
+    nodes: [...nodeMap.values()].sort((a, b) => a.node_id.localeCompare(b.node_id)),
+    edges: [...edgeMap.values()].sort((a, b) => a.edge_id.localeCompare(b.edge_id)),
+    budgets: {
+      max_depth: maxDepth,
+      max_nodes: maxNodes,
+      nodes_used: nodeMap.size,
+      edges_used: edgeMap.size,
+    },
+    omissions,
+  };
+}
+
+function normalizeRootId(rootId: string): string {
+  const trimmed = rootId.trim();
+  if (
+    trimmed.startsWith("evt:") ||
+    trimmed.startsWith("subj:") ||
+    trimmed.startsWith("thr:") ||
+    trimmed.startsWith("project:") ||
+    trimmed.startsWith("worktree:")
+  ) {
+    return trimmed;
+  }
+  // Bare event ids are accepted for operator convenience.
+  if (trimmed.startsWith("evt_")) {
+    return `evt:${trimmed}`;
+  }
+  return trimmed;
+}
+
+function readGraphNode(db: SqlDatabase, nodeId: string): GraphNode | undefined {
+  const row = db
+    .prepare(
+      `SELECT node_id, node_kind, trust_zone_id, label, source_event_id, properties_json
+       FROM graph_nodes WHERE node_id = ?`,
+    )
+    .get(nodeId) as NodeRow | undefined;
+  if (row === undefined) return undefined;
+  return {
+    node_id: row.node_id,
+    node_kind: row.node_kind as GraphNodeKind,
+    trust_zone_id: row.trust_zone_id,
+    ...(row.label ? { label: row.label } : {}),
+    ...(row.source_event_id ? { source_event_id: row.source_event_id } : {}),
+    properties: JSON.parse(row.properties_json) as Record<string, string>,
+  };
+}
+
+function readIncidentEdges(db: SqlDatabase, nodeId: string): GraphEdge[] {
+  const rows = db
+    .prepare(
+      `SELECT edge_id, edge_kind, from_node_id, to_node_id, trust_zone_id,
+              source_event_id, properties_json
+       FROM graph_edges
+       WHERE from_node_id = ? OR to_node_id = ?`,
+    )
+    .all(nodeId, nodeId) as EdgeRow[];
+  return rows.map((row) => ({
+    edge_id: row.edge_id,
+    edge_kind: row.edge_kind as GraphEdgeKind,
+    from_node_id: row.from_node_id,
+    to_node_id: row.to_node_id,
+    trust_zone_id: row.trust_zone_id,
+    ...(row.source_event_id ? { source_event_id: row.source_event_id } : {}),
+    properties: JSON.parse(row.properties_json) as Record<string, string>,
+  }));
+}
+
+function hasOutgoing(db: SqlDatabase, nodeId: string): boolean {
+  const row = db
+    .prepare(`SELECT 1 AS ok FROM graph_edges WHERE from_node_id = ? OR to_node_id = ? LIMIT 1`)
+    .get(nodeId, nodeId) as { ok: number } | undefined;
+  return row !== undefined;
+}
