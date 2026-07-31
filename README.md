@@ -2,10 +2,12 @@
 
 [English](README.md) · [한국어](README.ko.md)
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-0e8a16?style=flat)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.22-0052cc?style=flat)](package.json)
-[![Status](https://img.shields.io/badge/status-pre--MVP-fbca04?style=flat)](#what-is-implemented-today)
-[![Website](https://img.shields.io/badge/website-open-4f7cff?style=flat)](https://innocarpe.github.io/carpeos-website/)
+[![npm](https://img.shields.io/npm/v/@innocarpe/carpeos.svg?style=flat&label=npm&color=cb3837)](https://www.npmjs.com/package/@innocarpe/carpeos)
+[![CI](https://github.com/innocarpe/CarpeOS/actions/workflows/ci.yml/badge.svg)](https://github.com/innocarpe/CarpeOS/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/innocarpe/CarpeOS?style=flat)](LICENSE)
+[![Node](https://img.shields.io/node/v-lts/@innocarpe/carpeos?style=flat&label=node)](package.json)
+[![GitHub release](https://img.shields.io/github/v/release/innocarpe/CarpeOS?style=flat&label=release)](https://github.com/innocarpe/CarpeOS/releases/latest)
+[![Website](https://img.shields.io/badge/docs-website-4f7cff?style=flat)](https://innocarpe.github.io/carpeos-website/)
 
 **Capture context. Compound knowledge.**
 
@@ -271,8 +273,7 @@ carpeos memory context-pack \
 `carpeos setup doctor` reports hook install status, recent `EvidenceArtifact`
 activity, Observation/Claim counts, **adjudication policy version + promote/hold/reject
 counts**, and that **default search is promoted/active only** (empty store → warnings,
-not fail). 1.0 is pipeline infrastructure; 2.0 adjudication remains in progress beyond
-merged MVP surfaces. Automated gates: `pnpm smoke:product` · `pnpm smoke:knowledge`.
+not fail). Automated gates: `pnpm smoke:product` · `pnpm smoke:knowledge`.
 
 Advanced/manual hook templates remain under [`adapters/`](adapters/). Full notes:
 [one-stop install](docs/guides/one-stop-install.md) ·
@@ -293,7 +294,7 @@ Keep install **idempotent** and **out of the git tree** for private data.
 6. Releases use SemVer + `vX.Y.Z` tags only — see
    [versioning](docs/maintainers/versioning-and-releases.md) and skill
    `skills/carpeos-release/SKILL.md` (`./scripts/install-release-skill.sh`).
-   Do not claim `1.0.0` until product gate Approve.
+   Follow SemVer; do not invent tags outside the release skill.
 
 | Guide | Link |
 | --- | --- |
@@ -316,27 +317,29 @@ Keep install **idempotent** and **out of the git tree** for private data.
 
 ## What works today
 
-Pre-MVP. The local path — capture → outbox → sync client → retrieval → MCP →
-Obsidian projection — is implemented and covered with synthetic tests in this
-repo.
+**Published:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0)).
 
-G008 adds release-readiness documentation and a synthetic local end-to-end
-proof. On Node 22.22.0, `pnpm check` passes, and the opt-in synthetic local
-Worker+D1+R2 gate passes with
-`pnpm --filter @carpeos/sync-worker test:e2e`. This is local evidence only.
+Local path is implemented and CI-gated:
+
+`capture → adjudicate (promote|hold|reject) → promoted meaning → retrieval / MCP / CLI`
+(+ optional private sync, Obsidian projection).
+
+Gates: `pnpm check` · `pnpm smoke:product` · `pnpm smoke:knowledge` · opt-in
+`pnpm --filter @carpeos/sync-worker test:e2e` (local Worker+D1+R2 only).
 
 | Area | Status |
 | --- | --- |
-| Specs, ontology, ADRs | In tree |
-| Local capture + outbox | Implemented (synthetic tests) |
+| Specs, ontology, ADRs | In tree (incl. ADR 0012 adjudication) |
+| Local capture + outbox | Shipped |
+| Knowledge adjudication | Shipped (rule `adj_v1`; doctor + held review + smoke) |
 | Sync Worker/client | Code + local tests; no production deploy claimed |
-| Local hybrid retrieval | Implemented (deterministic dev embeddings) |
+| Local hybrid retrieval | Shipped (default: promoted/active only) |
 | MCP stdio server (8 tools) | Local only |
 | Expert-slot context packs | CLI + MCP (local) |
-| `carpeos setup` / one-stop install | In tree; npm package `@innocarpe/carpeos` |
+| `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection package | Local only |
-| Synthetic G008 local e2e | Local only; opt-in Worker+D1+R2 proof |
 | Hosted embeddings | Not built |
 | GraphRAG traversal | Planned — [roadmap](docs/plans/graphrag-roadmap.md) |
 | Hosted multi-tenant SaaS | Not a goal of this repo |

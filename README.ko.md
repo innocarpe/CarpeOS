@@ -2,10 +2,12 @@
 
 [English](README.md) · [한국어](README.ko.md)
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-0e8a16?style=flat)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.22-0052cc?style=flat)](package.json)
-[![Status](https://img.shields.io/badge/status-pre--MVP-fbca04?style=flat)](#지금-구현된-것)
-[![Website](https://img.shields.io/badge/website-open-4f7cff?style=flat)](https://innocarpe.github.io/carpeos-website/)
+[![npm](https://img.shields.io/npm/v/@innocarpe/carpeos.svg?style=flat&label=npm&color=cb3837)](https://www.npmjs.com/package/@innocarpe/carpeos)
+[![CI](https://github.com/innocarpe/CarpeOS/actions/workflows/ci.yml/badge.svg)](https://github.com/innocarpe/CarpeOS/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/innocarpe/CarpeOS?style=flat)](LICENSE)
+[![Node](https://img.shields.io/node/v-lts/@innocarpe/carpeos?style=flat&label=node)](package.json)
+[![GitHub release](https://img.shields.io/github/v/release/innocarpe/CarpeOS?style=flat&label=release)](https://github.com/innocarpe/CarpeOS/releases/latest)
+[![Website](https://img.shields.io/badge/docs-website-4f7cff?style=flat)](https://innocarpe.github.io/carpeos-website/)
 
 **Capture context. Compound knowledge.**
 
@@ -265,7 +267,7 @@ carpeos memory context-pack \
 `carpeos setup doctor` 는 훅 설치 상태, 최근 `EvidenceArtifact`, Observation/Claim
 개수, **판정 policy_version + promote/hold/reject 카운트**, 그리고 **기본 검색이
 promoted/active only** 임을 보고합니다 (빈 스토어는 warning, fail 아님).
-1.0은 파이프라인 인프라이며, 2.0 판정은 병합된 MVP 이후에도 진행 중입니다.
+`@innocarpe/carpeos@2.0.0` 이 배포되어 있으며, 기본 검색은 promote된 의미 단위만 사용합니다.
 자동 게이트: `pnpm smoke:product` · `pnpm smoke:knowledge`.
 
 수동/고급 템플릿은 [`adapters/`](adapters/) 에 있습니다. 자세한 문서:
@@ -287,7 +289,7 @@ promoted/active only** 임을 보고합니다 (빈 스토어는 warning, fail �
    [versioning](docs/maintainers/versioning-and-releases.md),
    스킬 `skills/carpeos-release/SKILL.md`
    (`./scripts/install-release-skill.sh`).
-   product gate Approve 전에는 `1.0.0` 을 주장하지 말 것.
+   SemVer를 따르고, release skill 밖의 태그를 만들지 말 것.
 
 | 가이드 | 링크 |
 | --- | --- |
@@ -304,27 +306,29 @@ promoted/active only** 임을 보고합니다 (빈 스토어는 warning, fail �
 
 ## 지금 구현된 것
 
-pre-MVP입니다. 로컬 경로(capture → outbox → sync client → retrieval → MCP →
-Obsidian projection)는 이 monorepo에 구현돼 있고, synthetic 테스트가 붙어
-있습니다.
+**배포됨:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0)).
 
-G008은 release-readiness 문서와 synthetic local end-to-end proof를 추가합니다.
-Node 22.22.0에서 `pnpm check`가 통과했고,
-`pnpm --filter @carpeos/sync-worker test:e2e`로 opt-in synthetic local
-Worker+D1+R2 gate가 통과했습니다. 이 증거는 로컬 증거일 뿐입니다.
+로컬 경로가 구현·CI 게이트되어 있습니다.
+
+`capture → adjudicate (promote|hold|reject) → 승격된 의미 → retrieval / MCP / CLI`
+(+ 선택적 private sync, Obsidian projection).
+
+게이트: `pnpm check` · `pnpm smoke:product` · `pnpm smoke:knowledge` · 선택
+`pnpm --filter @carpeos/sync-worker test:e2e` (로컬 Worker+D1+R2만).
 
 | 영역 | 상태 |
 | --- | --- |
-| Specs, ontology, ADRs | 있음 |
-| Local capture + outbox | 구현 (synthetic 테스트) |
+| Specs, ontology, ADRs | 있음 (ADR 0012 판정 포함) |
+| Local capture + outbox | 출시 |
+| Knowledge adjudication | 출시 (규칙 `adj_v1`; doctor·held 리뷰·smoke) |
 | Sync Worker/client | 코드 + 로컬 테스트. production 배포 주장 없음 |
-| Local hybrid retrieval | 구현 (개발용 deterministic embedding) |
+| Local hybrid retrieval | 출시 (기본: promoted/active only) |
 | MCP stdio server (도구 8개) | 로컬만 |
 | Expert-slot context pack | CLI + MCP (로컬) |
-| `carpeos setup` / one-stop install | 있음. npm 패키지 `@innocarpe/carpeos` |
+| `carpeos setup` / one-stop install | npm 패키지 `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection package | 로컬만 |
-| Synthetic G008 local e2e | 로컬만. opt-in Worker+D1+R2 proof |
 | Hosted embeddings | 아직 없음 |
 | GraphRAG traversal | 계획 — [로드맵](docs/plans/graphrag-roadmap.md) |
 | Hosted multi-tenant SaaS | 이 저장소 목표 아님 |
