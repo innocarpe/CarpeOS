@@ -10,9 +10,10 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
-- (none yet — fold entries here before the next release)
+- Report current `adj_v2` disposition counts from `carpeos doctor` instead of stale
+  `adj_v1` counts after upgrading from 3.0.0
 
 ## [3.0.1] - 2026-07-31
 

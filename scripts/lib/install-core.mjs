@@ -791,7 +791,7 @@ export function doctorLocalStoreActivity(input) {
           .get();
         if (tableRow) {
           // Current product adjudicator identity (keep in sync with ADJUDICATION_POLICY_VERSION).
-          const policyVersion = "adj_v1";
+          const policyVersion = "adj_v2";
           const dispRows = db
             .prepare(
               `
