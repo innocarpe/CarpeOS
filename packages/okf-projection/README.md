@@ -11,6 +11,7 @@ content or mutate canonical knowledge.
 - Deterministic, filesystem-independent bundles from `buildOkfProjectionPlan`.
 - Manifest-owned disk rebuilds with `delete_missing` (default) and
   `tombstone_missing` policies through `rebuildOkfProjection`.
+- OKF v0.2 bundle conformance checks with `checkOkfConformance`.
 - Field mapping details: [MAPPING.md](./MAPPING.md).
 
 ## Usage (library)
@@ -18,6 +19,7 @@ content or mutate canonical knowledge.
 ```ts
 import {
   buildOkfProjectionPlan,
+  checkOkfConformance,
   rebuildOkfProjection,
   type OkfMapInput,
   type OkfProjectionConfig,
@@ -31,12 +33,17 @@ const config: OkfProjectionConfig = {
 };
 
 const plan = buildOkfProjectionPlan({ snapshot, config });
+const conformance = checkOkfConformance({
+  files: plan.files,
+  manifest: plan.manifest,
+});
+if (!conformance.valid) throw new Error("Planned bundle is not conformant");
 rebuildOkfProjection({ snapshot, config });
 ```
 
-`buildOkfProjectionPlan` does not touch the filesystem. `rebuildOkfProjection`
-creates planned files and rewrites or deletes only paths owned by a valid prior
-manifest.
+`buildOkfProjectionPlan` and `checkOkfConformance` do not touch the filesystem.
+`rebuildOkfProjection` creates planned files and rewrites or deletes only paths
+owned by a valid prior manifest.
 
 ## Defaults and safety
 
