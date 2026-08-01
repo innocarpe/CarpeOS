@@ -1,3 +1,18 @@
+export {
+  checkOkfConformance,
+  OKF_MANIFEST_PATH,
+  OKF_PROJECTION_VERSION,
+  OKF_VERSION,
+} from "./conformance.js";
+export type {
+  OkfBundleFile,
+  OkfConformanceDiagnostic,
+  OkfConformanceDiagnosticCode,
+  OkfConformanceInput,
+  OkfConformanceManifest,
+  OkfConformanceResult,
+  OkfConformanceSeverity,
+} from "./conformance.js";
 export { mapEventsToOkf } from "./map.js";
 export { buildOkfProjectionPlan, rebuildOkfProjection } from "./rebuild.js";
 export type {
