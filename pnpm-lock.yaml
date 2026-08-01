@@ -37,6 +37,9 @@ importers:
       '@carpeos/mcp-server':
         specifier: workspace:*
         version: link:../carpeos-mcp-server
+      '@carpeos/okf-projection':
+        specifier: workspace:*
+        version: link:../../packages/okf-projection
       '@carpeos/retrieval':
         specifier: workspace:*
         version: link:../../packages/retrieval

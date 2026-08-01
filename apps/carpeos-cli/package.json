@@ -27,6 +27,7 @@
   "dependencies": {
     "@carpeos/capture": "workspace:*",
     "@carpeos/local-store": "workspace:*",
+    "@carpeos/okf-projection": "workspace:*",
     "@carpeos/mcp-server": "workspace:*",
     "@carpeos/retrieval": "workspace:*",
     "@carpeos/schema": "workspace:*",

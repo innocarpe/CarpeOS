@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { isIdempotencyKey } from "@carpeos/capture";
@@ -13,6 +13,11 @@ import {
   runtimeDirFromEnv,
   withLocalRetrievalDatabase,
 } from "@carpeos/local-store";
+import {
+  buildOkfProjectionPlan,
+  checkOkfConformance,
+  rebuildOkfProjection,
+} from "@carpeos/okf-projection";
 import { createCarpeosMcpApplication } from "@carpeos/mcp-server";
 import {
   ackEmbeddingJob,
@@ -93,6 +98,8 @@ export async function runCli(
         return runRetrieval(rest, env);
       case "memory":
         return await runMemory(rest, env);
+      case "okf":
+        return runOkf(rest, env);
       case "setup":
       case "doctor":
         throw new CliUsageError(
@@ -226,6 +233,96 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       default:
         throw new CliUsageError(`unknown retrieval subcommand: ${subcommand}`);
     }
+  } finally {
+    store.close();
+  }
+}
+function runOkf(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const [subcommand, ...rest] = argv;
+  if (subcommand !== "export" && subcommand !== "rebuild") {
+    throw new CliUsageError("okf requires export or rebuild (see: carpeos help okf)");
+  }
+
+  const parsed = parseArgs({
+    args: rest,
+    allowPositionals: false,
+    strict: true,
+    options: {
+      out: { type: "string" },
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+      "visible-trust-zone": { type: "string", multiple: true },
+      "include-held": { type: "boolean", default: false },
+    },
+  });
+  const visibleTrustZoneIds = parsed.values["visible-trust-zone"];
+  if (visibleTrustZoneIds === undefined || visibleTrustZoneIds.length === 0) {
+    throw new CliUsageError("okf commands require --visible-trust-zone");
+  }
+  for (const trustZoneId of visibleTrustZoneIds) {
+    if (!isTrustZoneId(trustZoneId)) {
+      throw new CliUsageError("--visible-trust-zone must match tz_[a-z0-9][a-z0-9_-]{2,63}");
+    }
+  }
+
+  const outputRoot = resolve(requireString(parsed.values.out, "--out"));
+  const store = openStore(
+    compactCommonOptions(
+      parsed.values.home,
+      parsed.values["project-id"],
+      parsed.values["trust-zone"],
+    ),
+    env,
+  );
+  try {
+    const activeTrustZoneId = store.trustZone.trust_zone_id;
+    if (!visibleTrustZoneIds.includes(activeTrustZoneId)) {
+      throw new CliUsageError("--visible-trust-zone must include the active trust zone");
+    }
+
+    const sortedVisibleTrustZoneIds = [...new Set(visibleTrustZoneIds)].sort();
+    const snapshot = store.getRetrievalInputSnapshot({
+      visibleTrustZoneIds: sortedVisibleTrustZoneIds,
+    });
+    const config = {
+      outputRoot,
+      visibleTrustZoneIds: sortedVisibleTrustZoneIds,
+      generatedAt: new Date().toISOString(),
+      includeHeld: parsed.values["include-held"],
+      pathPolicy: "delete_missing" as const,
+    };
+    const plan = buildOkfProjectionPlan({ snapshot, config });
+    const conformance = checkOkfConformance({
+      files: plan.files,
+      manifest: plan.manifest,
+    });
+    if (!conformance.valid) {
+      throw new Error("OKF projection plan is not conformant");
+    }
+
+    const rebuilt = rebuildOkfProjection({ snapshot, config });
+    writeJson(process.stdout, {
+      ok: true,
+      command: `okf ${subcommand}`,
+      projection: "okf-export/v1",
+      okf_version: "0.2",
+      output_root: outputRoot,
+      visible_trust_zone_ids: sortedVisibleTrustZoneIds,
+      include_held: parsed.values["include-held"],
+      concept_count: plan.files.filter((file) => file.path !== "index.md" && file.path !== "log.md")
+        .length,
+      file_count: plan.files.length,
+      manifest_status: rebuilt.manifestStatus,
+      manifest_path: rebuilt.manifestPath,
+      written: rebuilt.written,
+      deleted: rebuilt.deleted,
+      preserved_deletion_because_manifest_corrupt: rebuilt.preservedDeletionBecauseManifestCorrupt,
+      conformance_warning_count: conformance.diagnostics.filter(
+        (diagnostic) => diagnostic.severity === "warning",
+      ).length,
+    });
+    return 0;
   } finally {
     store.close();
   }
@@ -1129,14 +1226,6 @@ function resolveTrustZoneResolution(
   return { trustZoneId: undefined, source: "device_default" };
 }
 
-function resolveTrustZoneId(
-  explicit: string | undefined,
-  env: NodeJS.ProcessEnv,
-  runtimeDir: string,
-): string | undefined {
-  return resolveTrustZoneResolution(explicit, env, runtimeDir).trustZoneId;
-}
-
 function readTrustZoneFromHomeConfig(runtimeDir: string): string | undefined {
   try {
     const raw = readFileSync(join(runtimeDir, "config.json"), "utf8");
@@ -1222,6 +1311,7 @@ COMMANDS
   sync                 Push/pull with a remote sync edge (status|push|pull|once|cycle)
   retrieval            Rebuild local retrieval index or run embed jobs
   memory               Search / get / context-pack over local memory
+  okf                  Export OKF v0.2 (export|rebuild; explicit zones; held off; no canonical mutation)
   help                 Show this help or help for a command
 
 COMMON OPTIONS (most store commands)
@@ -1243,6 +1333,7 @@ EXAMPLES
     --visible-trust-zone tz_local_default
   carpeos outbox status --home "$HOME/.carpeos"
   carpeos help memory
+  carpeos okf export --out ./okf --visible-trust-zone tz_local_default
 
 OUTPUT
   Successful command results are JSON on stdout.
@@ -1469,6 +1560,29 @@ OPTIONS
 EXAMPLES
   carpeos retrieval rebuild --trust-zone tz_local_default
   carpeos retrieval embed --trust-zone tz_local_default --provider local-lexical-hash
+`;
+    case "okf":
+      return `carpeos okf — write an OKF v0.2 projection without canonical mutation
+
+USAGE
+  carpeos okf export --out <dir> --visible-trust-zone <id> [options]
+  carpeos okf rebuild --out <dir> --visible-trust-zone <id> [options]
+
+SUBCOMMANDS
+  export               Build and write the projection-managed OKF bundle
+  rebuild              Rebuild the projection-managed OKF bundle
+
+OPTIONS
+  --out <dir>                  Required output directory
+  --visible-trust-zone <id>    Required; repeatable; must include the active trust zone
+  --include-held               Include draft/held knowledge units (default: off)
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+
+NOTES
+  Both commands are projection-only filesystem exports: they never mutate canonical events.
+  Explicit visible trust zones are required; promoted/active knowledge is exported by default.
 `;
     case "memory":
       return `carpeos memory — query local memory (search / get / context-pack)
