@@ -18,7 +18,7 @@ const NON_AUTH_MARKER =
 
 /**
  * Pure mapper: CarpeOS events → OKF concept files + index/log markdown.
- * Does not touch the filesystem (K1). K2 will write these under a manifest.
+ * Filesystem planning and writes are handled by the rebuild API.
  */
 export function mapEventsToOkf(input: OkfMapInput, config: OkfMapConfig): OkfMapResult {
   const visibleZones = new Set(config.visibleTrustZoneIds);

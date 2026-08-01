@@ -1,6 +1,4 @@
-/**
- * Pure OKF export mapping types (K1). Disk rebuild lands in K2.
- */
+/** Pure OKF export mapping types. */
 
 export type OkfLifecycleStatus = "draft" | "stable" | "deprecated";
 
