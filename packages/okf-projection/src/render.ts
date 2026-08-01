@@ -119,9 +119,9 @@ export function renderRootIndex(input: {
   for (const prefix of [...byPrefix.keys()].sort()) {
     lines.push(`# ${prefix}`);
     lines.push("");
-    for (const concept of (byPrefix.get(prefix) ?? []).slice().sort((a, b) =>
-      a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
-    )) {
+    for (const concept of (byPrefix.get(prefix) ?? [])
+      .slice()
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
       const desc = concept.frontmatter.description ?? concept.frontmatter.type;
       lines.push(`* [${concept.frontmatter.title}](${concept.path}) - ${desc}`);
     }

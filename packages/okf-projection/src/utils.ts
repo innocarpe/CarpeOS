@@ -44,11 +44,7 @@ export function oneLine(value: string, max = 200): string {
 /** Map free-form actor ids into OKF actor convention when missing a prefix. */
 export function toOkfActor(raw: string): string {
   const trimmed = raw.trim();
-  if (
-    trimmed.startsWith("human:") ||
-    trimmed.startsWith("process:") ||
-    trimmed.includes("/")
-  ) {
+  if (trimmed.startsWith("human:") || trimmed.startsWith("process:") || trimmed.includes("/")) {
     return trimmed;
   }
   return `human:${trimmed}`;

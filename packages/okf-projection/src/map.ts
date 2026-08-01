@@ -100,8 +100,7 @@ export function mapEventsToOkf(input: OkfMapInput, config: OkfMapConfig): OkfMap
       omissions.push({
         event_id: claim.event_id,
         event_type: "Claim",
-        reason:
-          claim.lifecycle_status === "draft" ? "draft_claim_excluded" : "acceptance_missing",
+        reason: claim.lifecycle_status === "draft" ? "draft_claim_excluded" : "acceptance_missing",
       });
       continue;
     }
@@ -143,9 +142,7 @@ export function mapEventsToOkf(input: OkfMapInput, config: OkfMapConfig): OkfMap
       `- Decision: \`${acceptance.payload.decision}\``,
       `- Decided by: \`${acceptance.payload.decided_by}\``,
       `- Decided at: \`${acceptance.payload.decided_at}\``,
-      acceptance.payload.rationale
-        ? `- Rationale: ${acceptance.payload.rationale}`
-        : undefined,
+      acceptance.payload.rationale ? `- Rationale: ${acceptance.payload.rationale}` : undefined,
       "",
       "## Claim type",
       "",
@@ -533,9 +530,7 @@ function observationSources(
     sources.push({
       id: `evidence-${evidenceId}`,
       resource: `/evidence/${safePathSegment(evidenceId)}.md`,
-      title: evidenceEvent
-        ? `Evidence ${evidenceId}`
-        : `Evidence ${evidenceId} (metadata only)`,
+      title: evidenceEvent ? `Evidence ${evidenceId}` : `Evidence ${evidenceId} (metadata only)`,
     });
   }
   return sources;
@@ -576,5 +571,3 @@ function renderSourceSection(sources: readonly OkfSourceEntry[]): string {
   lines.push("");
   return lines.join("\n");
 }
-
-

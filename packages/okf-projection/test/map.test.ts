@@ -89,10 +89,7 @@ describe("mapEventsToOkf (K1)", () => {
   });
 
   it("never exports rejected claims by default", () => {
-    const result = mapEventsToOkf(
-      input([claimRejected(), rejectedDecision()]),
-      config(),
-    );
+    const result = mapEventsToOkf(input([claimRejected(), rejectedDecision()]), config());
     expect(result.concepts).toEqual([]);
     expect(result.omissions.some((o) => o.reason === "rejected")).toBe(true);
   });
