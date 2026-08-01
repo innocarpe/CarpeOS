@@ -1,7 +1,7 @@
 # OKF interop implementation plan (product 3.1)
 
-Status: **implementation complete through K6** — K7 freeze packet and maintainer
-**Approve** remain pending; K8 release remains blocked.
+Status: **release approved through K7** — K8 release execution for **3.1.0**
+remains pending.
 
 Related:
 
@@ -170,12 +170,12 @@ exports OKF rather than becoming OKF.
 
 ---
 
-## Phase 7–8 — Freeze + release (K7–K8, pending)
+## Phase 7–8 — Freeze approved; release pending
 
-1. Freeze packet in product-3.1.0.md remains unfilled until freeze.
-2. Maintainer **Approve** remains pending.
-3. After K7 approval, run carpeos-release for **3.1.0** (MINOR).
-4. Do not include incomplete import stories in release notes.
+1. [x] Freeze packet filled in `product-3.1.0.md`.
+2. [x] Maintainer **Approve** recorded from chat on 2026-08-01.
+3. [ ] Run carpeos-release for **3.1.0** (MINOR).
+4. [x] Release notes exclude incomplete import stories.
 
 ---
 
