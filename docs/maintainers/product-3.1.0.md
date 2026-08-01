@@ -1,8 +1,8 @@
 # Product 3.1.0 — Definition of Done (OKF interop export)
 
-Status: **design accepted (K0)** — scope locked in ADR 0014. Not product-frozen
-for release. Target packaging: `@innocarpe/carpeos@3.1.0` after remaining gates
-green + maintainer Approve.
+Status: **implementation complete through K6** — freeze pending maintainer
+**Approve**. Target packaging: `@innocarpe/carpeos@3.1.0` only after K7 is
+approved.
 
 Related:
 
@@ -11,7 +11,7 @@ Related:
 - [ADR 0014](../adr/0014-okf-export-projection.md) — OKF is an export projection
 - [OKF interop plan](../plans/okf-interop.md) — gated implementation sequence
 - [Versioning policy](versioning-and-releases.md) — MINOR = additive feature
-- Public package: `@innocarpe/carpeos` (currently `3.0.0` on main)
+- Public package: `@innocarpe/carpeos` (currently `3.0.2` on main)
 
 ---
 
@@ -74,29 +74,29 @@ canonical events + dispositions  (authority)
 | --- | --- | --- |
 | K0 | ADR 0014 + this DoD + plan merged (design freeze for scope) | **done** (PR #124) |
 | K1 | Field mapping table locked (disposition → OKF frontmatter) + golden fixtures | **done** (`@carpeos/okf-projection` mapper + fixtures) |
-| K2 | `@carpeos/okf-projection` rebuild API from typed snapshots (disk + manifest) | pending |
-| K3 | OKF v0.2 conformance checks (type, frontmatter, reserved names, links) | pending |
-| K4 | CLI export command + doctor/help discoverability | pending |
-| K5 | Safety suite: redaction, path escape, held-default-off, zone fail-closed | pending |
-| K6 | Docs: guide + README/CHANGELOG honesty; architecture/projections updated | pending |
-| K7 | Freeze packet + maintainer **Approve** | blocked on K0–K6 |
-| K8 | SemVer **3.1.0** release (`carpeos-release` skill path) | blocked on Approve |
+| K2 | `@carpeos/okf-projection` rebuild API from typed snapshots (disk + manifest) | **done** (`buildOkfProjectionPlan` / `rebuildOkfProjection`; integrated projection tests: 28 passed) |
+| K3 | OKF v0.2 conformance checks (type, frontmatter, reserved names, links) | **done** (`checkOkfConformance`; integrated projection tests: 28 passed) |
+| K4 | CLI export command + doctor/help discoverability | **done** (`carpeos okf export` / `carpeos okf rebuild`; CLI tests: 42 passed; npm package build/packaging test and packaged `help okf` smoke passed) |
+| K5 | Safety suite: redaction, path escape, held-default-off, zone fail-closed | **done** (integrated projection tests: 28 passed; public boundary: 290 files passed) |
+| K6 | Docs: guide + README/CHANGELOG honesty; architecture/projections updated | **done** (`pnpm check` passed) |
+| K7 | Freeze packet + maintainer **Approve** | pending — K0–K6 complete; maintainer **Approve** not yet given |
+| K8 | SemVer **3.1.0** release (`carpeos-release` skill path) | blocked on K7 maintainer **Approve** |
 
 ---
 
-## Operator experience (target)
+## Operator experience
 
-CLI names **locked** (K4 implements; must not rename without deprecation):
+CLI names are **implemented and locked**; do not rename without deprecation:
 
 ```bash
 # Export promoted/active knowledge for declared zones into an OKF bundle
-carpeos okf export --out ./okf-bundle --visible-trust-zone local
+carpeos okf export --out ./okf-bundle --visible-trust-zone tz_local_default
 
 # Rebuild / refresh managed bundle (manifest-aware)
-carpeos okf rebuild --out ./okf-bundle --visible-trust-zone local
+carpeos okf rebuild --out ./okf-bundle --visible-trust-zone tz_local_default
 
 # Optional: include held/draft (never default)
-carpeos okf export --out ./okf-bundle --visible-trust-zone local --include-held
+carpeos okf export --out ./okf-bundle --visible-trust-zone tz_local_default --include-held
 ```
 
 Also locked for 3.1:

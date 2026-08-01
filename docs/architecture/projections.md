@@ -1,7 +1,7 @@
 # Projections and Retrieval
 
-Status: G007 local retrieval, MCP context-pack, and Obsidian projection
-implementation plus planned future projections.
+Status: G007 local retrieval, MCP context-pack, Obsidian projection, and OKF
+export projection implementation; other future projections remain planned.
 
 CarpeOS projections are read models derived from canonical events. They are
 interfaces, not sources of truth.
@@ -18,20 +18,21 @@ Implemented local projections include:
 - graph nodes and edges (product 3.0);
 - MCP context packs;
 - Obsidian Markdown notes and manifests.
+- OKF v0.2 export bundles (`okf-export/v1`; portable exchange, not authority).
 
 Planned future projections include:
 
-- **OKF export bundles** (product 3.1 — ADR 0014; rebuildable portable exchange
-  surface, not authority);
 - accepted-fact views;
 - dashboards;
 - session timelines;
 - open-loop lists.
 
-OKF export (when implemented) is rebuilt by `@carpeos/okf-projection` and the
-`carpeos okf export` / `carpeos okf rebuild` CLI. It does not mutate canonical
-events. See [ADR 0014](../adr/0014-okf-export-projection.md) and
-[product-3.1.0](../maintainers/product-3.1.0.md).
+The `@carpeos/okf-projection` package and `carpeos okf export` /
+`carpeos okf rebuild` CLI produce OKF v0.2 bundles from explicitly visible
+trust zones. This is a rebuildable, non-authoritative projection: it does not
+mutate canonical events, and it has no import path in product 3.1. See the
+[OKF export guide](../guides/okf-export.md), [ADR 0014](../adr/0014-okf-export-projection.md),
+and [product-3.1.0](../maintainers/product-3.1.0.md).
 
 All projections MUST be rebuildable from visible canonical events, erasure
 records, configuration, and authorization policy.

@@ -1,9 +1,8 @@
 # `@carpeos/okf-projection`
 
-OKF v0.2 export projection for CarpeOS. It is rebuildable and
-non-authoritative: canonical events remain the source of truth
-([ADR 0014](../../docs/adr/0014-okf-export-projection.md)). It does not import
-content or mutate canonical knowledge.
+OKF v0.2 export projection for CarpeOS. It is rebuildable and non-authoritative:
+canonical events remain the source of truth ([ADR 0014](../../docs/adr/0014-okf-export-projection.md)).
+It does not import content or mutate canonical knowledge.
 
 ## Capabilities
 
@@ -12,6 +11,7 @@ content or mutate canonical knowledge.
 - Manifest-owned disk rebuilds with `delete_missing` (default) and
   `tombstone_missing` policies through `rebuildOkfProjection`.
 - OKF v0.2 bundle conformance checks with `checkOkfConformance`.
+- CLI integration lives in `@innocarpe/carpeos`.
 - Field mapping details: [MAPPING.md](./MAPPING.md).
 
 ## Usage (library)
@@ -38,6 +38,7 @@ const conformance = checkOkfConformance({
   manifest: plan.manifest,
 });
 if (!conformance.valid) throw new Error("Planned bundle is not conformant");
+
 rebuildOkfProjection({ snapshot, config });
 ```
 
@@ -47,15 +48,10 @@ owned by a valid prior manifest.
 
 ## Defaults and safety
 
-- Only promoted/active meaning is included; `includeHeld` opts in to draft
-  observations.
-- Referenced evidence metadata is included by default.
+- Only promoted/active meaning is included; `includeHeld` opts in to draft observations.
+- Referenced evidence and metadata are included by default; set
+  `includeReferencedEvidence: false` to omit referenced evidence.
 - `visibleTrustZoneIds` is required and must not be empty.
-- Existing unmanaged paths, unsafe paths, and corrupt manifests fail closed.
-- There is no import path.
-
-## Test
-
-```bash
-pnpm --filter @carpeos/okf-projection test
-```
+- The default path policy is `delete_missing`; use `tombstone_missing` to retain
+  non-authoritative erasure tombstones instead.
+- Existing unmanaged paths, unsafe paths, and corrupt manifests prevent rebuilds.

@@ -12,7 +12,10 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- OKF v0.2 export projection: mapper, rebuild handling, conformance checks,
+  `carpeos okf export|rebuild` CLI, filesystem and manifest safety behavior,
+  and operator guide ([ADR 0014](docs/adr/0014-okf-export-projection.md);
+  [product 3.1.0 DoD](docs/maintainers/product-3.1.0.md)).
 
 ## [3.0.2] - 2026-08-01
 
@@ -42,7 +45,7 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- Docs-only OKF export projection design track for a future 3.1 major (ADR 0014,
+- Docs-only OKF export projection design track for a future 3.1 minor (ADR 0014,
   product-3.1.0 DoD, PRD index row). Not a runtime feature in this patch.
 
 ## [3.0.0] - 2026-07-31

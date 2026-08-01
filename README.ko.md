@@ -127,6 +127,9 @@ flowchart LR
   `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
   `memory_capture`, `memory_propose_claim`)
 - **Obsidian projection** — 로컬 스토어에서 Markdown 생성 (원본 아님, projection)
+- **OKF v0.2 export projection** — `carpeos okf export|rebuild`가 신뢰 영역 범위를
+  명시한 portable bundle을 만듭니다. 기본값은 promoted/active이며 canonical storage나
+  import 경로가 아닙니다 ([가이드](docs/guides/okf-export.md)).
 
 ### 로컬 우선, sync는 선택
 
@@ -335,6 +338,7 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | Retrieval / context-pack CLI | [docs/guides/retrieval.md](docs/guides/retrieval.md) |
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | Cloudflare / sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
+| OKF v0.2 export projection | [docs/guides/okf-export.md](docs/guides/okf-export.md) |
 | Smokes | `pnpm smoke:mcp` · `smoke:product` · `smoke:knowledge` · `smoke:dogfood` |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Product 1.0 DoD (파이프라인) | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
