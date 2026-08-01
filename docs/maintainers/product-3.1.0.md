@@ -1,7 +1,6 @@
 # Product 3.1.0 — Definition of Done (OKF interop export)
 
-Status: **release approved (K7)** — `@innocarpe/carpeos@3.1.0` release execution
-remains at K8.
+Status: **released (K8)** as `@innocarpe/carpeos@3.1.0`.
 
 Related:
 
@@ -10,7 +9,8 @@ Related:
 - [ADR 0014](../adr/0014-okf-export-projection.md) — OKF is an export projection
 - [OKF interop plan](../plans/okf-interop.md) — gated implementation sequence
 - [Versioning policy](versioning-and-releases.md) — MINOR = additive feature
-- Public package: `@innocarpe/carpeos` (currently `3.0.2` on main)
+- [v3.1.0 GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) — shipped
+- Public package: `@innocarpe/carpeos` (currently `3.1.0` on main and npm)
 
 ---
 
@@ -79,7 +79,7 @@ canonical events + dispositions  (authority)
 | K5 | Safety suite: redaction, path escape, held-default-off, zone fail-closed | **done** (integrated projection tests: 28 passed; public boundary: 290 files passed) |
 | K6 | Docs: guide + README/CHANGELOG honesty; architecture/projections updated | **done** (`pnpm check` passed) |
 | K7 | Freeze packet + maintainer **Approve** | **done** (maintainer end-to-end release authorization in chat, 2026-08-01) |
-| K8 | SemVer **3.1.0** release (`carpeos-release` skill path) | pending — execute the approved release |
+| K8 | SemVer **3.1.0** release (`carpeos-release` skill path) | **done** (`v3.1.0`; npm + GitHub Release published 2026-08-01) |
 
 ---
 
