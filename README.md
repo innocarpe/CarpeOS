@@ -134,6 +134,9 @@ flowchart LR
   `memory_capture`, `memory_propose_claim`)
 - **Obsidian projection** — Markdown files generated from the local store
   (projection only; not the source of truth)
+- **OKF v0.2 export projection** — `carpeos okf export|rebuild` writes a
+  trust-zone-scoped, promoted/active-by-default portable bundle; it is not
+  canonical storage or an import path ([guide](docs/guides/okf-export.md))
 
 ### Local first, sync optional
 
@@ -344,6 +347,7 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | MCP | [docs/guides/mcp-server.md](docs/guides/mcp-server.md) |
 | MCP tool contract | [docs/contracts/mcp-tools-v1.md](docs/contracts/mcp-tools-v1.md) |
 | Cloudflare / sync | [docs/guides/cloudflare-sync.md](docs/guides/cloudflare-sync.md) |
+| OKF v0.2 export projection | [docs/guides/okf-export.md](docs/guides/okf-export.md) |
 | Smokes | `pnpm smoke:mcp` · `smoke:product` · `smoke:knowledge` · `smoke:dogfood` |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Product 1.0 DoD (pipeline) | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |

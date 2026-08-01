@@ -1,7 +1,7 @@
 # OKF interop implementation plan (product 3.1)
 
-Status: **design** — execute only after ADR 0014 + product-3.1.0 scope are
-accepted. Branch/worktree: `okf-interop-3.1`.
+Status: **implementation complete through K6** — K7 freeze packet and maintainer
+**Approve** remain pending; K8 release remains blocked.
 
 Related:
 
@@ -28,7 +28,7 @@ K0 design freeze  →  K1 mapping fixtures  →  K2 package API
 
 ---
 
-## Phase 0 — Design freeze (current)
+## Phase 0 — Design freeze
 
 **Deliverables**
 
@@ -39,8 +39,8 @@ K0 design freeze  →  K1 mapping fixtures  →  K2 package API
 - [x] OKF listed under planned projections in
       `docs/architecture/projections.md`
 
-**Exit:** K0 green after docs PR merges — scope locked, non-goals explicit.
-Implementation starts at Phase 1 (mapping fixtures), not before.
+**Exit:** K0 green — scope locked, non-goals explicit. K1–K6 implementation is
+complete.
 
 ---
 
@@ -68,16 +68,17 @@ Implementation starts at Phase 1 (mapping fixtures), not before.
 
 ## Phase 2 — Package rebuild API (K2)
 
-**Deliverables**
+**Status: done** — `buildOkfProjectionPlan` and `rebuildOkfProjection` provide
+the typed-snapshot, manifest-aware rebuild boundary.
 
-- Package `@carpeos/okf-projection` (preferred) OR submodule with same boundary:
+- [x] Package `@carpeos/okf-projection`:
   - input: typed local-store snapshot + export config
   - output: file plan `{ path, content }[]` + manifest
   - no ad hoc SQL; no absolute paths in content
-- Rebuild semantics mirror Obsidian:
+- [x] Rebuild semantics mirror Obsidian:
   - `pathPolicy: delete_missing | tombstone_missing`
   - managed-only deletes via manifest
-- Deterministic path scheme from concept id / event id (stable across rebuilds)
+- [x] Deterministic path scheme from concept id / event id (stable across rebuilds)
 
 **Suggested layout**
 
@@ -97,78 +98,84 @@ packages/okf-projection/
     conformance.test.ts
 ```
 
-**Exit:** unit tests rebuild from fixture snapshots to expected tree.
+**Exit:** integrated `@carpeos/okf-projection` tests: 28 passed.
 
 ---
 
 ## Phase 3 — Conformance (K3)
 
-**Deliverables**
+**Status: done** — `checkOkfConformance` validates OKF v0.2 bundle output.
 
-- Conformance checker (test helper first; optional CLI later):
+- [x] Conformance checker:
   - frontmatter parse + required `type`
   - reserved `index.md` / `log.md` shapes
   - internal links resolve or soft-fail per OKF (broken links allowed; we still
     prefer no broken links for managed files)
-- Pin target **OKF v0.2** in docs and `okf_version` on root index when present
-- Record projection version string e.g. `okf-export/v1` in manifest
+- [x] Pin target **OKF v0.2** in docs and require `okf_version` on root index
+- [x] Record projection version string `okf-export/v1` in manifest
 
-**Exit:** conformance tests green on goldens + negative cases.
+**Exit:** integrated `@carpeos/okf-projection` tests: 28 passed.
 
 ---
 
 ## Phase 4 — CLI (K4)
 
-**Deliverables**
+**Status: done** — `carpeos okf export` and `carpeos okf rebuild` are wired
+into the CLI with help coverage.
 
-- Wire into `@innocarpe/carpeos` CLI (names to lock):
+- [x] Wire into `@innocarpe/carpeos` CLI:
   - preferred: `carpeos okf export` / `carpeos okf rebuild`
   - avoid stealing unrelated namespaces
-- Flags (minimum):
+- [x] Flags:
   - `--out <dir>`
   - `--visible-trust-zone <id>` (repeatable or CSV — match existing CLI style)
   - `--include-held` (default off)
   - dry-run / JSON summary if cheap and consistent with other commands
-- Help text states: projection only; no canonical mutation; OKF v0.2
+- [x] Help text states: projection only; no canonical mutation; OKF v0.2
 
-**Exit:** CLI integration test with temp store + temp out dir.
+**Exit:** CLI tests: 42 passed; npm package build/packaging test and packaged
+`help okf` smoke passed.
 
 ---
 
 ## Phase 5 — Safety (K5)
 
-**Deliverables**
+**Status: done** — redaction, path safety, held-default-off, and fail-closed
+zone behavior are covered.
 
-- Redaction asserts (reuse Obsidian/`assertNoProtectedPlaintext` patterns)
-- Path traversal rejection (`../`, absolute out escapes)
-- Default held-off regression test
-- Missing trust zone fail-closed test
-- Public-boundary scan on new fixtures (`pnpm public-boundary`)
+- [x] Redaction asserts (reuse Obsidian/`assertNoProtectedPlaintext` patterns)
+- [x] Path traversal, absolute managed-path, symlink, and bundle-escape rejection
+- [x] Default held-off regression test
+- [x] Missing trust zone fail-closed test
+- [x] Public-boundary scan on new fixtures (`pnpm public-boundary`)
 
-**Exit:** safety tests green; no new public-boundary exceptions.
+**Exit:** integrated `@carpeos/okf-projection` tests: 28 passed; public
+boundary: 290 files passed.
 
 ---
 
 ## Phase 6 — Docs + honesty (K6)
 
-**Deliverables**
+**Status: done** — operator guidance and product documentation reflect export
+projection scope without release claims.
 
-- `docs/guides/okf-export.md` operator guide
-- Update `docs/architecture/projections.md` implemented list
-- README EN/KO short “OKF export” mention (not hero rewrite)
-- CHANGELOG `[Unreleased]` → fold at release
-- Cross-link ADR 0014 / product-3.1.0
+- [x] `docs/guides/okf-export.md` operator guide
+- [x] Update `docs/architecture/projections.md` implemented list
+- [x] README EN/KO short “OKF export” mention (not hero rewrite)
+- [x] CHANGELOG `[Unreleased]` → fold at release
+- [x] Cross-link ADR 0014 / product-3.1.0
 
-**Exit:** docs-only review; no overclaim (“we are OKF” vs “we export OKF”).
+**Exit:** `pnpm check` passed; documentation remains explicit that CarpeOS
+exports OKF rather than becoming OKF.
 
 ---
 
-## Phase 7–8 — Freeze + release (K7–K8)
+## Phase 7–8 — Freeze + release (K7–K8, pending)
 
-1. Fill freeze packet in product-3.1.0.md
-2. Maintainer Approve
-3. Run carpeos-release for **3.1.0** (MINOR)
-4. Do not include incomplete import stories in release notes
+1. Freeze packet in product-3.1.0.md remains unfilled until freeze.
+2. Maintainer **Approve** remains pending.
+3. After K7 approval, run carpeos-release for **3.1.0** (MINOR).
+4. Do not include incomplete import stories in release notes.
 
 ---
 
@@ -192,13 +199,12 @@ packages/okf-projection/
 
 ## Open questions
 
-**None remaining for K0.** Implementation questions (path slug algorithm, exact
-YAML key order, dry-run flag) are deferred to K1–K4 and must not reopen the
-export-only / promoted-default / no-import locks above.
+**None remaining for K0.** Implementation decisions have been resolved without
+reopening the export-only / promoted-default / no-import locks above.
 
 ---
 
-## Suggested PR slices (after design accept)
+## Suggested delivery slices (completed through K6; K7–K8 pending)
 
 | PR | Scope | Gates |
 | --- | --- | --- |

@@ -52,6 +52,9 @@ carpeos memory context-pack \
   --task "Summarize my current work" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
+carpeos okf export \
+  --out ./okf-bundle \
+  --visible-trust-zone tz_local_default
 ```
 
 ## Docs
@@ -59,6 +62,7 @@ carpeos memory context-pack \
 - Repository: https://github.com/innocarpe/carpeos
 - One-stop install (git checkout): `docs/guides/one-stop-install.md`
 - MCP guide: `docs/guides/mcp-server.md`
+- [OKF export guide](https://github.com/innocarpe/carpeos/blob/main/docs/guides/okf-export.md)
 
 ## License
 
