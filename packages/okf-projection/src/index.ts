@@ -1,4 +1,23 @@
 export { mapEventsToOkf } from "./map.js";
+export { buildOkfProjectionPlan, rebuildOkfProjection } from "./rebuild.js";
+export type {
+  OkfProjectionConfig,
+  OkfProjectionFile,
+  OkfProjectionPlan,
+  RebuildOkfProjectionResult,
+} from "./rebuild.js";
+export {
+  buildOkfManifest,
+  readPreviousOkfManifest,
+  type OkfManifestFile,
+  type OkfProjectionManifest,
+  type PreviousOkfManifestRead,
+} from "./manifest.js";
+export {
+  normalizeOkfRelativePath,
+  resolveManagedOkfPath,
+  resolveOkfManifestPath,
+} from "./paths.js";
 export {
   renderFrontmatter,
   renderOkfConcept,

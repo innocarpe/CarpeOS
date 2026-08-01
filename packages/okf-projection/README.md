@@ -1,47 +1,51 @@
 # `@carpeos/okf-projection`
 
-OKF v0.2 **export projection** for CarpeOS. Rebuildable, non-authoritative.
-Canonical events remain SSOT ([ADR 0014](../../docs/adr/0014-okf-export-projection.md)).
+OKF v0.2 export projection for CarpeOS. It is rebuildable and
+non-authoritative: canonical events remain the source of truth
+([ADR 0014](../../docs/adr/0014-okf-export-projection.md)). It does not import
+content or mutate canonical knowledge.
 
-## K1 status
+## Capabilities
 
-Shipped here:
-
-- Pure mapper `mapEventsToOkf` (events → concepts + `index.md` / `log.md` strings)
-- Deterministic `renderOkfConcept` markdown renderer
-- Field mapping table: [MAPPING.md](./MAPPING.md)
-- Golden fixtures + vitest suite
-
-Not yet (K2+):
-
-- Disk rebuild + ownership manifest
-- CLI `carpeos okf export` / `rebuild`
-- Full OKF conformance CLI checker
+- Pure mapping with `mapEventsToOkf` and deterministic Markdown rendering.
+- Deterministic, filesystem-independent bundles from `buildOkfProjectionPlan`.
+- Manifest-owned disk rebuilds with `delete_missing` (default) and
+  `tombstone_missing` policies through `rebuildOkfProjection`.
+- Field mapping details: [MAPPING.md](./MAPPING.md).
 
 ## Usage (library)
 
 ```ts
-import { mapEventsToOkf, renderOkfConcept } from "@carpeos/okf-projection";
+import {
+  buildOkfProjectionPlan,
+  rebuildOkfProjection,
+  type OkfMapInput,
+  type OkfProjectionConfig,
+} from "@carpeos/okf-projection";
 
-const result = mapEventsToOkf(
-  { events: [/* OkfMapInputEvent rows */] },
-  {
-    visibleTrustZoneIds: ["tz_local_default"],
-    generatedAt: "2026-07-31T12:00:00Z",
-  },
-);
+const snapshot: OkfMapInput = { events: [] };
+const config: OkfProjectionConfig = {
+  outputRoot: "./synthetic-okf-bundle",
+  visibleTrustZoneIds: ["tz_local_default"],
+  generatedAt: "2026-07-31T12:00:00Z",
+};
 
-for (const concept of result.concepts) {
-  const markdown = renderOkfConcept(concept);
-  // write concept.path later in K2
-}
+const plan = buildOkfProjectionPlan({ snapshot, config });
+rebuildOkfProjection({ snapshot, config });
 ```
 
-## Defaults
+`buildOkfProjectionPlan` does not touch the filesystem. `rebuildOkfProjection`
+creates planned files and rewrites or deletes only paths owned by a valid prior
+manifest.
 
-- Promoted / active meaning only (`includeHeld` opt-in for draft observations)
-- Evidence: referenced + metadata only
-- No import path
+## Defaults and safety
+
+- Only promoted/active meaning is included; `includeHeld` opts in to draft
+  observations.
+- Referenced evidence metadata is included by default.
+- `visibleTrustZoneIds` is required and must not be empty.
+- Existing unmanaged paths, unsafe paths, and corrupt manifests fail closed.
+- There is no import path.
 
 ## Test
 
