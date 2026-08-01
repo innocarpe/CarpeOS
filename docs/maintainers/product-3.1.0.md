@@ -72,9 +72,9 @@ canonical events + dispositions  (authority)
 
 | ID | Gate | Status |
 | --- | --- | --- |
-| K0 | ADR 0014 + this DoD + plan merged (design freeze for scope) | **done when docs PR merges** |
-| K1 | Field mapping table locked (disposition → OKF frontmatter) + golden fixtures | pending |
-| K2 | `@carpeos/okf-projection` (or equivalent) rebuild API from typed snapshots | pending |
+| K0 | ADR 0014 + this DoD + plan merged (design freeze for scope) | **done** (PR #124) |
+| K1 | Field mapping table locked (disposition → OKF frontmatter) + golden fixtures | **done** (`@carpeos/okf-projection` mapper + fixtures) |
+| K2 | `@carpeos/okf-projection` rebuild API from typed snapshots (disk + manifest) | pending |
 | K3 | OKF v0.2 conformance checks (type, frontmatter, reserved names, links) | pending |
 | K4 | CLI export command + doctor/help discoverability | pending |
 | K5 | Safety suite: redaction, path escape, held-default-off, zone fail-closed | pending |

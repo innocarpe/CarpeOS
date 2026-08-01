@@ -46,23 +46,23 @@ Implementation starts at Phase 1 (mapping fixtures), not before.
 
 ## Phase 1 — Mapping + fixtures (K1)
 
+**Status: done** on branch `okf-interop-3.1` (mapper package + goldens).
+
 **Deliverables**
 
-1. Normative mapping table (copy from ADR/DoD, expand edge cases):
-   - promote/hold/reject × Observation/Claim/Acceptance/Supersession/Erasure
-   - missing acceptance lineage (never emit Accepted Decision)
-   - multi-zone visibility
-2. Synthetic golden fixtures under `packages/okf-projection/test/fixtures/`
-   (public-safe only):
-   - minimal accepted decision bundle
-   - promoted observation + source evidence summary
-   - held excluded by default / included with flag
-   - superseded decision shows `deprecated` or lineage link
-3. Document extension keys: `carpeos_event_id`, `carpeos_trust_zone_id`,
-   `carpeos_projection`, `canonical_effect`
+1. Normative mapping table — `packages/okf-projection/MAPPING.md`
+2. Pure API `mapEventsToOkf` + `renderOkfConcept` (no disk I/O)
+3. Synthetic golden fixtures under `packages/okf-projection/test/fixtures/`:
+   - `minimal-accepted/` — accepted decision + observation + evidence + index/log
+   - `held-include/drafts/` — draft observation only when `includeHeld`
+   - `supersession/lineage/` — supersession concept when target exported
+4. Tests: default held-off, rejected omit, erasure, wrong zone, orphan evidence,
+   determinism, protected-plaintext refuse
+5. Extension keys: `carpeos_event_id`, `carpeos_event_type`,
+   `carpeos_trust_zone_id`, `carpeos_projection`, `canonical_effect`, plus
+   unit id keys
 
-**Exit:** golden expected Markdown snapshots reviewed; no production code
-required beyond pure mappers if useful.
+**Exit:** `pnpm --filter @carpeos/okf-projection test` green.
 
 ---
 
