@@ -1,7 +1,6 @@
 # OKF interop implementation plan (product 3.1)
 
-Status: **release approved through K7** — K8 release execution for **3.1.0**
-remains pending.
+Status: **released through K8** as `@innocarpe/carpeos@3.1.0`.
 
 Related:
 
@@ -170,11 +169,11 @@ exports OKF rather than becoming OKF.
 
 ---
 
-## Phase 7–8 — Freeze approved; release pending
+## Phase 7–8 — complete
 
 1. [x] Freeze packet filled in `product-3.1.0.md`.
 2. [x] Maintainer **Approve** recorded from chat on 2026-08-01.
-3. [ ] Run carpeos-release for **3.1.0** (MINOR).
+3. [x] Released `@innocarpe/carpeos@3.1.0` via annotated tag `v3.1.0`.
 4. [x] Release notes exclude incomplete import stories.
 
 ---
@@ -204,7 +203,7 @@ reopening the export-only / promoted-default / no-import locks above.
 
 ---
 
-## Suggested delivery slices (completed through K6; K7–K8 pending)
+## Delivery slices (completed through K8)
 
 | PR | Scope | Gates |
 | --- | --- | --- |
