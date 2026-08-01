@@ -21,6 +21,7 @@ const alias = {
   "@carpeos/sync-client": join(repoRoot, "packages/sync-client/src/index.ts"),
   "@carpeos/mcp-server": join(repoRoot, "apps/carpeos-mcp-server/src/exports.ts"),
   "@carpeos/obsidian-projection": join(repoRoot, "packages/obsidian-projection/src/index.ts"),
+  "@carpeos/okf-projection": join(repoRoot, "packages/okf-projection/src/index.ts"),
 };
 
 const common = {

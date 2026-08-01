@@ -1,6 +1,14 @@
 import { ADJUDICATION_POLICY_VERSION } from "@carpeos/capture";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -1133,6 +1141,130 @@ describe("carpeos CLI", () => {
     expect(messages.size).toBe(8);
     db.close();
     store.close();
+  });
+  it("discovers OKF export help and validates its required visibility contract", async () => {
+    const rootHelp = await captureHelp([]);
+    const topicHelp = await captureHelp(["help", "okf"]);
+    expect(rootHelp.stdout).toContain("OKF v0.2");
+    expect(rootHelp.stdout).toContain("okf");
+    expect(topicHelp.stdout).toContain("okf export");
+    expect(topicHelp.stdout).toContain("okf rebuild");
+    expect(topicHelp.stdout).toContain("projection-only");
+    expect(topicHelp.stdout).toContain("--visible-trust-zone");
+    expect(topicHelp.stdout).toContain("default: off");
+
+    const context = makeContext();
+    const initialized = runJson(["init"], context);
+    const zone = String(initialized.stdout.trust_zone_id);
+    expect(runJson(["okf", "export", "--visible-trust-zone", zone], context).status).toBe(2);
+    expect(runJson(["okf", "export", "--out", tempDir("carpeos-okf-")], context).status).toBe(2);
+    expect(
+      runJson(
+        ["okf", "export", "--out", tempDir("carpeos-okf-"), "--visible-trust-zone", "invalid"],
+        context,
+      ).status,
+    ).toBe(2);
+    expect(
+      runJson(
+        [
+          "okf",
+          "export",
+          "--out",
+          tempDir("carpeos-okf-"),
+          "--visible-trust-zone",
+          "tz_another_zone",
+        ],
+        context,
+      ).status,
+    ).toBe(2);
+  });
+
+  it("exports a promoted Observation as a safe OKF projection and preserves unmanaged files", () => {
+    const context = makeContext();
+    const initialized = runJson(["init"], context);
+    const zone = String(initialized.stdout.trust_zone_id);
+    const captured = runJson(
+      ["capture-hook", "--no-extract", "--provider", "codex"],
+      context,
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session_okf_export",
+        timestamp: "2026-01-01T00:00:00Z",
+        message: "We decided to use synthetic fixtures for the release checklist.",
+        private_sentinel: "SYNTHETIC_OKF_PRIVATE_SENTINEL",
+      }),
+    );
+    const adjudicated = runJson(
+      ["adjudicate", "--event-id", String(captured.stdout.event_id)],
+      context,
+    );
+    expect(adjudicated.status).toBe(0);
+
+    const outputRoot = tempDir("carpeos-okf-output-");
+    const exported = runJson(
+      ["okf", "export", "--out", outputRoot, "--visible-trust-zone", zone],
+      context,
+    );
+    expect(exported.status).toBe(0);
+    expect(exported.stdout).toMatchObject({
+      ok: true,
+      command: "okf export",
+      projection: "okf-export/v1",
+      okf_version: "0.2",
+      output_root: outputRoot,
+      visible_trust_zone_ids: [zone],
+      include_held: false,
+      manifest_status: "missing",
+    });
+    expect(exported.rawStdout).not.toContain("SYNTHETIC_OKF_PRIVATE_SENTINEL");
+    expect(existsSync(join(outputRoot, "index.md"))).toBe(true);
+    expect(existsSync(join(outputRoot, "log.md"))).toBe(true);
+    expect(existsSync(join(outputRoot, ".carpeos-okf-projection-manifest.json"))).toBe(true);
+    const manifest = JSON.parse(
+      readFileSync(join(outputRoot, ".carpeos-okf-projection-manifest.json"), "utf8"),
+    ) as { files: Array<{ path: string }> };
+    const concept = manifest.files.find(
+      (file) => file.path !== "index.md" && file.path !== "log.md",
+    );
+    expect(concept).toBeDefined();
+    expect(existsSync(join(outputRoot, concept?.path ?? ""))).toBe(true);
+
+    writeFileSync(join(outputRoot, "unmanaged.txt"), "preserve me\n", "utf8");
+    const rebuilt = runJson(
+      ["okf", "rebuild", "--out", outputRoot, "--visible-trust-zone", zone],
+      context,
+    );
+    expect(rebuilt.status).toBe(0);
+    expect(rebuilt.stdout).toMatchObject({
+      ok: true,
+      command: "okf rebuild",
+      manifest_status: "valid",
+    });
+    expect(readFileSync(join(outputRoot, "unmanaged.txt"), "utf8")).toBe("preserve me\n");
+  });
+
+  it("fails closed for unsafe OKF output roots and unmanaged managed-path collisions", () => {
+    const context = makeContext();
+    const initialized = runJson(["init"], context);
+    const zone = String(initialized.stdout.trust_zone_id);
+    const target = tempDir("carpeos-okf-target-");
+    const symlinkRoot = join(tempDir("carpeos-okf-link-parent-"), "output");
+    symlinkSync(target, symlinkRoot, "dir");
+    const symlinked = runJson(
+      ["okf", "export", "--out", symlinkRoot, "--visible-trust-zone", zone],
+      context,
+    );
+    expect(symlinked.status).not.toBe(0);
+    expect(existsSync(join(target, "index.md"))).toBe(false);
+
+    const collisionRoot = tempDir("carpeos-okf-collision-");
+    writeFileSync(join(collisionRoot, "index.md"), "unmanaged\n", "utf8");
+    const collision = runJson(
+      ["okf", "export", "--out", collisionRoot, "--visible-trust-zone", zone],
+      context,
+    );
+    expect(collision.status).not.toBe(0);
+    expect(readFileSync(join(collisionRoot, "index.md"), "utf8")).toBe("unmanaged\n");
   });
 });
 
