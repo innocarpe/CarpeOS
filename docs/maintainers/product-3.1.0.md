@@ -1,8 +1,7 @@
 # Product 3.1.0 — Definition of Done (OKF interop export)
 
-Status: **implementation complete through K6** — freeze pending maintainer
-**Approve**. Target packaging: `@innocarpe/carpeos@3.1.0` only after K7 is
-approved.
+Status: **release approved (K7)** — `@innocarpe/carpeos@3.1.0` release execution
+remains at K8.
 
 Related:
 
@@ -79,8 +78,8 @@ canonical events + dispositions  (authority)
 | K4 | CLI export command + doctor/help discoverability | **done** (`carpeos okf export` / `carpeos okf rebuild`; CLI tests: 42 passed; npm package build/packaging test and packaged `help okf` smoke passed) |
 | K5 | Safety suite: redaction, path escape, held-default-off, zone fail-closed | **done** (integrated projection tests: 28 passed; public boundary: 290 files passed) |
 | K6 | Docs: guide + README/CHANGELOG honesty; architecture/projections updated | **done** (`pnpm check` passed) |
-| K7 | Freeze packet + maintainer **Approve** | pending — K0–K6 complete; maintainer **Approve** not yet given |
-| K8 | SemVer **3.1.0** release (`carpeos-release` skill path) | blocked on K7 maintainer **Approve** |
+| K7 | Freeze packet + maintainer **Approve** | **done** (maintainer end-to-end release authorization in chat, 2026-08-01) |
+| K8 | SemVer **3.1.0** release (`carpeos-release` skill path) | pending — execute the approved release |
 
 ---
 
@@ -160,14 +159,14 @@ Same discipline as 3.0:
 4. Cut `3.1.0` via [carpeos-release](../../.agents/skills/carpeos-release/SKILL.md)
    / `scripts/release.mjs` — never retag 3.0.0.
 
-### Freeze packet (empty until freeze)
+### Freeze packet
 
 | Item | Value |
 | --- | --- |
-| Decision | _Defer until Approve_ |
-| CLI contract delta | _TBD at K4_ |
-| Known residuals | _TBD_ |
-| Approve | _not yet_ |
+| Decision | **Approve 3.1.0 (MINOR)** — 3.0.0 is already released; no 4.0 breaking thesis is introduced |
+| CLI contract delta | Additive `carpeos okf export` / `carpeos okf rebuild` commands with `--out`, repeatable `--visible-trust-zone`, and opt-in `--include-held` |
+| Known residuals | No OKF import, full Attested Computation runtime, or cloud catalog glue; all are explicit non-goals and none are release-blocking |
+| Approve | Maintainer end-to-end release authorization in chat, 2026-08-01 |
 
 ---
 
