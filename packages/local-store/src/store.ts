@@ -3,24 +3,23 @@ import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "nod
 import { dirname, join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
+  ADJUDICATION_POLICY_VERSION,
+  type AdjudicationResult,
+  adjudicateKnowledgeCandidate,
   buildSyncPushRequest,
   type CaptureEnvelope,
   deriveIdempotencyKey,
-  adjudicateKnowledgeCandidate,
-  ADJUDICATION_POLICY_VERSION,
-  extractKnowledgeCandidateSpans,
   extractionObservationIdempotencyKey,
+  extractKnowledgeCandidateSpans,
   fingerprintEnvelope,
   fingerprintObject,
   hashHex,
   isIdempotencyKey,
-  normalizeCaptureHookEventName,
-  planObservationExtraction,
-  signalsFromTranscriptPath,
-  stableJson,
-  type AdjudicationResult,
   type KnowledgeDisposition,
   type MeaningfulUnitPolicyConfig,
+  normalizeCaptureHookEventName,
+  signalsFromTranscriptPath,
+  stableJson,
 } from "@carpeos/capture";
 import type {
   CanonicalEvent,
@@ -35,8 +34,8 @@ import type {
   WrappedDeviceKeyEnvelope,
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
-import { resolveProjectIdentity, resolveWorktreeIdentity } from "./project-identity.js";
 import type { WorktreeIdentity } from "./project-identity.js";
+import { resolveProjectIdentity, resolveWorktreeIdentity } from "./project-identity.js";
 
 export type Clock = {
   now(): Date;
@@ -139,10 +138,15 @@ export type ProposeObservationDraftInput = {
 export type HeldDisposition = {
   source_event_id: string;
   artifact_id: string;
-  statement: string;
   reason_codes: string[];
   policy_version: string;
   created_at: string;
+};
+
+export type HeldDispositionListResult = {
+  policy_version: string;
+  count: number;
+  held: HeldDisposition[];
 };
 
 export type HeldReviewDecision = "promote" | "reject";
@@ -154,11 +158,18 @@ export type HeldReviewResult =
       source_event_id: string;
       decision: HeldReviewDecision;
       policy_version: string;
-      extraction?: ExtractionResult;
+      count: 1;
+      observation?: {
+        event_id: string;
+        observation_id: string;
+        lifecycle_status: "active";
+      };
     }
   | {
       status: "failed";
       source_event_id: string;
+      policy_version?: string;
+      count: 0;
       error: string;
     };
 
@@ -1609,15 +1620,16 @@ export class LocalCaptureStore {
     return { ...counts, policy_version: ADJUDICATION_POLICY_VERSION };
   }
 
-  listHeldDispositions(limit = 50): HeldDisposition[] {
+  listHeldDispositions(policyVersion: string, limit = 50): HeldDispositionListResult {
+    const normalizedPolicyVersion = normalizePolicyVersion(policyVersion);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
       throw new Error("held disposition limit must be an integer between 1 and 200");
     }
     const rows = this.db
       .prepare(
         `
-          SELECT d.source_event_id, d.artifact_id, d.statement,
-                 d.reason_codes_json, d.policy_version, d.created_at
+          SELECT d.source_event_id, d.artifact_id, d.reason_codes_json,
+                 d.policy_version, d.created_at
           FROM knowledge_dispositions d
           LEFT JOIN knowledge_disposition_reviews r
             ON r.source_event_id = d.source_event_id
@@ -1631,30 +1643,50 @@ export class LocalCaptureStore {
           LIMIT ?
         `,
       )
-      .all(this.trustZone.trust_zone_id, ADJUDICATION_POLICY_VERSION, limit) as Array<{
+      .all(this.trustZone.trust_zone_id, normalizedPolicyVersion, limit) as Array<{
       source_event_id: string;
       artifact_id: string;
-      statement: string;
       reason_codes_json: string;
       policy_version: string;
       created_at: string;
     }>;
-    return rows.map((row) => ({
+    const held = rows.map((row) => ({
       source_event_id: row.source_event_id,
       artifact_id: row.artifact_id,
-      statement: row.statement,
       reason_codes: JSON.parse(row.reason_codes_json) as string[],
       policy_version: row.policy_version,
       created_at: row.created_at,
     }));
+    return {
+      policy_version: normalizedPolicyVersion,
+      count: held.length,
+      held,
+    };
   }
 
-  reviewHeldDisposition(sourceEventId: string, decision: HeldReviewDecision): HeldReviewResult {
+  reviewHeldDisposition(
+    sourceEventId: string,
+    decision: HeldReviewDecision,
+    policyVersion: string,
+  ): HeldReviewResult {
     const normalizedEventId = sourceEventId.trim();
+    let normalizedPolicyVersion: string;
+    try {
+      normalizedPolicyVersion = normalizePolicyVersion(policyVersion);
+    } catch (error) {
+      return {
+        status: "failed",
+        source_event_id: normalizedEventId,
+        count: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
     if (normalizedEventId.length === 0) {
       return {
         status: "failed",
         source_event_id: sourceEventId,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
         error: "source event id is required",
       };
     }
@@ -1662,32 +1694,38 @@ export class LocalCaptureStore {
       return {
         status: "failed",
         source_event_id: normalizedEventId,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
         error: `invalid held review decision: ${String(decision)}`,
       };
     }
-    const disposition = this.getDisposition(normalizedEventId);
+    const disposition = this.getDisposition(normalizedEventId, normalizedPolicyVersion);
     if (disposition === undefined) {
       return {
         status: "failed",
         source_event_id: normalizedEventId,
-        error: `disposition not found in trust zone: ${normalizedEventId}`,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
+        error: `held disposition not found for policy version: ${normalizedPolicyVersion}`,
       };
     }
     if (disposition.disposition !== "hold") {
       return {
         status: "failed",
         source_event_id: normalizedEventId,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
         error: `disposition is ${disposition.disposition}, expected hold`,
       };
     }
 
-    let review = this.getHeldReview(normalizedEventId, disposition.policy_version);
+    let review = this.getHeldReview(normalizedEventId, normalizedPolicyVersion);
     let status: "reviewed" | "replay" = "replay";
     if (review === undefined) {
       const reviewId = heldReviewId(
         normalizedEventId,
         this.trustZone.trust_zone_id,
-        disposition.policy_version,
+        normalizedPolicyVersion,
         decision,
       );
       try {
@@ -1705,15 +1743,15 @@ export class LocalCaptureStore {
               reviewId,
               normalizedEventId,
               this.trustZone.trust_zone_id,
-              disposition.policy_version,
+              normalizedPolicyVersion,
               decision,
               this.clock.now().toISOString(),
             );
         });
-        review = this.getHeldReview(normalizedEventId, disposition.policy_version);
+        review = this.getHeldReview(normalizedEventId, normalizedPolicyVersion);
         status = "reviewed";
       } catch (error) {
-        review = this.getHeldReview(normalizedEventId, disposition.policy_version);
+        review = this.getHeldReview(normalizedEventId, normalizedPolicyVersion);
         if (review === undefined) throw error;
       }
     }
@@ -1721,6 +1759,8 @@ export class LocalCaptureStore {
       return {
         status: "failed",
         source_event_id: normalizedEventId,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
         error: "held review audit could not be recorded",
       };
     }
@@ -1728,6 +1768,8 @@ export class LocalCaptureStore {
       return {
         status: "failed",
         source_event_id: normalizedEventId,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
         error: `held disposition already reviewed as ${review.decision}`,
       };
     }
@@ -1737,23 +1779,40 @@ export class LocalCaptureStore {
         review_id: review.review_id,
         source_event_id: normalizedEventId,
         decision,
-        policy_version: disposition.policy_version,
+        policy_version: normalizedPolicyVersion,
+        count: 1,
       };
     }
 
     try {
+      const extraction = this.materializeHeldPromotion(disposition);
+      if (extraction.status !== "extracted" && extraction.status !== "replay") {
+        throw new Error(`held promotion materialization failed: ${extraction.status}`);
+      }
+      if (extraction.event.lifecycle_status !== "active") {
+        throw new Error(
+          `held promotion materialized unexpected lifecycle: ${extraction.event.lifecycle_status}`,
+        );
+      }
       return {
         status,
         review_id: review.review_id,
         source_event_id: normalizedEventId,
         decision,
-        policy_version: disposition.policy_version,
-        extraction: this.materializeHeldPromotion(disposition),
+        policy_version: normalizedPolicyVersion,
+        count: 1,
+        observation: {
+          event_id: extraction.event.event_id,
+          observation_id: extraction.event.payload.observation_id,
+          lifecycle_status: extraction.event.lifecycle_status,
+        },
       };
     } catch (error) {
       return {
         status: "failed",
         source_event_id: normalizedEventId,
+        policy_version: normalizedPolicyVersion,
+        count: 0,
         error: `held review audit ${review.review_id} recorded; retry promote-held: ${
           error instanceof Error ? error.message : String(error)
         }`,

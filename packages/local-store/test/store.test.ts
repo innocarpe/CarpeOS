@@ -1145,7 +1145,7 @@ describe("LocalCaptureStore adjudication", () => {
     expect(store.countRows("canonical_events")).toBe(1);
   });
 
-  it("lists held dispositions and promotes one through an append-only review", () => {
+  it("returns body-free held receipts and promotes one through an append-only review", () => {
     const { store } = makeStore();
     const captured = store.captureHook(
       makeEnvelope({
@@ -1160,49 +1160,57 @@ describe("LocalCaptureStore adjudication", () => {
     }
     expect(captured.extraction.event.lifecycle_status).toBe("draft");
 
-    const held = store.listHeldDispositions();
-    expect(held).toHaveLength(1);
-    expect(held[0]).toMatchObject({
+    const held = store.listHeldDispositions(ADJUDICATION_POLICY_VERSION);
+    expect(held).toMatchObject({ policy_version: ADJUDICATION_POLICY_VERSION, count: 1 });
+    expect(held.held[0]).toMatchObject({
       source_event_id: captured.event.event_id,
       artifact_id: captured.event.payload.artifact_id,
       policy_version: ADJUDICATION_POLICY_VERSION,
     });
+    expect(held.held[0]).not.toHaveProperty("statement");
+    expect(JSON.stringify(held)).not.toContain(captured.extraction.event.payload.statement);
 
-    const reviewed = store.reviewHeldDisposition(captured.event.event_id, "promote");
+    const reviewed = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      ADJUDICATION_POLICY_VERSION,
+    );
     expect(reviewed.status).toBe("reviewed");
-    if (reviewed.status === "failed" || reviewed.extraction === undefined) {
+    if (reviewed.status === "failed" || reviewed.observation === undefined) {
       throw new Error("expected held promotion");
     }
-    expect(reviewed.decision).toBe("promote");
-    expect(reviewed.extraction.status).toBe("extracted");
-    if (reviewed.extraction.status !== "extracted" && reviewed.extraction.status !== "replay") {
-      throw new Error("expected active review Observation");
-    }
-    expect(reviewed.extraction.event.lifecycle_status).toBe("active");
-    expect(reviewed.extraction.event.payload.statement).toBe(
-      captured.extraction.event.payload.statement,
-    );
-    expect(store.listHeldDispositions()).toEqual([]);
+    expect(reviewed).toMatchObject({
+      decision: "promote",
+      policy_version: ADJUDICATION_POLICY_VERSION,
+      count: 1,
+      observation: { lifecycle_status: "active" },
+    });
+    expect(store.listHeldDispositions(ADJUDICATION_POLICY_VERSION)).toMatchObject({ count: 0 });
     expect(store.countRows("knowledge_disposition_reviews")).toBe(1);
     expect(store.countRows("canonical_events")).toBe(3);
 
-    const replay = store.reviewHeldDisposition(captured.event.event_id, "promote");
+    const replay = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      ADJUDICATION_POLICY_VERSION,
+    );
     expect(replay.status).toBe("replay");
-    if (replay.status === "failed" || replay.extraction === undefined) {
+    if (replay.status === "failed" || replay.observation === undefined) {
       throw new Error("expected held promotion replay");
     }
-    expect(replay.extraction.status).toBe("replay");
-    if (replay.extraction.status !== "extracted" && replay.extraction.status !== "replay") {
-      throw new Error("expected active review replay");
-    }
-    expect(replay.extraction.event.event_id).toBe(reviewed.extraction.event.event_id);
+    expect(replay.observation.event_id).toBe(reviewed.observation.event_id);
     expect(store.countRows("canonical_events")).toBe(3);
 
-    const conflict = store.reviewHeldDisposition(captured.event.event_id, "reject");
-    expect(conflict).toMatchObject({ status: "failed" });
+    const conflict = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "reject",
+      ADJUDICATION_POLICY_VERSION,
+    );
+    expect(conflict).toMatchObject({ status: "failed", count: 0 });
     if (conflict.status === "failed") {
       expect(conflict.error).toContain("already reviewed as promote");
     }
+    expect(store.countRows("knowledge_disposition_reviews")).toBe(1);
 
     const db = new DatabaseSync(store.dbPath);
     expect(() =>
@@ -1215,6 +1223,13 @@ describe("LocalCaptureStore adjudication", () => {
     expect(() => db.prepare("DELETE FROM knowledge_disposition_reviews").run()).toThrow(
       /append-only/,
     );
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM canonical_events WHERE event_type = 'AcceptanceDecision'",
+        )
+        .get(),
+    ).toMatchObject({ n: 0 });
     db.close();
   });
 
@@ -1228,24 +1243,33 @@ describe("LocalCaptureStore adjudication", () => {
       { extract: true },
     );
     expect(captured.extraction?.status).toBe("extracted");
-    expect(store.listHeldDispositions()).toHaveLength(1);
+    expect(store.listHeldDispositions(ADJUDICATION_POLICY_VERSION)).toMatchObject({ count: 1 });
 
-    const reviewed = store.reviewHeldDisposition(captured.event.event_id, "reject");
+    const reviewed = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "reject",
+      ADJUDICATION_POLICY_VERSION,
+    );
     expect(reviewed).toMatchObject({
       status: "reviewed",
       source_event_id: captured.event.event_id,
       decision: "reject",
+      policy_version: ADJUDICATION_POLICY_VERSION,
+      count: 1,
     });
-    expect(store.listHeldDispositions()).toEqual([]);
+    expect(store.listHeldDispositions(ADJUDICATION_POLICY_VERSION)).toMatchObject({ count: 0 });
     expect(store.countRows("canonical_events")).toBe(2);
     expect(store.countRows("knowledge_disposition_reviews")).toBe(1);
 
-    expect(store.reviewHeldDisposition(captured.event.event_id, "reject")).toMatchObject({
-      status: "replay",
-      decision: "reject",
-    });
-    const conflict = store.reviewHeldDisposition(captured.event.event_id, "promote");
-    expect(conflict).toMatchObject({ status: "failed" });
+    expect(
+      store.reviewHeldDisposition(captured.event.event_id, "reject", ADJUDICATION_POLICY_VERSION),
+    ).toMatchObject({ status: "replay", decision: "reject" });
+    const conflict = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      ADJUDICATION_POLICY_VERSION,
+    );
+    expect(conflict).toMatchObject({ status: "failed", count: 0 });
     expect(store.countRows("canonical_events")).toBe(2);
   });
 
@@ -1262,7 +1286,11 @@ describe("LocalCaptureStore adjudication", () => {
       throw new Error("synthetic interruption");
     });
 
-    const interrupted = store.reviewHeldDisposition(captured.event.event_id, "promote");
+    const interrupted = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      ADJUDICATION_POLICY_VERSION,
+    );
     expect(interrupted).toMatchObject({ status: "failed" });
     if (interrupted.status === "failed") {
       expect(interrupted.error).toContain("audit");
@@ -1270,15 +1298,19 @@ describe("LocalCaptureStore adjudication", () => {
     }
     expect(store.countRows("knowledge_disposition_reviews")).toBe(1);
     expect(store.countRows("canonical_events")).toBe(2);
-    expect(store.listHeldDispositions()).toEqual([]);
+    expect(store.listHeldDispositions(ADJUDICATION_POLICY_VERSION)).toMatchObject({ count: 0 });
 
     proposal.mockRestore();
-    const repaired = store.reviewHeldDisposition(captured.event.event_id, "promote");
+    const repaired = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      ADJUDICATION_POLICY_VERSION,
+    );
     expect(repaired.status).toBe("replay");
-    if (repaired.status === "failed" || repaired.extraction === undefined) {
+    if (repaired.status === "failed" || repaired.observation === undefined) {
       throw new Error("expected repaired promotion");
     }
-    expect(repaired.extraction.status).toBe("extracted");
+    expect(repaired.observation.lifecycle_status).toBe("active");
     expect(store.countRows("canonical_events")).toBe(3);
   });
 
@@ -1356,6 +1388,58 @@ describe("LocalCaptureStore adjudication", () => {
     expect(counts.policy_version).toBe(ADJUDICATION_POLICY_VERSION);
     expect(counts.promote + counts.hold + counts.reject).toBe(1);
   });
+  it("isolates held review by exact policy version", () => {
+    const { store } = makeStore();
+    const captured = store.captureHook(
+      makeEnvelope({
+        session_id: "session_mixed_policy_held",
+        payload: { message: "Synthetic held candidate for policy isolation." },
+      }),
+      { extract: true },
+    );
+    const second = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_test_v2",
+    });
+    expect(second).toMatchObject({ status: "held", policy_version: "adj_test_v2" });
+
+    expect(store.listHeldDispositions(ADJUDICATION_POLICY_VERSION)).toMatchObject({
+      policy_version: ADJUDICATION_POLICY_VERSION,
+      count: 1,
+    });
+    expect(store.listHeldDispositions("adj_test_v2")).toMatchObject({
+      policy_version: "adj_test_v2",
+      count: 1,
+    });
+
+    const unknown = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      "adj_unknown_v9",
+    );
+    expect(unknown).toMatchObject({
+      status: "failed",
+      policy_version: "adj_unknown_v9",
+      count: 0,
+    });
+    expect(store.countRows("knowledge_disposition_reviews")).toBe(0);
+
+    const reviewed = store.reviewHeldDisposition(captured.event.event_id, "reject", "adj_test_v2");
+    expect(reviewed).toMatchObject({
+      status: "reviewed",
+      decision: "reject",
+      policy_version: "adj_test_v2",
+      count: 1,
+    });
+    expect(store.listHeldDispositions("adj_test_v2")).toMatchObject({ count: 0 });
+    expect(store.listHeldDispositions(ADJUDICATION_POLICY_VERSION)).toMatchObject({ count: 1 });
+    expect(store.countRows("knowledge_disposition_reviews")).toBe(1);
+
+    expect(() => store.listHeldDispositions("invalid policy")).toThrow(/policy version must match/);
+    expect(
+      store.reviewHeldDisposition(captured.event.event_id, "promote", "invalid policy"),
+    ).toMatchObject({ status: "failed", count: 0 });
+    expect(store.countRows("knowledge_disposition_reviews")).toBe(1);
+  });
 
   it("refuses held review for a non-held disposition", () => {
     const { store } = makeStore();
@@ -1366,7 +1450,11 @@ describe("LocalCaptureStore adjudication", () => {
       }),
       { extract: true },
     );
-    const reviewed = store.reviewHeldDisposition(captured.event.event_id, "promote");
+    const reviewed = store.reviewHeldDisposition(
+      captured.event.event_id,
+      "promote",
+      ADJUDICATION_POLICY_VERSION,
+    );
     expect(reviewed).toMatchObject({ status: "failed" });
     if (reviewed.status === "failed") {
       expect(reviewed.error).toContain("expected hold");

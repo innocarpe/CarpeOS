@@ -1,4 +1,3 @@
-import { ADJUDICATION_POLICY_VERSION } from "@carpeos/capture";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -13,6 +12,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { ADJUDICATION_POLICY_VERSION } from "@carpeos/capture";
 import { LocalCaptureStore, StaticKeyProvider } from "@carpeos/local-store";
 import type {
   ProtectedValueMetadata,
@@ -114,6 +114,7 @@ describe("carpeos CLI", () => {
     expect(memoryTopic.stdout).toContain("--include-held");
     expect(adjudicateTopic.stdout).toContain("--policy-version");
     expect(adjudicateTopic.stdout).toContain("Neither path creates an AcceptanceDecision");
+    expect(adjudicateTopic.stdout).toContain("adj_v3");
   });
 
   it("initializes, identifies a project, captures without plaintext output, and replays", () => {
@@ -276,8 +277,17 @@ describe("carpeos CLI", () => {
     ).toBe(0);
     expect(
       (
-        runJson(["adjudicate", "list-held", "--trust-zone", trustZone], context).stdout
-          .held as unknown[]
+        runJson(
+          [
+            "adjudicate",
+            "list-held",
+            "--trust-zone",
+            trustZone,
+            "--policy-version",
+            ADJUDICATION_POLICY_VERSION,
+          ],
+          context,
+        ).stdout.held as unknown[]
       ).length,
     ).toBeGreaterThan(0);
     expect(runJson(["retrieval", "rebuild", "--trust-zone", trustZone], context).status).toBe(0);
@@ -326,7 +336,7 @@ describe("carpeos CLI", () => {
     ).toEqual(["active", "draft"]);
   });
 
-  it("lists and terminally reviews held dispositions", () => {
+  it("returns policy-scoped, body-free held receipts and terminal reviews", () => {
     const context = makeContext();
     runJson(["init"], context);
     const captureHeld = (sessionId: string, message: string) =>
@@ -353,49 +363,172 @@ describe("carpeos CLI", () => {
     expect(rejectCandidate.status).toBe(0);
     const promoteEventId = String(promoteCandidate.stdout.event_id);
     const rejectEventId = String(rejectCandidate.stdout.event_id);
+    const secondPolicy = runJson(
+      ["adjudicate", "--event-id", promoteEventId, "--policy-version", "adj_test_v2"],
+      context,
+    );
+    expect(secondPolicy.stdout).toMatchObject({ status: "held", policy_version: "adj_test_v2" });
+    const secondPolicyHeld = runJson(
+      ["adjudicate", "list-held", "--policy-version", "adj_test_v2"],
+      context,
+    );
+    expect(secondPolicyHeld.stdout).toMatchObject({
+      policy_version: "adj_test_v2",
+      count: 1,
+    });
 
-    const listed = runJson(["adjudicate", "list-held", "--limit", "10"], context);
+    const listed = runJson(
+      ["adjudicate", "list-held", "--limit", "10", "--policy-version", ADJUDICATION_POLICY_VERSION],
+      context,
+    );
     expect(listed.status).toBe(0);
     expect(listed.stdout).toMatchObject({
       ok: true,
       command: "adjudicate",
       mode: "list-held",
+      policy_version: ADJUDICATION_POLICY_VERSION,
       count: 2,
     });
-    const held = listed.stdout.held as Array<{ source_event_id: string; statement: string }>;
+    const held = listed.stdout.held as Array<{ source_event_id: string }>;
     expect(held.map((item) => item.source_event_id).sort()).toEqual(
       [promoteEventId, rejectEventId].sort(),
     );
-    expect(held.every((item) => item.statement.includes("SessionEnd"))).toBe(true);
+    expect(JSON.stringify(listed.stdout)).not.toContain("Synthetic held candidate");
+    expect(held.every((item) => !("statement" in item))).toBe(true);
 
-    const promoted = runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context);
+    const promoted = runJson(
+      [
+        "adjudicate",
+        "promote-held",
+        "--event-id",
+        promoteEventId,
+        "--policy-version",
+        ADJUDICATION_POLICY_VERSION,
+      ],
+      context,
+    );
     expect(promoted.status).toBe(0);
     expect(promoted.stdout).toMatchObject({
       ok: true,
       mode: "promote-held",
       status: "reviewed",
       decision: "promote",
-      extraction: { status: "extracted", lifecycle_status: "active" },
+      policy_version: ADJUDICATION_POLICY_VERSION,
+      count: 1,
+      observation: { lifecycle_status: "active" },
     });
 
-    const rejected = runJson(["adjudicate", "reject-held", "--event-id", rejectEventId], context);
+    const rejected = runJson(
+      [
+        "adjudicate",
+        "reject-held",
+        "--event-id",
+        rejectEventId,
+        "--policy-version",
+        ADJUDICATION_POLICY_VERSION,
+      ],
+      context,
+    );
     expect(rejected.status).toBe(0);
     expect(rejected.stdout).toMatchObject({
       ok: true,
       mode: "reject-held",
       status: "reviewed",
       decision: "reject",
+      policy_version: ADJUDICATION_POLICY_VERSION,
+      count: 1,
     });
-    expect(runJson(["adjudicate", "list-held"], context).stdout).toMatchObject({ count: 0 });
+    expect(
+      runJson(["adjudicate", "list-held", "--policy-version", ADJUDICATION_POLICY_VERSION], context)
+        .stdout,
+    ).toMatchObject({ count: 0, policy_version: ADJUDICATION_POLICY_VERSION });
 
     expect(
-      runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context).stdout,
-    ).toMatchObject({ status: "replay", decision: "promote" });
-    const conflict = runJson(["adjudicate", "reject-held", "--event-id", promoteEventId], context);
+      runJson(
+        [
+          "adjudicate",
+          "promote-held",
+          "--event-id",
+          promoteEventId,
+          "--policy-version",
+          ADJUDICATION_POLICY_VERSION,
+        ],
+        context,
+      ).stdout,
+    ).toMatchObject({ status: "replay", decision: "promote", count: 1 });
+    const conflict = runJson(
+      [
+        "adjudicate",
+        "reject-held",
+        "--event-id",
+        promoteEventId,
+        "--policy-version",
+        ADJUDICATION_POLICY_VERSION,
+      ],
+      context,
+    );
     expect(conflict.status).toBe(1);
-    expect(conflict.stdout).toMatchObject({ ok: false, status: "failed" });
+    expect(conflict.stdout).toMatchObject({ ok: false, status: "failed", count: 0 });
 
-    const invalidLimit = runJson(["adjudicate", "list-held", "--limit", "201"], context);
+    const unknown = runJson(
+      [
+        "adjudicate",
+        "promote-held",
+        "--event-id",
+        promoteEventId,
+        "--policy-version",
+        "adj_unknown_v9",
+      ],
+      context,
+    );
+    expect(unknown.status).toBe(1);
+    expect(unknown.stdout).toMatchObject({
+      ok: false,
+      status: "failed",
+      policy_version: "adj_unknown_v9",
+      count: 0,
+    });
+    const secondPolicyRejected = runJson(
+      [
+        "adjudicate",
+        "reject-held",
+        "--event-id",
+        promoteEventId,
+        "--policy-version",
+        "adj_test_v2",
+      ],
+      context,
+    );
+    expect(secondPolicyRejected.stdout).toMatchObject({
+      status: "reviewed",
+      policy_version: "adj_test_v2",
+      count: 1,
+    });
+    expect(
+      runJson(["adjudicate", "list-held", "--policy-version", ADJUDICATION_POLICY_VERSION], context)
+        .stdout,
+    ).toMatchObject({ count: 0 });
+
+    const missingPolicy = runJson(["adjudicate", "list-held"], context);
+    expect(missingPolicy.status).toBe(2);
+    const invalidPolicy = runJson(
+      ["adjudicate", "list-held", "--policy-version", "invalid policy"],
+      context,
+    );
+    expect(invalidPolicy.status).toBe(2);
+    expect(invalidPolicy.stderr).toMatchObject({ ok: false, error: { code: "invalid_usage" } });
+
+    const invalidLimit = runJson(
+      [
+        "adjudicate",
+        "list-held",
+        "--limit",
+        "201",
+        "--policy-version",
+        ADJUDICATION_POLICY_VERSION,
+      ],
+      context,
+    );
     expect(invalidLimit.status).toBe(2);
     expect(invalidLimit.stderr).toMatchObject({ ok: false, error: { code: "invalid_usage" } });
   });

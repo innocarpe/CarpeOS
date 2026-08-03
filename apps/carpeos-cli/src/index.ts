@@ -13,12 +13,12 @@ import {
   runtimeDirFromEnv,
   withLocalRetrievalDatabase,
 } from "@carpeos/local-store";
+import { createCarpeosMcpApplication } from "@carpeos/mcp-server";
 import {
   buildOkfProjectionPlan,
   checkOkfConformance,
   rebuildOkfProjection,
 } from "@carpeos/okf-projection";
-import { createCarpeosMcpApplication } from "@carpeos/mcp-server";
 import {
   ackEmbeddingJob,
   defaultEmbeddingProvider,
@@ -39,11 +39,11 @@ import {
 import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
 import {
   CycleFailure,
+  type CyclePreflight,
+  type CycleSyncResult,
   hashPath,
   hashText,
   runSyncCycle,
-  type CyclePreflight,
-  type CycleSyncResult,
 } from "./cycle.js";
 import { packageName, packageVersion } from "./package-version.js";
 
@@ -686,17 +686,17 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
   );
   try {
     if (mode === "list-held") {
+      const policyVersion = parseHeldPolicyVersion(parsed.values["policy-version"], mode);
       const limit = parseInteger(parsed.values.limit, "--limit", 1);
       if (limit > 200) {
         throw new CliUsageError("--limit must be less than or equal to 200");
       }
-      const held = store.listHeldDispositions(limit);
+      const receipt = store.listHeldDispositions(policyVersion, limit);
       writeJson(process.stdout, {
         ok: true,
         command: "adjudicate",
         mode,
-        count: held.length,
-        held,
+        ...receipt,
       });
       return 0;
     }
@@ -723,30 +723,17 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
       if (eventId === undefined || eventId.length === 0) {
         throw new CliUsageError(`${mode} requires --event-id <evt_…>`);
       }
+      const policyVersion = parseHeldPolicyVersion(parsed.values["policy-version"], mode);
       const result = store.reviewHeldDisposition(
         eventId,
         mode === "promote-held" ? "promote" : "reject",
+        policyVersion,
       );
       writeJson(process.stdout, {
         ok: result.status !== "failed",
         command: "adjudicate",
         mode,
         ...result,
-        ...(result.status !== "failed" && result.extraction !== undefined
-          ? {
-              extraction: {
-                status: result.extraction.status,
-                ...(result.extraction.status === "extracted" ||
-                result.extraction.status === "replay"
-                  ? {
-                      observation_event_id: result.extraction.event.event_id,
-                      observation_id: result.extraction.event.payload.observation_id,
-                      lifecycle_status: result.extraction.event.lifecycle_status,
-                    }
-                  : {}),
-              },
-            }
-          : {}),
       });
       return result.status === "failed" ? 1 : 0;
     }
@@ -1434,7 +1421,7 @@ USAGE
 OPTIONS
   --event-id <id>           EvidenceArtifact event_id to adjudicate, review, or history
   --signal-text <text>      Optional free-text signal for scoring only
-  --policy-version <id>     Disposition policy identity (default: current adj_v1)
+  --policy-version <id>     Disposition policy identity; required for held review
   --stats                   Print promote/hold/reject counts for current policy
   --limit <n>               Held queue rows, 1–200 (default: 50)
   --home <path>
@@ -1442,12 +1429,13 @@ OPTIONS
   --trust-zone <id>
 
 NOTES
-  Precision-first rule adjudicator (adj_v1). Promote → active Observation;
+  Precision-first rule adjudicator (adj_v3). Promote → active Observation;
   hold → draft Observation; reject → disposition only.
   Same evidence + same policy_version is replay-safe. A new --policy-version
   appends a new disposition without rewriting prior rows; active search uses
   Observations produced by each promote path (default filter remains active).
   Held review is terminal and append-only per source event + policy version.
+  Held receipts are metadata-only and bounded to the requested policy.
   promote-held appends a new active Observation; reject-held records review only.
   Neither path creates an AcceptanceDecision.
   Prefer: carpeos adjudicate after capture sessions (hooks stay fail-open).
@@ -2083,6 +2071,16 @@ function parseInteger(value: string | undefined, name: string, minimum: number):
     throw new CliUsageError(`${name} must be an integer greater than or equal to ${minimum}`);
   }
   return parsed;
+}
+function parseHeldPolicyVersion(value: string | undefined, mode: string): string {
+  if (value === undefined || value.trim().length === 0) {
+    throw new CliUsageError(`${mode} requires --policy-version <id>`);
+  }
+  const policyVersion = value.trim();
+  if (policyVersion.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(policyVersion)) {
+    throw new CliUsageError("--policy-version must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+  }
+  return policyVersion;
 }
 
 function parseProtectedValuePolicy(
