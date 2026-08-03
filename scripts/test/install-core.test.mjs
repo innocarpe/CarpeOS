@@ -210,7 +210,7 @@ describe("install-core", () => {
         "promote",
         "[]",
         "{}",
-        "adj_v2",
+        "adj_v3",
         "synthetic doctor promote statement",
         nowIso,
       );
@@ -225,7 +225,7 @@ describe("install-core", () => {
         "hold",
         "[]",
         "{}",
-        "adj_v2",
+        "adj_v3",
         "synthetic doctor hold statement",
         nowIso,
       );
@@ -240,8 +240,8 @@ describe("install-core", () => {
         "reject",
         "[]",
         "{}",
-        "adj_v1",
-        "synthetic prior-policy reject ignored by current counts",
+        "adj_v2",
+        "synthetic stale-policy reject ignored by current counts",
         nowIso,
       );
       db.close();
@@ -253,10 +253,12 @@ describe("install-core", () => {
       assert.ok(activity.recent_evidence_count >= 1);
       assert.equal(activity.warnings.length, 0);
       assert.equal(activity.adjudication.available, true);
-      assert.equal(activity.adjudication.policy_version, "adj_v2");
+      assert.equal(activity.adjudication.policy_version, "adj_v3");
       assert.equal(activity.adjudication.promote, 1);
       assert.equal(activity.adjudication.hold, 1);
       assert.equal(activity.adjudication.reject, 0);
+      assert.equal(activity.adjudication.total, 2);
+      assert.ok(activity.checks.some((c) => c.includes("policy=adj_v3")));
       assert.equal(activity.adjudication.default_search, "promoted_active_only");
       assert.ok(activity.checks.some((c) => c.includes("adjudication: ok")));
       assert.ok(activity.checks.some((c) => c.includes("default_search: promoted_active_only")));
@@ -280,7 +282,7 @@ describe("install-core", () => {
       assert.ok(doctor.checks.some((c) => c.includes("recent_capture: ok")));
       assert.ok(doctor.checks.some((c) => c.includes("adjudication: ok")));
       assert.ok(doctor.checks.some((c) => c.includes("default_search: promoted_active_only")));
-      assert.equal(doctor.adjudication.policy_version, "adj_v2");
+      assert.equal(doctor.adjudication.policy_version, "adj_v3");
       assert.equal(doctor.default_search, "promoted_active_only");
     } finally {
       rmSync(dir, { recursive: true, force: true });

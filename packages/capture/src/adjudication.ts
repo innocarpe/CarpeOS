@@ -12,7 +12,7 @@ import {
 } from "./meaningful-unit-policy.js";
 import { buildMetadataObservationStatement } from "./extract-observation.js";
 
-export const ADJUDICATION_POLICY_VERSION = "adj_v2" as const;
+export const ADJUDICATION_POLICY_VERSION = "adj_v3" as const;
 
 export type KnowledgeDisposition = "promote" | "hold" | "reject";
 

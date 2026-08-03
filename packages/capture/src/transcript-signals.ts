@@ -85,54 +85,43 @@ export function readTranscriptTail(
  * Extract scoring + candidate prose from a Claude/Codex-style JSONL transcript tail.
  */
 export function signalsFromTranscriptText(text: string): TranscriptSignals {
-  const lines = text.split(/\n+/);
-  const userChunks: string[] = [];
-  const assistantChunks: string[] = [];
+  const proseStream: string[] = [];
+  const seen = new Set<string>();
 
-  for (const line of lines) {
+  for (const line of text.split(/\n+/)) {
     const trimmed = line.trim();
     if (trimmed.length === 0) continue;
+
     let row: unknown;
     try {
       row = JSON.parse(trimmed);
     } catch {
-      // Plain text line — weak scoring only.
-      const plain = sanitizeProse(trimmed);
-      if (plain !== undefined) userChunks.push(plain);
+      // Unparseable JSONL has no authenticated role or content boundary.
       continue;
     }
     if (row === null || typeof row !== "object") continue;
     const record = row as Record<string, unknown>;
-    const role = inferRole(record);
-    if (role === undefined) continue;
+    if (inferRole(record) === undefined) continue;
+
     const prose = proseFromTranscriptRecord(record);
     if (prose === undefined) continue;
-    if (role === "assistant") assistantChunks.push(prose);
-    else userChunks.push(prose);
+    if (!isDurableProse(prose)) continue;
+    const duplicateKey = normalizeDuplicateKey(prose);
+    if (seen.has(duplicateKey)) continue;
+    seen.add(duplicateKey);
+    proseStream.push(prose);
   }
 
-  // Prefer recent turns.
-  const recentUsers = userChunks.slice(-6);
-  const recentAssistants = assistantChunks.slice(-8);
-  const scoringParts = [...recentUsers, ...recentAssistants];
-  const scoring = joinBounded(scoringParts, TRANSCRIPT_SIGNAL_MAX_CHARS);
+  const activeStream = removeCorrectedProse(proseStream);
+  const recent = activeStream.slice(-8);
+  const scoring = joinBounded(recent, TRANSCRIPT_SIGNAL_MAX_CHARS);
 
-  // Candidate: last durable assistant prose, else last durable user prose.
   let candidate: string | undefined;
-  for (let i = recentAssistants.length - 1; i >= 0; i -= 1) {
-    const value = recentAssistants[i];
+  for (let i = recent.length - 1; i >= 0; i -= 1) {
+    const value = recent[i];
     if (value !== undefined && isDurableProse(value)) {
       candidate = `Message: ${value}`.slice(0, TRANSCRIPT_CANDIDATE_MAX_CHARS);
       break;
-    }
-  }
-  if (candidate === undefined) {
-    for (let i = recentUsers.length - 1; i >= 0; i -= 1) {
-      const value = recentUsers[i];
-      if (value !== undefined && isDurableProse(value)) {
-        candidate = `Message: ${value}`.slice(0, TRANSCRIPT_CANDIDATE_MAX_CHARS);
-        break;
-      }
     }
   }
 
@@ -230,26 +219,82 @@ function sanitizeProse(value: string): string | undefined {
   if (normalized.length < 8) return undefined;
   if (NOISE_LINE.test(normalized)) return undefined;
   if (containsSecretLikeMaterial(normalized)) return undefined;
-  // Heavy tool dumps / process tables are not knowledge statements.
-  if (/\bPID\b/.test(normalized) && /\b%CPU\b/.test(normalized) && normalized.length > 200) {
+  // Tool dumps and serialized payloads are not candidate prose.
+  if (
+    /[{}[\]]|\b(?:reasoning_content|tool_calls?|raw_payload|transcript)\s*[:=]/i.test(normalized) ||
+    (/\bPID\b/.test(normalized) && /\b%CPU\b/.test(normalized) && normalized.length > 200)
+  ) {
     return undefined;
   }
   return normalized.slice(0, TRANSCRIPT_CANDIDATE_MAX_CHARS);
 }
 
 function isDurableProse(value: string): boolean {
-  if (value.length < 20) return false;
-  if (NOISE_LINE.test(value)) return false;
-  // Prefer content that looks like a decision/preference/constraint/procedure,
-  // or at least a multi-word task statement.
-  if (
-    /\b(decid(?:e|ed|ing|es)|decision|prefer|must|should|always|never|constraint|procedure|workflow|adopt|chose|choose|default|will use|going with|plan is)\b/i.test(
+  if (NOISE_LINE.test(value) || isFutureIntent(value)) return false;
+  return (
+    /\b(decid(?:e|ed|ing|es)|decisions?|prefer(?:ence)?|must|should|always|never|constraint|procedure|workflow|adopt(?:ed)?|chose|choose|default|policy|correction|corrected|retract(?:ed|ion)?|replace(?:d|ment)?|instead|no longer)\b/i.test(
       value,
-    )
-  ) {
-    return true;
+    ) || /(결정|선호|반드시|항상|절대|기본값|정책|절차|정정|철회|대신|더 이상)/.test(value)
+  );
+}
+
+function isFutureIntent(value: string): boolean {
+  return (
+    /\b(?:will|plan(?:s)? to|planning to|going to|intend(?:s|ed)? to|may|might|could)\b/i.test(
+      value,
+    ) || /(할 예정이다|계획이다|계획입니다|하려고 한다|할 수 있다)/.test(value)
+  );
+}
+
+function normalizeDuplicateKey(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function removeCorrectedProse(parts: readonly string[]): string[] {
+  const blocked = new Set<number>();
+
+  for (let correctionIndex = 0; correctionIndex < parts.length; correctionIndex += 1) {
+    const correction = parts[correctionIndex];
+    if (correction === undefined || !isCorrectionOrReplacement(correction)) continue;
+    const obsoleteTerms = correctedTerms(correction);
+    if (obsoleteTerms.length === 0) continue;
+
+    for (let priorIndex = 0; priorIndex < correctionIndex; priorIndex += 1) {
+      const prior = parts[priorIndex];
+      if (
+        prior !== undefined &&
+        obsoleteTerms.some((term) => normalizeDuplicateKey(prior).includes(term))
+      ) {
+        blocked.add(priorIndex);
+      }
+    }
   }
-  return value.split(/\s+/).length >= 8;
+
+  return parts.filter((_, index) => !blocked.has(index));
+}
+
+function isCorrectionOrReplacement(value: string): boolean {
+  return (
+    /\b(?:correction|corrected|retract(?:ed|ion)?|replace(?:d|ment)?|instead of|no longer)\b/i.test(
+      value,
+    ) || /(정정|철회|대신|더 이상)/.test(value)
+  );
+}
+
+function correctedTerms(value: string): string[] {
+  const normalized = normalizeDuplicateKey(value);
+  const terms: string[] = [];
+  for (const pattern of [
+    /\binstead of ([a-z0-9][a-z0-9 _-]{1,80})/i,
+    /\breplace ([a-z0-9][a-z0-9 _-]{1,80}) with\b/i,
+    /\bno longer (?:use|prefer|allow|support) ([a-z0-9][a-z0-9 _-]{1,80})/i,
+    /\bdo not (?:use|prefer|allow|support) ([a-z0-9][a-z0-9 _-]{1,80})/i,
+  ] as const) {
+    const match = pattern.exec(normalized);
+    const term = match?.[1]?.trim();
+    if (term !== undefined && term.length >= 2) terms.push(term);
+  }
+  return terms;
 }
 
 function joinBounded(parts: readonly string[], max: number): string | undefined {
