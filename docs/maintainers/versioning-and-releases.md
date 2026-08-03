@@ -119,7 +119,8 @@ defaults and contracts assume **adjudicated** knowledge (see
 
 ### Cut a release
 
-From a clean `main` checkout (after CI is green):
+From a clean `main` checkout (after CI is green and with explicit user authorization
+to cut, push, and publish):
 
 ```sh
 # dry-run
@@ -138,6 +139,48 @@ Pushing the tag triggers [`.github/workflows/release.yml`](../../.github/workflo
 2. Build `@innocarpe/carpeos`
 3. `npm publish` from `packages/carpeos`
 4. Create GitHub Release for `vX.Y.Z` with changelog notes
+
+### Verify publication, activate locally, and smoke
+
+After the release workflow succeeds, verify the remote artifacts:
+
+```sh
+gh run list --workflow=release.yml --limit 5
+npm view @innocarpe/carpeos version
+gh release view vX.Y.Z
+```
+
+Then, in the maintainer's real local environment, install the just-published exact
+version. Never use `latest`, a floating tag, or an unversioned install.
+
+```sh
+npm install --global "@innocarpe/carpeos@X.Y.Z"
+command -v carpeos
+carpeos --version
+carpeos setup doctor
+```
+
+Confirm the resolved `carpeos` executable and `carpeos --version` report `X.Y.Z`.
+Run `carpeos help <new-public-command>` for every newly added public command, then
+exercise the release's principal behavior with only synthetic or disposable inputs.
+For a 3.1-style release, perform this ordered synthetic OKF smoke without falling
+back to the maintainer's real home:
+
+1. Create disposable home and output directories.
+2. Initialize the disposable home with a synthetic trust zone, then ingest and
+   adjudicate a synthetic fixture in that zone.
+3. Run OKF export and then rebuild with `--home` set to the disposable home and
+   `--visible-trust-zone` set to the initialized zone.
+4. Verify expected bundle roots and manifest, preservation of an unmanaged file,
+   and absence of a synthetic sentinel in exported output.
+5. Delete both disposable directories after recording the results.
+
+Record the actual commands and results in the release receipt. Any failure blocks a
+`complete` claim. npm and GitHub publication alone are not release completion: if the
+active global CLI remains older, report **published; local activation incomplete**.
+
+Keep the receipt public-safe: do not record local paths, usernames, credentials,
+private data, or production runtime output.
 
 ### Manual publish fallback
 
