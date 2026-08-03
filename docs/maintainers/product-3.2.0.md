@@ -15,7 +15,7 @@ Schema v1, event types, required CLI/MCP contracts/defaults, trust zones, fail-o
 | Goals | Non-goals / prohibitions |
 | --- | --- |
 | Planned chronology, exact-normalized deduplication, correction handling, deterministic evaluators, and policy-aware held review improve precision without granting authority. | Automatic/adjudicated Claim drafting, runtime form selector/materializer, or AcceptanceDecision. `allow_auto_claim=false`; `memory_propose_claim` remains draft-only. |
-| **B0:** complete deterministic, metadata-only, zero-write reconciliation preview makes eligible, noop, unsafe, component, taint, and digest evidence reviewable. | B1 safe-subset apply, Supersession construction, event/protected/canonical/outbox writer, apply command, apply receipt, best-effort skip, cleanup UPDATE/DELETE, fuzzy dedup, authority inferred from scores/forms/support/graph/feedback. |
+| **B0:** deterministic bounded, metadata-only, zero-write reconciliation preview makes emitted eligible, noop, unsafe, component, taint, and digest evidence reviewable without claiming completeness when over limit. | B1 safe-subset apply, Supersession construction, event/protected/canonical/outbox writer, apply command, apply receipt, best-effort skip, cleanup UPDATE/DELETE, fuzzy dedup, authority inferred from scores/forms/support/graph/feedback. |
 | Planned pack-once release proves the same `.tgz` is installed, smoked, and published from the approved release SHA. | Repacking after test or claiming runtime/release/install completion before its gate is evidenced. |
 
 ## Current evidence
@@ -35,7 +35,7 @@ Schema v1, event types, required CLI/MCP contracts/defaults, trust zones, fail-o
 | K3 | Disposition evaluator green | pending |
 | K4 | Evidence-only form evaluator green; auto Claim off | pending |
 | K5 | Policy-aware held review green | pending |
-| K6 | Complete preview/global taint and byte-identical digest interoperability green | pending |
+| K6 | Bounded preview/global taint and byte-identical digest interoperability green | pending |
 | K7 | **B0 selected; runtime/no-apply receipt pending** | pending |
 | K8 | Retrieval evaluator green | pending |
 | K9 | Dogfood, docs, and pack green | pending |
@@ -51,14 +51,14 @@ Schema v1, event types, required CLI/MCP contracts/defaults, trust zones, fail-o
 | Form/support | `knowledge-form-support/v1`; at least four synthetic fixtures per class; accuracy, Claim precision/recall, Observation preservation `1.00`; false candidates/support/provenance/safety/reason failures `0`; automatic Claim/AcceptanceDecision writes `0`. |
 | Invalid denominators | A zero or undefined reported denominator is invalid corpus: exit `2`, never normalized to `1.00`. |
 | Session and held review | Session obsolete/generic/secret leakage `0`; exact-normalized dedup only. Held policy/count exact, replay stable, opposite terminal fails, no AcceptanceDecision. |
-| B0 preview | Complete deterministic plan-v2 enumeration/classification/components/global taint and exact UTF-8 preimage SHA-256 interoperability; preview zero writes. |
+| B0 preview | Exact bounded plan-v2 preview: deterministic emitted prefix/digest, full classification only when total is within limit, `incomplete_enumeration_global_taint` and inadmissibility when over limit, and zero writes. |
 | B0 no-apply | No writer, apply command, or apply receipt; reconciliation creates no new Supersession, protected, canonical, or outbox rows and does not widen authority. Apply/pin/acknowledgement flags fail exit `2` before reconciliation writes. |
 | Retrieval | macro recall@3 `1.00`, MRR `>= .90`, leakage/budget/false acceptance `0`, eight canonical branches, stable rebuild digest; offline only. |
 | Release/install | Planned pack-once proof: install/smoke and publish identical `.tgz`; manifest SHA-512/integrity and registry `gitHead` equal approved release SHA. |
 
 ## B0 selected; B1 deferred
 
-3.2 ships complete deterministic zero-write preview only. B1 failed admission because truthful recorded time cannot be backdated for offline byte convergence; the current outbox uploads linked protected values; remote replay does not compare canonical bytes; and candidate null normalization/calendar validation were not ready. These proof failures select B0 without reducing preview scope.
+3.2 is planned to provide deterministic bounded zero-write preview only. B1 failed admission because truthful recorded time cannot be backdated for offline byte convergence; the current outbox uploads linked protected values; remote replay does not compare canonical bytes; and candidate null normalization/calendar validation were not ready. These proof failures select B0 without reducing the bounded-preview contract.
 
 B1 safe-subset apply, Supersession construction, protected transfer/lifecycle, and sync convergence are deferred outside 3.2. Unsafe entries remain unchanged. The exact preview contract, digest, classifications, component/global-taint rules, and B0 usage contract are in the [policy reconciliation decision](../adr/0015-policy-version-reconciliation.md).
 
@@ -74,7 +74,7 @@ PR00/K0 and PR01/K1 are immutable history. New runtime work begins at PR02. Bran
 | 05 | `fix/3.2-held-policy-review` | `packages/local-store/src/store.ts`, `packages/local-store/test/store.test.ts`, `apps/carpeos-cli/src/index.ts`, `apps/carpeos-cli/test/cli.test.ts`; planned policy-aware held operations | K1 |
 | 06 | `feat/3.2-policy-reconciliation-preview` | planned `packages/local-store/src/policy-reconciliation.ts`, `packages/local-store/src/store.ts`, `packages/local-store/test/store.test.ts`, `apps/carpeos-cli/src/index.ts`, and `apps/carpeos-cli/test/cli.test.ts`; preview builders/classifier only | strictly after 05 |
 | 07 | — | **Deferred; not opened or merged for 3.2.** No branch, runtime ownership, apply writer, command, fixture, receipt, or event construction. | B0 selected |
-| 08 | `test/3.2-retrieval-quality` | planned retrieval evaluation source, matching test, fixture, and `packages/retrieval/package.json` | K1 |
+| 08 | `test/3.2-retrieval-quality` | planned `packages/retrieval/src/retrieval-evaluation.ts`, `packages/retrieval/test/retrieval-evaluation.test.ts`, `packages/retrieval/test/fixtures/retrieval-quality-v1.json`, and `packages/retrieval/package.json` | K1 |
 | 09 | `test/3.2-pack-once-release` | planned `scripts/pack-once.mjs`, `scripts/test/pack-once.test.mjs`, existing `packages/carpeos/test/packaging.test.mjs` and `scripts/test/release.test.mjs`, planned `scripts/test/release-artifact.test.mjs`, and `.github/workflows/release.yml` | K1 |
 | 10 | `docs/3.2-runtime-truth-audit` | `docs/architecture/overview.md`, `docs/architecture/provider-neutral-capture.md`, `docs/architecture/projections.md`, `docs/architecture/memory-capacity.md`, `docs/plans/graphrag-roadmap.md` | K1 |
 | 11 | `test/3.2-public-knowledge-dogfood` | existing `scripts/smoke-dogfood.mjs`, `scripts/smoke-knowledge.mjs`, `.github/workflows/ci.yml`; planned synthetic fixtures/tests for evaluators, **B0 preview-only** smoke, no fake apply, and unsupported-flag zero-write proof | evaluators, held/preview/retrieval |
@@ -87,15 +87,15 @@ PR06 owns preview and no writer. PR07 is absent from the shared store/CLI chain.
 
 ### Planned reconciliation implementation ownership
 
-PR06 adds only planned `classifyPolicyReconciliationEntry`, `partitionReconciliationComponents`, `buildPolicyReconciliationPlanV2`, `policyReconciliationDigestPreimageV2`, and `digestPolicyReconciliationPlanV2` in `packages/local-store/src/policy-reconciliation.ts`, with preview wiring in `store.ts` and `apps/carpeos-cli/src/index.ts`. There is no planned apply method, apply fixture, or apply receipt for 3.2. Planned fixtures prove exact plan/preimage UTF-8 bytes and SHA-256 across store and CLI.
+PR06 adds only planned `classifyPolicyReconciliationEntry`, `partitionReconciliationComponents`, `buildPolicyReconciliationPlanV2`, `policyReconciliationDigestPreimageV2`, and `digestPolicyReconciliationPlanV2` in `packages/local-store/src/policy-reconciliation.ts`, with preview wiring in `store.ts` and `apps/carpeos-cli/src/index.ts`. There is no planned apply method, apply fixture, or apply receipt for 3.2. Planned fixtures prove exact UTF-8 plan/preimage bytes and SHA-256 across store and CLI, including deterministic emitted prefixes and the required incomplete-enumeration taint/inadmissibility for over-limit totals.
 
 ## Planned test matrix and receipts
 
 | Layer | Required proof |
 | --- | --- |
-| Unit | chronology/correction/exact dedup/future/Korean/malformed/secret; evaluator denominator/formula/digest/redaction/exits; held policy/replay/conflict; complete preview reasons/components/taint; every included preimage-field mutation and excluded-field invariance; preview zero writes; unsupported apply flags exit `2`/zero writes; retrieval branches/digest/exits; pack identity. |
-| Integration | `adj_v3` transcript; Claim-shaped automatic capture remains Observation/disposition only; held workflow; store/CLI exact preview bytes/hash; taint visibility and zero writes; unsupported flags zero-write; retrieval index/graph/recheck; installed tarball behavior. |
-| End-to-end | disposable synthetic session/form/held/older-policy/foreign cases; B0 preview-only with unsafe/global-taint visibility and no fake apply; OKF safety smoke; exact release SHA repetition. |
+| Unit | chronology/correction/exact dedup/future/Korean/malformed/secret; evaluator denominator/formula/digest/redaction/exits; held policy/replay/conflict; deterministic bounded preview prefixes, emitted-entry reasons/components/taint, and no false completeness when over limit; every included preimage-field mutation and excluded-field invariance; preview zero writes; unsupported apply flags exit `2`/zero writes; retrieval branches/digest/exits; pack identity. |
+| Integration | `adj_v3` transcript; Claim-shaped automatic capture remains Observation/disposition only; held workflow; store/CLI exact bounded-preview bytes/hash; over-limit taint/inadmissibility and zero writes; unsupported flags zero-write; retrieval index/graph/recheck; installed tarball behavior. |
+| End-to-end | disposable synthetic session/form/held/older-policy/foreign cases; B0 bounded preview-only with unsafe/global-taint visibility, deterministic over-limit prefix, and no fake apply; OKF safety smoke; exact release SHA repetition. |
 | Observability | aggregate reports; metadata-only preview exposes counts, IDs, reasons, components, admissibility, and digest—not bodies. |
 
 Freeze records each gate PR SHA, command/result, metric/digest, compatibility/risk/boundary, **B0 selection**, preview golden proof, unsafe/global-taint inventory, and explicit B1 defer. Pre-tag Approve records B0 and quality receipts. PR15 records public-safe preview-only activation. Exact artifact install/release proof remains required and pending.

@@ -1,4 +1,4 @@
-# ADR 0015: Policy-version reconciliation requires complete, digest-pinned preview plans
+# ADR 0015: Policy-version reconciliation requires bounded, digest-pinned preview plans
 
 Status: **Accepted for Product 3.2 B0; preview implementation pending; B1 deferred**
 
@@ -12,7 +12,7 @@ Canonical/review/disposition history remains append-only and bitemporal. Schema 
 
 ## Decision
 
-**Product 3.2 selects B0: complete deterministic reconciliation preview only, with zero writes.** B1 safe-subset Supersession apply is deferred and does not merge for 3.2. This is the approved fallback, not a scope reduction: complete enumeration, exact classification, component partition, global-taint visibility, and the canonical plan-v2 digest remain required.
+**Product 3.2 selects B0: deterministic bounded reconciliation preview only, with zero writes.** B1 safe-subset Supersession apply is deferred and does not merge for 3.2. This is the approved fallback, not a scope reduction: exact pre-limit candidate total, deterministic emitted-prefix classification, component partition, global-taint visibility, and the canonical plan-v2 digest remain required.
 
 No preview result creates authority or changes canonical state. Unsafe entries remain unchanged and conspicuous. No silent/best-effort skip exists; global taint marks the plan inadmissible. Automatic Claim/AcceptanceDecision creation remains forbidden.
 
@@ -20,7 +20,7 @@ No preview result creates authority or changes canonical state. Unsafe entries r
 
 All values are JSON. Objects contain exactly their stated keys: no omitted optional keys, unknown keys, aliases, shorthand, or display/timestamp/error/body fields. UTF-8 strings use NFC normalization before validation and `stableJson`. `Identifier` is `^[a-z][a-z0-9_:-]{2,127}$`; `PolicyIdentifier` is `^[a-z][a-z0-9_-]{2,63}$`; `TrustZoneId` is `^tz_[a-z0-9][a-z0-9_-]{2,63}$`; `EventId` is `^evt_[a-z0-9][a-z0-9_-]{7,127}$`; `ComponentId` is `^cmp:[0-9a-f]{64}$`; and `Sha256Digest` is `sha256:` plus 64 lowercase hexadecimal characters. Counts/high-water values are safe JSON integers in `0..9007199254740991`; `limit` is an integer in `1..200`; booleans are JSON booleans.
 
-`ReasonCode` is exactly `"replace" | "invalidate" | "already_applied" | "shared_materialization_unsafe" | "missing_unsafe" | "ambiguous_unsafe" | "imported_unsafe" | "self_unsafe" | "cycle_unsafe" | "zone_unsafe" | "lineage_unsafe" | "conflicting_intent_unsafe"`. `UnsafeReasonCode` excludes the first three. `GlobalTaintReasonCode` is exactly `"incomplete_enumeration_global_taint" | "unstable_snapshot_global_taint" | "eligible_unsafe_overlap_global_taint" | "conflicting_eligible_intent_global_taint" | "eligible_reachable_cycle_global_taint" | "eligible_imported_shared_lineage_global_taint" | "eligible_cross_zone_global_taint" | "eligible_subject_uncertainty_global_taint" | "unsafe_influences_eligible_global_taint" | "nonunique_component_partition_global_taint" | "unproved_zero_write_global_taint" | "unproved_conformance_global_taint" | "unproved_transaction_safety_global_taint"`. Arrays are never `null`; only target/replacement IDs may be JSON `null` where stated.
+`ReasonCode` is exactly `"replace" | "invalidate" | "already_applied" | "shared_materialization_unsafe" | "missing_unsafe" | "ambiguous_unsafe" | "imported_unsafe" | "self_unsafe" | "cycle_unsafe" | "zone_unsafe" | "lineage_unsafe" | "conflicting_intent_unsafe"`. `UnsafeReasonCode` excludes the first three. `GlobalTaintReasonCode` is exactly `"incomplete_enumeration_global_taint" | "unstable_snapshot_global_taint" | "eligible_unsafe_overlap_global_taint" | "conflicting_eligible_intent_global_taint" | "eligible_reachable_cycle_global_taint" | "eligible_imported_shared_lineage_global_taint" | "eligible_cross_zone_global_taint" | "eligible_subject_uncertainty_global_taint" | "unsafe_influences_eligible_global_taint" | "nonunique_component_partition_global_taint" | "unproved_zero_write_global_taint" | "unproved_conformance_global_taint"`. Arrays are never `null`; only target/replacement IDs may be JSON `null` where stated.
 
 ```ts
 type PolicyReconciliationPlanV2 = {
@@ -67,17 +67,17 @@ type PolicyReconciliationEntryV2 = {
 };
 ```
 
-Preview accepts explicit `trust_zone_id`, `from_policy`, `to_policy`, and `limit`. It calculates `total_candidate_count` before limiting, enumerates sources in `(source_event_id, policy_version)` order, and emits one entry for each local canonical Observation whose provenance/idempotency matches historical extraction, policy-scoped materialization, or held-review promotion. `classified_count`, `truncated`, and high-water are receipts of that bounded preview; no B0 action depends on admission.
+Preview accepts explicit `trust_zone_id`, `from_policy`, `to_policy`, and `limit` in `1..200`. It calculates `total_candidate_count` as the exact pre-limit total, orders all candidates by `(source_event_id, policy_version)`, and emits entries for exactly the first `min(total_candidate_count, limit)` candidates. `classified_count === entries.length`; `truncated === (total_candidate_count > limit)`. Every action/reason count, component, and per-entry evidence covers emitted entries only. When `total_candidate_count <= limit`, all candidates are emitted and classification is fully deterministic. When truncated, `plan_admissible=false` and `global_taint_reason_codes` includes `incomplete_enumeration_global_taint`. Preview and usage errors always write zero reconciliation rows.
 
 Permitted entry combinations are exhaustive: `eligible_write/replace/replace` has distinct non-null target/replacement; `eligible_write/invalidate/invalidate` has non-null target and null replacement; `eligible_noop/already_applied/already_applied` has non-null target and nullable replacement; `unsafe_unchanged/none` uses an unsafe reason and nullable target/replacement. No other pair is valid. `source_event_id` differs from non-null target/replacement except an unsafe `self_unsafe` fact.
 
 ### Components, normalization, and global taint
 
-Planned `partitionReconciliationComponents` builds an undirected graph over sources, non-null target/replacement IDs, materialization lineage IDs, and existing/prospective Supersession relations. A component is its lexicographically sorted vertex IDs; `component_id` is `cmp:${sha256Hex(stableJson(componentVertexIds))}`. Components are recomputed, never accepted from CLI input.
+Planned `partitionReconciliationComponents` builds an undirected graph over the emitted entries’ sources, non-null target/replacement IDs, materialization lineage IDs, and existing/prospective Supersession relations. A component is its lexicographically sorted vertex IDs; `component_id` is `cmp:${sha256Hex(stableJson(componentVertexIds))}`. Components are recomputed, never accepted from CLI input, and describe emitted entries only.
 
-Sort `reason_code_counts` by reason code; sort/deduplicate global-taint reasons/components/entry IDs lexicographically; sort entries by `(source_event_id,bucket,action,target_event_id-or-empty,replacement_event_id-or-empty,reason_code,component_id)`. Reason counts cover every entry reason exactly once. The primary counts sum to `classified_count`; `replace_count + invalidate_count = eligible_write_count`; `already_applied_count = eligible_noop_count`.
+Sort `reason_code_counts` by reason code; sort/deduplicate global-taint reasons/components/entry IDs lexicographically; sort entries by `(source_event_id,bucket,action,target_event_id-or-empty,replacement_event_id-or-empty,reason_code,component_id)`. Reason counts cover every emitted entry reason exactly once. The primary counts sum to `classified_count`; `replace_count + invalidate_count = eligible_write_count`; `already_applied_count = eligible_noop_count`.
 
-An unsafe entry is isolated only when its complete component is disjoint from eligible target/replacement and cannot alter eligible classification. The preview maps causal facts deterministically: incomplete/truncated enumeration → `incomplete_enumeration_global_taint`; unstable snapshot/high-water/counts → `unstable_snapshot_global_taint`; eligible/unsafe overlap → `eligible_unsafe_overlap_global_taint`; conflicting eligible intent → `conflicting_eligible_intent_global_taint`; eligible-reachable cycle → `eligible_reachable_cycle_global_taint`; imported/shared lineage touching eligible → `eligible_imported_shared_lineage_global_taint`; cross-zone → `eligible_cross_zone_global_taint`; subject uncertainty → `eligible_subject_uncertainty_global_taint`; unsafe influence on eligible semantics → `unsafe_influences_eligible_global_taint`; nonunique partition → `nonunique_component_partition_global_taint`; unproved zero-write/conformance/transaction safety → their corresponding `unproved_*_global_taint` codes. It emits all applicable sorted/deduplicated codes and causal component/entry IDs. Unsafe-only self/cycle/shared/imported/ambiguous components remain unchanged.
+An unsafe emitted entry is isolated only when its emitted component is disjoint from eligible target/replacement and cannot alter emitted eligible classification. The preview maps causal facts deterministically: `truncated=true` → `incomplete_enumeration_global_taint`; unstable snapshot/high-water/counts → `unstable_snapshot_global_taint`; eligible/unsafe overlap → `eligible_unsafe_overlap_global_taint`; conflicting eligible intent → `conflicting_eligible_intent_global_taint`; eligible-reachable cycle → `eligible_reachable_cycle_global_taint`; imported/shared lineage touching eligible → `eligible_imported_shared_lineage_global_taint`; cross-zone → `eligible_cross_zone_global_taint`; subject uncertainty → `eligible_subject_uncertainty_global_taint`; unsafe influence on eligible semantics → `unsafe_influences_eligible_global_taint`; nonunique partition → `nonunique_component_partition_global_taint`; unproved zero-write/conformance → respectively `unproved_zero_write_global_taint` or `unproved_conformance_global_taint`. It emits all applicable sorted/deduplicated codes and causal emitted component/entry IDs. Unsafe-only self/cycle/shared/imported/ambiguous emitted components remain unchanged.
 
 ### Canonical plan digest
 
@@ -150,7 +150,7 @@ Drivers: precision before recall; evidence is not authority; explicit classifica
 
 | Alternative | Decision |
 | --- | --- |
-| B0 complete preview-only | **Selected for 3.2.** |
+| B0 bounded preview-only | **Selected for 3.2.** |
 | B1 safe-subset apply | Deferred pending re-admission. |
 | Best effort, hidden skip, automatic repair, fuzzy cleanup | Rejected. |
 | Automatic Claims/AcceptanceDecision, online learning, schema expansion | Rejected for 3.2. |
