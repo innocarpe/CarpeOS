@@ -103,4 +103,139 @@ describe("transcript signals", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it("uses one mixed-role chronology and keeps the latest durable meaning", () => {
+    const text = [
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: "Decision: use SQLite for local metadata." },
+      }),
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "We prefer deterministic offline checks." },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: "Constraint: releases must have a synthetic proof.",
+        },
+      }),
+    ].join("\n");
+
+    const signals = signalsFromTranscriptText(text);
+
+    expect(signals.scoring).toContain("SQLite for local metadata");
+    expect(signals.scoring).toContain("deterministic offline checks");
+    expect(signals.candidate).toContain("releases must have a synthetic proof");
+  });
+
+  it("blocks corrected, negated, and replaced durable prose without dropping unrelated facts", () => {
+    const text = [
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "Decision: use SQLite for local metadata." },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: "Preference: keep offline checks deterministic." },
+      }),
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "Correction: replace SQLite with PostgreSQL." },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: "Constraint: use an ephemeral cache." },
+      }),
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "Correction: no longer use an ephemeral cache." },
+      }),
+    ].join("\n");
+
+    const signals = signalsFromTranscriptText(text);
+
+    expect(signals.scoring).not.toContain("Decision: use SQLite");
+    expect(signals.scoring).not.toContain("Constraint: use an ephemeral cache");
+    expect(signals.scoring).toContain("keep offline checks deterministic");
+    expect(signals.candidate).toContain("no longer use an ephemeral cache");
+  });
+
+  it("suppresses exact normalized duplicates but preserves near-duplicate prose", () => {
+    const text = [
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "Preference: keep offline checks deterministic." },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: "  preference: keep offline checks deterministic.  ",
+        },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: "Preference: keep deterministic offline checks." },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: "Constraint: synthetic fixtures must remain public-safe.",
+        },
+      }),
+    ].join("\n");
+
+    const signals = signalsFromTranscriptText(text);
+
+    expect(signals.scoring?.match(/keep offline checks deterministic/gi)).toHaveLength(1);
+    expect(signals.scoring).toContain("keep deterministic offline checks");
+    expect(signals.scoring).toContain("synthetic fixtures must remain public-safe");
+  });
+
+  it("admits explicit Korean durable prose but rejects future intent and generic chatter", () => {
+    const future = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: "We will consider a storage choice after the next meeting.",
+      },
+    });
+    const chatter = JSON.stringify({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: "This is a pleasant general discussion with several ordinary words.",
+      },
+    });
+    const korean = JSON.stringify({
+      type: "user",
+      message: { role: "user", content: "결정: 오프라인 검증을 기본값으로 유지합니다." },
+    });
+
+    expect(signalsFromTranscriptText(future)).toEqual({});
+    expect(signalsFromTranscriptText(chatter)).toEqual({});
+    expect(signalsFromTranscriptText(korean).candidate).toContain("오프라인 검증");
+  });
+
+  it("fails closed for malformed JSONL, structured dumps, and secret-like input", () => {
+    const text = [
+      '{"type":"user","message":',
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: 'Decision: inspect {"transcript":"raw dump"}.' },
+      }),
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "Decision: retain api_key=syntheticsecretvalue12345." },
+      }),
+    ].join("\n");
+
+    const signals = signalsFromTranscriptText(text);
+
+    expect(signals.scoring).toBeUndefined();
+    expect(signals.candidate).toBeUndefined();
+    expect(JSON.stringify(signals)).not.toMatch(/raw dump|api_key|syntheticsecret/i);
+  });
 });

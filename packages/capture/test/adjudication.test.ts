@@ -7,6 +7,9 @@ import {
 } from "../src/adjudication.js";
 
 describe("adjudication", () => {
+  it("uses the adj_v3 replay policy version", () => {
+    expect(ADJUDICATION_POLICY_VERSION).toBe("adj_v3");
+  });
   it("rejects PostToolUse as noise", () => {
     const result = adjudicateKnowledgeCandidate({
       provider: "codex",
