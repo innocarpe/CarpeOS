@@ -72,6 +72,21 @@ export async function runCli(
       return 0;
     }
     if (rest.some((token) => isHelpToken(token))) {
+      if (
+        command === "adjudicate" &&
+        rest[0] === "reconcile-policy" &&
+        rest.some((token) => isHelpToken(token)) &&
+        rest.some(
+          (token) =>
+            token.startsWith("--") &&
+            !isHelpToken(token) &&
+            !["--from-policy", "--to-policy", "--trust-zone", "--limit"].includes(
+              token.split("=", 1)[0] as string,
+            ),
+        )
+      ) {
+        return runReconcilePolicy(rest.slice(1), env);
+      }
       process.stdout.write(formatCommandHelp(command));
       return 0;
     }
@@ -652,6 +667,9 @@ function runExtract(argv: readonly string[], env: NodeJS.ProcessEnv): number {
 }
 
 function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  if (argv[0] === "reconcile-policy") {
+    return runReconcilePolicy(argv.slice(1), env);
+  }
   const [requestedMode, ...rest] = argv;
   const mode =
     requestedMode === "list-held" ||
@@ -792,6 +810,72 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
   }
 }
 
+function runReconcilePolicy(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  function assertUniqueReconciliationFlags(argv: readonly string[]): void {
+    const seen = new Set<string>();
+    for (const token of argv) {
+      if (!token.startsWith("--")) continue;
+      const flag = token.split("=", 1)[0] as string;
+      if (seen.has(flag)) throw new CliUsageError(`duplicate reconciliation flag: ${flag}`);
+      seen.add(flag);
+    }
+  }
+
+  assertUniqueReconciliationFlags(argv);
+  const parsed = parseArgs({
+    args: [...argv],
+    allowPositionals: false,
+    strict: true,
+    options: {
+      "from-policy": { type: "string" },
+      "to-policy": { type: "string" },
+      "trust-zone": { type: "string" },
+      limit: { type: "string" },
+    },
+  });
+  const fromPolicy = parsed.values["from-policy"];
+  const toPolicy = parsed.values["to-policy"];
+  const trustZoneId = parsed.values["trust-zone"];
+  const limitValue = parsed.values.limit;
+  const policyPattern = /^[a-z][a-z0-9_-]{2,63}$/;
+  if (
+    fromPolicy === undefined ||
+    toPolicy === undefined ||
+    trustZoneId === undefined ||
+    limitValue === undefined ||
+    fromPolicy.normalize("NFC") !== fromPolicy ||
+    toPolicy.normalize("NFC") !== toPolicy ||
+    trustZoneId.normalize("NFC") !== trustZoneId ||
+    !policyPattern.test(fromPolicy) ||
+    !policyPattern.test(toPolicy) ||
+    !isTrustZoneId(trustZoneId)
+  ) {
+    throw new CliUsageError(
+      "reconcile-policy requires valid --from-policy, --to-policy, --trust-zone, and --limit",
+    );
+  }
+  const limit = parseInteger(limitValue, "--limit", 1);
+  if (limit > 200) throw new CliUsageError("--limit must be less than or equal to 200");
+  const store = LocalCaptureStore.openExistingPreview({
+    runtimeDir: runtimeDirFromEnv(env),
+    workspaceRoot: process.cwd(),
+    trustZoneId,
+  });
+  try {
+    writeJson(
+      process.stdout,
+      store.previewPolicyReconciliation({
+        from_policy: fromPolicy,
+        to_policy: toPolicy,
+        trust_zone_id: trustZoneId,
+        limit,
+      }),
+    );
+    return 0;
+  } finally {
+    store.close();
+  }
+}
 function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
@@ -1293,7 +1377,7 @@ COMMANDS
   project identify     Print resolved project_id / client_id / trust zone
   capture-hook         Ingest a provider hook envelope (codex|claude|grok)
   extract              Extract Observation from an EvidenceArtifact event (via adjudicate)
-  adjudicate           Knowledge adjudication: promote | hold | reject (+ --stats)
+  adjudicate           Knowledge adjudication and preview-only policy reconciliation
   outbox               Local durable outbox (status|lease|ack|retry)
   sync                 Push/pull with a remote sync edge (status|push|pull|once|cycle)
   retrieval            Rebuild local retrieval index or run embed jobs
@@ -1417,12 +1501,17 @@ USAGE
   carpeos adjudicate history --event-id <evt_…> [options]
   carpeos adjudicate promote-held --event-id <evt_…> [options]
   carpeos adjudicate reject-held --event-id <evt_…> [options]
+  carpeos adjudicate reconcile-policy --from-policy <id> --to-policy <id> --trust-zone <id> --limit <n>
 
 OPTIONS
   --event-id <id>           EvidenceArtifact event_id to adjudicate, review, or history
   --signal-text <text>      Optional free-text signal for scoring only
   --policy-version <id>     Disposition policy identity; required for held review
   --stats                   Print promote/hold/reject counts for current policy
+  --from-policy <id>         Reconciliation source policy (reconcile-policy only)
+  --to-policy <id>           Reconciliation target policy (reconcile-policy only)
+  --trust-zone <id>          Required reconciliation trust zone
+  --limit <n>                Reconciliation preview bound (1..200)
   --limit <n>               Held queue rows, 1–200 (default: 50)
   --home <path>
   --project-id <id>
@@ -1437,6 +1526,8 @@ NOTES
   Held review is terminal and append-only per source event + policy version.
   Held receipts are metadata-only and bounded to the requested policy.
   promote-held appends a new active Observation; reject-held records review only.
+  reconcile-policy is a metadata-only preview; apply, acknowledgements, receipts,
+  and Supersession construction are unavailable.
   Neither path creates an AcceptanceDecision.
   Prefer: carpeos adjudicate after capture sessions (hooks stay fail-open).
 `;

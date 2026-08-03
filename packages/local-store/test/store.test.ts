@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { CaptureEnvelope } from "@carpeos/capture";
-import { ADJUDICATION_POLICY_VERSION, hashHex } from "@carpeos/capture";
+import { ADJUDICATION_POLICY_VERSION, hashHex, stableJson } from "@carpeos/capture";
 import type {
   CanonicalEvent,
   ErasureLedgerRecord,
@@ -19,6 +19,13 @@ import {
   LocalCaptureStore,
   StaticKeyProvider,
 } from "../src/index.js";
+import {
+  buildPolicyReconciliationPlanV2,
+  classifyPolicyReconciliationEntry,
+  digestPolicyReconciliationPlanV2,
+  partitionReconciliationComponents,
+  policyReconciliationDigestPreimageV2,
+} from "../src/policy-reconciliation.js";
 import { resolveProjectIdentity, sanitizeRemoteIdentity } from "../src/project-identity.js";
 
 const staticMaterial = new Uint8Array(32).fill(7);
@@ -1462,8 +1469,1063 @@ describe("LocalCaptureStore adjudication", () => {
     expect(store.countRows("knowledge_disposition_reviews")).toBe(0);
   });
 });
+describe("policy reconciliation preview", () => {
+  it("uses the exact all-zero plan-v2 digest", () => {
+    const plan = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 100,
+      total_candidate_count: 0,
+      high_water: {
+        canonical_local_sequence_max: 0,
+        disposition_row_count: 0,
+        review_row_count: 0,
+        outbox_id_max: 0,
+        supersession_event_count: 0,
+      },
+      candidates: [],
+    });
+    expect(plan.plan_digest).toBe(
+      "sha256:131f346f95646f32abb1ee39b30df40970b75c15d2466ff96c353cbb204204e6",
+    );
+    expect(digestPolicyReconciliationPlanV2(plan)).toBe(plan.plan_digest);
+  });
 
-function makeStore(): { store: LocalCaptureStore; runtimeDir: string } {
+  it("does not write for an empty metadata-only preview", () => {
+    const { store } = makeStore("tz_synthetic");
+    const before = {
+      protected: store.countRows("protected_values"),
+      canonical: store.countRows("canonical_events"),
+      outbox: store.countRows("outbox"),
+      dispositions: store.countRows("knowledge_dispositions"),
+      reviews: store.countRows("knowledge_disposition_reviews"),
+    };
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    expect(plan.entries).toEqual([]);
+    expect({
+      protected: store.countRows("protected_values"),
+      canonical: store.countRows("canonical_events"),
+      outbox: store.countRows("outbox"),
+      dispositions: store.countRows("knowledge_dispositions"),
+      reviews: store.countRows("knowledge_disposition_reviews"),
+    }).toEqual(before);
+  });
+  it("covers all permitted pure-builder entry actions and bounded taint", () => {
+    const plan = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 3,
+      total_candidate_count: 4,
+      high_water: {
+        canonical_local_sequence_max: 0,
+        disposition_row_count: 0,
+        review_row_count: 0,
+        outbox_id_max: 0,
+        supersession_event_count: 0,
+      },
+      candidates: [
+        {
+          source_event_id: "evt_source0001",
+          target_event_id: "evt_target0001",
+          replacement_event_id: "evt_replace001",
+          classification: "replace",
+        },
+        {
+          source_event_id: "evt_source0002",
+          target_event_id: "evt_target0002",
+          classification: "invalidate",
+        },
+        {
+          source_event_id: "evt_source0003",
+          target_event_id: "evt_target0003",
+          replacement_event_id: "evt_replace003",
+          classification: "already_applied",
+        },
+        { source_event_id: "evt_source0004", unsafe_reason_code: "missing_unsafe" },
+      ],
+    });
+    expect(plan.entries.map((entry) => entry.reason_code)).toEqual([
+      "replace",
+      "invalidate",
+      "already_applied",
+    ]);
+    expect(plan.counts.eligible_write_count).toBe(2);
+    expect(plan.counts.eligible_noop_count).toBe(1);
+    expect(plan.counts.unsafe_unchanged_count).toBe(0);
+    expect(plan.truncated).toBe(true);
+    expect(plan.global_taint_reason_codes).toEqual(["incomplete_enumeration_global_taint"]);
+    expect(plan.plan_admissible).toBe(false);
+  });
+  it("classifies all unsafe reasons without granting an action", () => {
+    const reasons = [
+      "shared_materialization_unsafe",
+      "missing_unsafe",
+      "ambiguous_unsafe",
+      "imported_unsafe",
+      "self_unsafe",
+      "cycle_unsafe",
+      "zone_unsafe",
+      "lineage_unsafe",
+      "conflicting_intent_unsafe",
+    ] as const;
+    for (const [index, reason] of reasons.entries()) {
+      const source = `evt_unsafe${String(index).padStart(4, "0")}`;
+      expect(
+        classifyPolicyReconciliationEntry({
+          source_event_id: source,
+          ...(reason === "self_unsafe" ? { target_event_id: source } : {}),
+          unsafe_reason_code: reason,
+        }),
+      ).toMatchObject({ bucket: "unsafe_unchanged", action: "none", reason_code: reason });
+    }
+    expect(() =>
+      classifyPolicyReconciliationEntry({
+        source_event_id: "evt_unsafe9999",
+        target_event_id: "evt_unsafe9999",
+        unsafe_reason_code: "missing_unsafe",
+      }),
+    ).toThrow("self relation");
+  });
+
+  it("sorts every global taint and reverse candidate prefix deterministically", () => {
+    const taints = [
+      "unproved_conformance_global_taint",
+      "unproved_zero_write_global_taint",
+      "nonunique_component_partition_global_taint",
+      "unsafe_influences_eligible_global_taint",
+      "eligible_subject_uncertainty_global_taint",
+      "eligible_cross_zone_global_taint",
+      "eligible_imported_shared_lineage_global_taint",
+      "eligible_reachable_cycle_global_taint",
+      "conflicting_eligible_intent_global_taint",
+      "eligible_unsafe_overlap_global_taint",
+      "unstable_snapshot_global_taint",
+      "incomplete_enumeration_global_taint",
+    ] as const;
+    const plan = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 12,
+      total_candidate_count: 12,
+      high_water: zeroHighWater(),
+      global_taint_reason_codes: taints,
+      candidates: taints.map((_, index) => ({
+        source_event_id: `evt_taint${String(11 - index).padStart(4, "0")}`,
+        unsafe_reason_code: "missing_unsafe" as const,
+      })),
+    });
+    expect(plan.global_taint_reason_codes).toEqual([...taints].sort());
+    expect(plan.entries.map((entry) => entry.source_event_id)).toEqual(
+      [...plan.entries.map((entry) => entry.source_event_id)].sort(),
+    );
+    expect(plan.plan_admissible).toBe(false);
+  });
+  it("rejects an already-applied replacement that aliases its source", () => {
+    expect(() =>
+      classifyPolicyReconciliationEntry({
+        source_event_id: "evt_noop00001",
+        target_event_id: "evt_target001",
+        replacement_event_id: "evt_noop00001",
+        classification: "already_applied",
+      }),
+    ).toThrow("self relation");
+  });
+
+  it("uses transitive, permutation-stable component partitions", () => {
+    const entries = [
+      classifyPolicyReconciliationEntry({
+        source_event_id: "evt_graph0001",
+        target_event_id: "evt_graph0002",
+        classification: "invalidate",
+      }),
+      classifyPolicyReconciliationEntry({
+        source_event_id: "evt_graph0003",
+        target_event_id: "evt_graph0004",
+        classification: "invalidate",
+      }),
+    ];
+    const candidates = [
+      {
+        source_event_id: "evt_graph0001",
+        lineage_event_ids: ["evt_graph0005"],
+        supersession_relations: [["evt_graph0005", "evt_graph0003"]] as const,
+      },
+      { source_event_id: "evt_graph0003" },
+    ];
+    const forward = partitionReconciliationComponents(entries, candidates);
+    const reverse = partitionReconciliationComponents(
+      [...entries].reverse(),
+      [...candidates].reverse(),
+    );
+    expect(forward[0]).toBe(forward[1]);
+    expect(reverse[0]).toBe(forward[1]);
+    expect(reverse[1]).toBe(forward[0]);
+  });
+
+  it("has an explicit zero preimage, excludes digest, and rejects invalid equations", () => {
+    const zero = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 100,
+      total_candidate_count: 0,
+      high_water: zeroHighWater(),
+      candidates: [],
+    });
+    const preimage = policyReconciliationDigestPreimageV2(zero);
+    expect(Object.hasOwn(preimage, "plan_digest")).toBe(false);
+    expect(JSON.stringify(preimage)).toBe(
+      '{"schema":"carpeos.policy-reconciliation-plan/v2","trust_zone_id":"tz_synthetic","from_policy":"adj_v1","to_policy":"adj_v3","limit":100,"total_candidate_count":0,"classified_count":0,"truncated":false,"high_water":{"canonical_local_sequence_max":0,"disposition_row_count":0,"review_row_count":0,"outbox_id_max":0,"supersession_event_count":0},"counts":{"eligible_write_count":0,"eligible_noop_count":0,"unsafe_unchanged_count":0,"replace_count":0,"invalidate_count":0,"already_applied_count":0,"reason_code_counts":[]},"plan_admissible":true,"global_taint_reason_codes":[],"global_taint_component_ids":[],"global_taint_entry_ids":[],"entries":[]}',
+    );
+    expect(digestPolicyReconciliationPlanV2({ ...preimage, to_policy: "adj_v2" })).not.toBe(
+      zero.plan_digest,
+    );
+    expect(() => policyReconciliationDigestPreimageV2({ ...zero, classified_count: 1 })).toThrow(
+      "classified",
+    );
+    const uncheckedPreimage = policyReconciliationDigestPreimageV2 as unknown as (
+      value: unknown,
+    ) => unknown;
+    expect(() => uncheckedPreimage({ ...zero, extra: true })).toThrow("keys");
+  });
+  it("opens an initialized preview read-only and fails closed without a database", () => {
+    const { store, runtimeDir } = makeStore("tz_synthetic");
+    const before = store.countRows("canonical_events");
+    const preview = LocalCaptureStore.openExistingPreview({
+      runtimeDir,
+      workspaceRoot: runtimeDir,
+      trustZoneId: "tz_synthetic",
+    });
+    expect(
+      preview.previewPolicyReconciliation({
+        from_policy: "adj_v1",
+        to_policy: "adj_v3",
+        trust_zone_id: "tz_synthetic",
+        limit: 1,
+      }).entries,
+    ).toEqual([]);
+    expect(store.countRows("canonical_events")).toBe(before);
+    preview.close();
+    expect(() =>
+      LocalCaptureStore.openExistingPreview({
+        runtimeDir: join(runtimeDir, "absent"),
+        workspaceRoot: runtimeDir,
+        trustZoneId: "tz_synthetic",
+      }),
+    ).toThrow("initialized preview store");
+  });
+  function reconciliationWriteCounts(store: LocalCaptureStore) {
+    return {
+      protected_values: store.countRows("protected_values"),
+      canonical_events: store.countRows("canonical_events"),
+      outbox: store.countRows("outbox"),
+      knowledge_dispositions: store.countRows("knowledge_dispositions"),
+      knowledge_disposition_reviews: store.countRows("knowledge_disposition_reviews"),
+    };
+  }
+  it("derives a replacement only from two explicit policy materializations", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({
+        payload: { decision: "Use the synthetic deterministic installer." },
+      }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "eligible_write",
+      action: "replace",
+      reason_code: "replace",
+    });
+    expect(JSON.stringify(plan)).not.toContain("synthetic deterministic installer");
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+
+  it("emits invalidation from an explicit later rejected disposition without writes", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({
+        payload: { decision: "Use the synthetic invalidation procedure." },
+      }),
+    );
+    const older = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const later = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+      signalText: "thanks",
+    });
+    expect(older.status).toBe("promoted");
+    expect(later.status).toBe("rejected");
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({
+        bucket: "eligible_write",
+        action: "invalidate",
+        reason_code: "invalidate",
+        target_event_id: expect.stringMatching(/^evt_/),
+        replacement_event_id: null,
+      }),
+    ]);
+    expect(plan.counts).toMatchObject({
+      eligible_write_count: 1,
+      eligible_noop_count: 0,
+      unsafe_unchanged_count: 0,
+      replace_count: 0,
+      invalidate_count: 1,
+      already_applied_count: 0,
+      reason_code_counts: [{ reason_code: "invalidate", count: 1 }],
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(plan.plan_admissible).toBe(true);
+    expect(JSON.stringify(plan)).not.toContain("synthetic invalidation procedure");
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("taints malformed canonical Supersession rows without reading or writing them", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "CORRUPT SUPERSESSION BODY SENTINEL" } }),
+    );
+    const db = new DatabaseSync(store.dbPath);
+    try {
+      db.prepare(
+        `INSERT INTO canonical_events (
+          event_id, event_type, trust_zone_id, idempotency_key,
+          request_fingerprint, protected_value_id, event_json, recorded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_corrupt0001",
+        "Supersession",
+        "tz_synthetic",
+        "idem_corrupt0001",
+        "sha256:corrupt",
+        captured.protected_value_id,
+        "{not canonical json",
+        "2026-01-01T00:00:00Z",
+      );
+    } finally {
+      db.close();
+    }
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    expect(plan.global_taint_reason_codes).toEqual(["unproved_conformance_global_taint"]);
+    expect(plan.plan_admissible).toBe(false);
+    expect(plan.global_taint_component_ids).toEqual([]);
+    expect(plan.global_taint_entry_ids).toEqual([]);
+    expect(JSON.stringify(plan)).not.toContain("CORRUPT SUPERSESSION BODY SENTINEL");
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("uses a conformant local Supersession as an existing noop relation", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    insertSyntheticSupersession(store, oldObservation, {
+      event_id: "evt_nooprelation01",
+      target_event_id: oldObservation.event_id,
+      replacement_event_id: newObservation.event_id,
+      trust_zone_id: "tz_synthetic",
+    });
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "eligible_noop",
+      action: "already_applied",
+      reason_code: "already_applied",
+      target_event_id: oldObservation.event_id,
+      replacement_event_id: newObservation.event_id,
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+
+  it("taints a replace relation whose persisted zone disagrees with its canonical body", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    insertSyntheticSupersession(store, oldObservation, {
+      event_id: "evt_rowzoneplace",
+      target_event_id: oldObservation.event_id,
+      replacement_event_id: newObservation.event_id,
+      trust_zone_id: "tz_synthetic",
+      row_trust_zone_id: "tz_other_zone",
+    });
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({ action: "replace", reason_code: "replace" });
+    expect(plan.global_taint_reason_codes).toEqual(["unproved_conformance_global_taint"]);
+    expect(plan.plan_admissible).toBe(false);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual([captured.event.event_id]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("taints an invalidate relation whose persisted zone disagrees with its canonical body", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    expect(oldResult.status).toBe("promoted");
+    const rejected = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+      signalText: "thanks",
+    });
+    const oldObservation = extractedObservation(oldResult);
+    expect(rejected.status).toBe("rejected");
+    insertSyntheticSupersession(store, oldObservation, {
+      event_id: "evt_rowzoneinval",
+      target_event_id: oldObservation.event_id,
+      replacement_event_id: null,
+      trust_zone_id: "tz_synthetic",
+      row_trust_zone_id: "tz_other_zone",
+    });
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({ action: "invalidate", reason_code: "invalidate" });
+    expect(plan.global_taint_reason_codes).toEqual(["unproved_conformance_global_taint"]);
+    expect(plan.plan_admissible).toBe(false);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual([captured.event.event_id]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("keeps an imported matching Supersession unsafe with causal arrays", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    store.importPulledEvent(
+      syntheticSupersession(oldObservation, {
+        event_id: "evt_importrelation",
+        target_event_id: oldObservation.event_id,
+        replacement_event_id: newObservation.event_id,
+        trust_zone_id: "tz_synthetic",
+      }),
+    );
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "unsafe_unchanged",
+      reason_code: "imported_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(plan.global_taint_component_ids).toEqual([]);
+    expect(plan.global_taint_entry_ids).toEqual([]);
+  });
+  it("marks a cross-zone existing relation unsafe without applying it", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    insertSyntheticSupersession(store, oldObservation, {
+      event_id: "evt_crosszonerel",
+      target_event_id: oldObservation.event_id,
+      replacement_event_id: newObservation.event_id,
+      trust_zone_id: "tz_other_zone",
+    });
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "unsafe_unchanged",
+      reason_code: "zone_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+  });
+  it("marks a conflicting existing target intent unsafe", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    insertSyntheticSupersession(store, oldObservation, {
+      event_id: "evt_conflictrel01",
+      target_event_id: oldObservation.event_id,
+      replacement_event_id: "evt_conflictrepl",
+      trust_zone_id: "tz_synthetic",
+    });
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "unsafe_unchanged",
+      reason_code: "conflicting_intent_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(newObservation.event_id).toMatch(/^evt_/);
+  });
+  it("connects an unsafe missing to-policy candidate through validated graph facts", () => {
+    const { store } = makeStore("tz_synthetic");
+    const eligible = store.captureHook(
+      makeEnvelope({
+        session_id: "session_eligible",
+        source_event_id: "source_eligible",
+        payload: { decision: "Use the synthetic deterministic installer." },
+      }),
+    );
+    const unsafe = store.captureHook(
+      makeEnvelope({
+        session_id: "session_unsafe",
+        source_event_id: "source_unsafe",
+        payload: { decision: "Use the synthetic deterministic installer." },
+      }),
+    );
+    const eligibleOld = store.adjudicateFromEventId(eligible.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const eligibleNew = store.adjudicateFromEventId(eligible.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    const unsafeOld = store.adjudicateFromEventId(unsafe.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    expect(eligibleOld.status).toBe("promoted");
+    expect(eligibleNew.status).toBe("promoted");
+    expect(unsafeOld.status).toBe("promoted");
+    const eligibleReplacement = extractedObservation(eligibleNew);
+    const unsafeTarget = extractedObservation(unsafeOld);
+    insertSyntheticSupersession(store, eligibleReplacement, {
+      event_id: "evt_connectfacts",
+      target_event_id: eligibleReplacement.event_id,
+      replacement_event_id: unsafeTarget.event_id,
+      trust_zone_id: "tz_synthetic",
+    });
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    const eligibleEntry = plan.entries.find(
+      (entry) => entry.source_event_id === eligible.event.event_id,
+    );
+    const unsafeEntry = plan.entries.find(
+      (entry) => entry.source_event_id === unsafe.event.event_id,
+    );
+    expect(eligibleEntry).toMatchObject({ action: "replace", reason_code: "replace" });
+    expect(unsafeEntry).toMatchObject({ reason_code: "missing_unsafe" });
+    expect(unsafeEntry?.component_id).toBe(eligibleEntry?.component_id);
+    expect(plan.global_taint_reason_codes).toEqual([
+      "eligible_unsafe_overlap_global_taint",
+      "unsafe_influences_eligible_global_taint",
+    ]);
+    expect(plan.global_taint_component_ids).toEqual([eligibleEntry?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual(
+      [eligible.event.event_id, unsafe.event.event_id].sort(),
+    );
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("emits exact causal arrays for lineage-connected eligible and unsafe entries", () => {
+    const plan = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 2,
+      total_candidate_count: 2,
+      high_water: zeroHighWater(),
+      candidates: [
+        {
+          source_event_id: "evt_overlap0001",
+          target_event_id: "evt_sharedtarget",
+          replacement_event_id: "evt_replacement",
+          classification: "replace",
+        },
+        {
+          source_event_id: "evt_overlap0002",
+          target_event_id: "evt_sharedtarget",
+          unsafe_reason_code: "lineage_unsafe",
+          taint_reason_codes: [
+            "unproved_conformance_global_taint",
+            "unsafe_influences_eligible_global_taint",
+          ],
+        },
+      ],
+    });
+    expect(plan.entries[0]?.component_id).toBe(plan.entries[1]?.component_id);
+    expect(plan.global_taint_reason_codes).toEqual([
+      "eligible_unsafe_overlap_global_taint",
+      "unproved_conformance_global_taint",
+      "unsafe_influences_eligible_global_taint",
+    ]);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual(["evt_overlap0001", "evt_overlap0002"]);
+  });
+  it("derives imported and zone taints only for unsafe facts connected to eligibility", () => {
+    const plan = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 3,
+      total_candidate_count: 3,
+      high_water: zeroHighWater(),
+      candidates: [
+        {
+          source_event_id: "evt_taintlink01",
+          target_event_id: "evt_tainttarget",
+          replacement_event_id: "evt_taintreplace",
+          classification: "replace",
+        },
+        {
+          source_event_id: "evt_taintlink02",
+          target_event_id: "evt_tainttarget",
+          unsafe_reason_code: "imported_unsafe",
+        },
+        {
+          source_event_id: "evt_taintlink03",
+          target_event_id: "evt_tainttarget",
+          unsafe_reason_code: "zone_unsafe",
+        },
+      ],
+    });
+    expect(plan.global_taint_reason_codes).toEqual([
+      "eligible_cross_zone_global_taint",
+      "eligible_imported_shared_lineage_global_taint",
+      "eligible_unsafe_overlap_global_taint",
+    ]);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual([
+      "evt_taintlink01",
+      "evt_taintlink02",
+      "evt_taintlink03",
+    ]);
+  });
+  it("detects a transitive existing Supersession cycle without globally tainting an unsafe-only entry", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
+    const target = extractedObservation(oldResult);
+    const replacement = extractedObservation(newResult);
+    insertSyntheticSupersession(store, target, {
+      event_id: "evt_cycleedge001",
+      target_event_id: target.event_id,
+      replacement_event_id: "evt_cyclemiddle",
+      trust_zone_id: "tz_synthetic",
+    });
+    insertSyntheticSupersession(store, target, {
+      event_id: "evt_cycleedge002",
+      target_event_id: "evt_cyclemiddle",
+      replacement_event_id: replacement.event_id,
+      trust_zone_id: "tz_synthetic",
+    });
+    insertSyntheticSupersession(store, target, {
+      event_id: "evt_cycleedge003",
+      target_event_id: replacement.event_id,
+      replacement_event_id: target.event_id,
+      trust_zone_id: "tz_synthetic",
+    });
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "unsafe_unchanged",
+      reason_code: "cycle_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+
+  it("adds a cycle taint only when a cycle-unsafe fact shares an eligible component", () => {
+    const plan = buildPolicyReconciliationPlanV2({
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 2,
+      total_candidate_count: 2,
+      high_water: zeroHighWater(),
+      candidates: [
+        {
+          source_event_id: "evt_cycleproof1",
+          target_event_id: "evt_cycleproof2",
+          replacement_event_id: "evt_cycleproof3",
+          classification: "replace",
+        },
+        {
+          source_event_id: "evt_cycleproof4",
+          target_event_id: "evt_cycleproof2",
+          unsafe_reason_code: "cycle_unsafe",
+        },
+      ],
+    });
+    expect(plan.global_taint_reason_codes).toEqual([
+      "eligible_reachable_cycle_global_taint",
+      "eligible_unsafe_overlap_global_taint",
+    ]);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual(["evt_cycleproof1", "evt_cycleproof4"]);
+  });
+  it("fails closed for a row-id-mismatched candidate Observation", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use synthetic malformed observation." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const rejected = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+      signalText: "thanks",
+    });
+    const oldObservation = extractedObservation(oldResult);
+    expect(rejected.status).toBe("rejected");
+    insertRowIdMismatchedObservation(store, oldObservation, captured.event.event_id, "adj_new");
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "unsafe_unchanged",
+      reason_code: "lineage_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual(["unproved_conformance_global_taint"]);
+    expect(plan.plan_admissible).toBe(false);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual([captured.event.event_id]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("fails closed for malformed candidate source JSON without throwing or writing", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(makeEnvelope());
+    const db = new DatabaseSync(store.dbPath);
+    try {
+      db.prepare(
+        `INSERT INTO canonical_events (
+          event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+          protected_value_id, event_json, recorded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_badsource001",
+        "EvidenceArtifact",
+        "tz_synthetic",
+        "idem_badsource001",
+        `sha256:${"c".repeat(64)}`,
+        captured.protected_value_id,
+        "{malformed source",
+        "2026-01-01T00:00:00Z",
+      );
+      db.prepare(
+        `INSERT INTO knowledge_dispositions (
+          source_event_id, artifact_id, trust_zone_id, disposition, reason_codes_json,
+          scores_json, policy_version, statement, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "evt_badsource001",
+        "art_badsource001",
+        "tz_synthetic",
+        "promote",
+        "[]",
+        "{}",
+        "adj_old",
+        "synthetic",
+        "2026-01-01T00:00:00Z",
+      );
+    } finally {
+      db.close();
+    }
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      bucket: "unsafe_unchanged",
+      reason_code: "lineage_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual(["unproved_conformance_global_taint"]);
+    expect(plan.plan_admissible).toBe(false);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual(["evt_badsource001"]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("uses the exact lexical prefix and incomplete taint for a bounded preview", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = ["z", "a"].map((suffix) =>
+      store.captureHook(
+        makeEnvelope({
+          session_id: `session_prefix_${suffix}`,
+          source_event_id: `source_prefix_${suffix}`,
+          payload: { decision: `Use synthetic prefix ${suffix}.` },
+        }),
+      ),
+    );
+    for (const item of captured) {
+      store.adjudicateFromEventId(item.event.event_id, { policyVersion: "adj_old" });
+    }
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    expect(plan.total_candidate_count).toBe(2);
+    expect(plan.classified_count).toBe(1);
+    expect(plan.truncated).toBe(true);
+    expect(plan.global_taint_reason_codes).toContain("incomplete_enumeration_global_taint");
+    expect(plan.plan_admissible).toBe(false);
+    expect(plan.entries[0]?.source_event_id).toBe(
+      [...captured.map((item) => item.event.event_id)].sort()[0],
+    );
+  });
+});
+
+function zeroHighWater() {
+  return {
+    canonical_local_sequence_max: 0,
+    disposition_row_count: 0,
+    review_row_count: 0,
+    outbox_id_max: 0,
+    supersession_event_count: 0,
+  };
+}
+function extractedObservation(
+  result: ReturnType<LocalCaptureStore["adjudicateFromEventId"]>,
+): CanonicalEvent<"Observation"> {
+  if (
+    (result.status !== "promoted" && result.status !== "held" && result.status !== "replay") ||
+    result.extraction === undefined ||
+    (result.extraction.status !== "extracted" && result.extraction.status !== "replay")
+  ) {
+    throw new Error("expected extracted Observation");
+  }
+  return result.extraction.event;
+}
+
+function syntheticSupersession(
+  base: CanonicalEvent<"Observation">,
+  input: {
+    event_id: string;
+    target_event_id: string;
+    replacement_event_id: string | null;
+    trust_zone_id: string;
+  },
+): CanonicalEvent<"Supersession"> {
+  const idempotencySuffix = hashHex(input.event_id).slice(0, 32);
+  return {
+    schema_version: "v1",
+    event_id: input.event_id,
+    event_type: "Supersession",
+    subject_ref: base.subject_ref,
+    valid_time: base.valid_time,
+    recorded_time: base.recorded_time,
+    lifecycle_status: "active",
+    epistemic_authority: "verified",
+    trust_zone: { ...base.trust_zone, trust_zone_id: input.trust_zone_id },
+    provenance: [...base.provenance],
+    idempotency_key: `idem_${idempotencySuffix}`,
+    request_fingerprint: `sha-256:${"a".repeat(64)}`,
+    payload: {
+      supersession_id: `sup_${hashHex(input.event_id).slice(0, 24)}`,
+      supersedes_event_id: input.target_event_id,
+      ...(input.replacement_event_id === null
+        ? {}
+        : { replacement_event_id: input.replacement_event_id }),
+      reason: "Synthetic reconciliation fixture.",
+    },
+  };
+}
+
+function insertSyntheticSupersession(
+  store: LocalCaptureStore,
+  base: CanonicalEvent<"Observation">,
+  input: {
+    event_id: string;
+    target_event_id: string;
+    replacement_event_id: string | null;
+    trust_zone_id: string;
+    row_trust_zone_id?: string;
+  },
+): void {
+  const event = syntheticSupersession(base, input);
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    const protectedValue = db
+      .prepare("SELECT protected_value_id FROM canonical_events WHERE event_id = ?")
+      .get(base.event_id) as { protected_value_id: string };
+    db.prepare(
+      `INSERT INTO canonical_events (
+        event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+        protected_value_id, event_json, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      event.event_id,
+      event.event_type,
+      input.row_trust_zone_id ?? input.trust_zone_id,
+      event.idempotency_key,
+      event.request_fingerprint,
+      protectedValue.protected_value_id,
+      JSON.stringify(event),
+      event.recorded_time.start,
+    );
+  } finally {
+    db.close();
+  }
+}
+function insertRowIdMismatchedObservation(
+  store: LocalCaptureStore,
+  base: CanonicalEvent<"Observation">,
+  sourceEventId: string,
+  policyVersion: string,
+): void {
+  const idempotencyKey = `idem_${hashHex(
+    stableJson({
+      kind: "adjudicated_observation",
+      source_event_id: sourceEventId,
+      policy_version: policyVersion,
+    }),
+  ).slice(0, 32)}`;
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    const protectedValue = db
+      .prepare("SELECT protected_value_id FROM canonical_events WHERE event_id = ?")
+      .get(base.event_id) as { protected_value_id: string };
+    db.prepare(
+      `INSERT INTO canonical_events (
+        event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+        protected_value_id, event_json, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "evt_mismatchobs01",
+      "Observation",
+      base.trust_zone.trust_zone_id,
+      idempotencyKey,
+      `sha256:${"b".repeat(64)}`,
+      protectedValue.protected_value_id,
+      JSON.stringify(base),
+      base.recorded_time.start,
+    );
+  } finally {
+    db.close();
+  }
+}
+function makeStore(trustZoneId?: string): { store: LocalCaptureStore; runtimeDir: string } {
   const runtimeDir = tempDir();
   return {
     runtimeDir,
@@ -1472,6 +2534,7 @@ function makeStore(): { store: LocalCaptureStore; runtimeDir: string } {
       workspaceRoot: runtimeDir,
       keyProvider: new StaticKeyProvider(staticMaterial),
       clock: { now: () => now },
+      ...(trustZoneId === undefined ? {} : { trustZoneId }),
     }),
   };
 }

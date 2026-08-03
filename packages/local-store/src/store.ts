@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
@@ -34,6 +34,13 @@ import type {
   WrappedDeviceKeyEnvelope,
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
+import {
+  buildPolicyReconciliationPlanV2,
+  classifyPolicyReconciliationEntry,
+  type PolicyReconciliationPlanV2,
+  partitionReconciliationComponents,
+  type ReconciliationCandidate,
+} from "./policy-reconciliation.js";
 import type { WorktreeIdentity } from "./project-identity.js";
 import { resolveProjectIdentity, resolveWorktreeIdentity } from "./project-identity.js";
 
@@ -52,6 +59,7 @@ export type LocalStoreOptions = {
   execGit?: (args: string[], cwd: string) => string;
   dbPath?: string;
   trustZoneId?: string;
+  readOnlyPreview?: boolean;
   explicitProjectId?: string;
   keyProvider?: KeyProvider;
   clock?: Clock;
@@ -221,6 +229,13 @@ type StoredHeldReview = {
   created_at: string;
 };
 
+function safeSqliteInteger(value: unknown, label: string): number {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+  if (typeof value === "bigint" && value >= 0n && value <= BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number(value);
+  }
+  throw new Error(`invalid SQLite ${label}`);
+}
 /** Pull a bounded rule-scoring signal from supported payload fields. */
 
 function envelopePayloadTranscriptPath(payload: unknown): unknown {
@@ -639,6 +654,38 @@ export class LocalCaptureStore {
       throw new Error(`invalid trust zone id: ${options.trustZoneId}`);
     }
 
+    if (options.readOnlyPreview === true) {
+      this.runtimeDir = options.runtimeDir;
+      this.dbPath = options.dbPath ?? join(this.runtimeDir, "carpeos.sqlite");
+      if (options.trustZoneId === undefined || !existsSync(this.dbPath)) {
+        throw new Error("initialized preview store is required");
+      }
+      this.db = new DatabaseSync(this.dbPath, { timeout: 5_000, readOnly: true });
+      this.db.exec("PRAGMA query_only = ON");
+      this.clock = options.clock ?? { now: () => new Date() };
+      this.trustZone = {
+        trust_zone_id: options.trustZoneId,
+        isolation: "local_device",
+        boundary_purpose: "single-user encrypted local capture store",
+      };
+      this.clientId = "";
+      this.projectId = "";
+      this.worktree = {
+        worktree_id: "",
+        worktree_name: "",
+        is_linked_worktree: false,
+        basis_kind: "workspace_root",
+      };
+      this.keyBytes = new Uint8Array(32);
+      try {
+        this.db.prepare("SELECT 1 FROM schema_migrations LIMIT 1").get();
+        this.db.prepare("SELECT 1 FROM knowledge_dispositions LIMIT 1").get();
+      } catch {
+        this.db.close();
+        throw new Error("initialized preview store is required");
+      }
+      return;
+    }
     this.runtimeDir = options.runtimeDir;
     mkdirSync(this.runtimeDir, { recursive: true, mode: 0o700 });
     chmodSync(this.runtimeDir, 0o700);
@@ -680,6 +727,14 @@ export class LocalCaptureStore {
     this.upsertProject(identity.basis_kind);
   }
 
+  static openExistingPreview(options: {
+    runtimeDir: string;
+    workspaceRoot: string;
+    trustZoneId: string;
+    dbPath?: string;
+  }): LocalCaptureStore {
+    return new LocalCaptureStore({ ...options, readOnlyPreview: true });
+  }
   close(): void {
     this.db.close();
   }
@@ -1551,6 +1606,523 @@ export class LocalCaptureStore {
     });
   }
 
+  previewPolicyReconciliation(input: {
+    from_policy: string;
+    to_policy: string;
+    trust_zone_id: string;
+    limit: number;
+  }): PolicyReconciliationPlanV2 {
+    if (input.trust_zone_id !== this.trustZone.trust_zone_id) {
+      throw new Error("trust zone does not match the opened store");
+    }
+    this.db.exec("BEGIN");
+    try {
+      const total = this.db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM knowledge_dispositions
+           WHERE trust_zone_id = ? AND policy_version = ?`,
+        )
+        .get(input.trust_zone_id, input.from_policy) as { n: number };
+      const candidates = this.db
+        .prepare(
+          `SELECT source_event_id, artifact_id, policy_version FROM knowledge_dispositions
+           WHERE trust_zone_id = ? AND policy_version = ?
+           ORDER BY source_event_id COLLATE BINARY ASC, policy_version COLLATE BINARY ASC LIMIT ?`,
+        )
+        .all(input.trust_zone_id, input.from_policy, input.limit) as Array<{
+        source_event_id: string;
+        artifact_id: string;
+        policy_version: string;
+      }>;
+      const canonicalSupersessions = this.db
+        .prepare(
+          `SELECT event_id, trust_zone_id, event_json FROM canonical_events
+           WHERE event_type = 'Supersession'
+           ORDER BY event_id COLLATE BINARY ASC`,
+        )
+        .all() as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
+      const inboxSupersessions = this.db
+        .prepare(
+          "SELECT event_id, trust_zone_id, event_json FROM sync_inbox_events ORDER BY event_id COLLATE BINARY ASC",
+        )
+        .all() as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
+      const localSupersessions = new Map<string, CanonicalEvent<"Supersession">>();
+      const importedSupersessions = new Map<string, CanonicalEvent<"Supersession">>();
+      let unprovedSupersessionConformance = false;
+      const loadSupersessions = (
+        rows: Array<{ event_id: string; trust_zone_id: string; event_json: string }>,
+        destination: Map<string, CanonicalEvent<"Supersession">>,
+        requireSupersession: boolean,
+      ) => {
+        for (const row of rows) {
+          if (destination.has(row.event_id)) continue;
+          try {
+            const event = JSON.parse(row.event_json) as CanonicalEvent;
+            const conformance = validateConformance("canonicalEvent", event);
+            if (
+              !conformance.valid ||
+              event.event_id !== row.event_id ||
+              event.trust_zone.trust_zone_id !== row.trust_zone_id ||
+              (requireSupersession && event.event_type !== "Supersession")
+            ) {
+              unprovedSupersessionConformance = true;
+              continue;
+            }
+            if (event.event_type === "Supersession") {
+              destination.set(event.event_id, event);
+            }
+          } catch {
+            unprovedSupersessionConformance = true;
+          }
+        }
+      };
+      loadSupersessions(canonicalSupersessions, localSupersessions, true);
+      loadSupersessions(inboxSupersessions, importedSupersessions, false);
+      for (const eventId of localSupersessions.keys()) {
+        importedSupersessions.delete(eventId);
+      }
+      const knownSupersessionRelations = [
+        ...new Map(
+          [...localSupersessions.values(), ...importedSupersessions.values()]
+            .flatMap((event) =>
+              event.payload.replacement_event_id === undefined
+                ? []
+                : [
+                    [
+                      `${event.payload.supersedes_event_id}\u0000${event.payload.replacement_event_id}`,
+                      [
+                        event.payload.supersedes_event_id,
+                        event.payload.replacement_event_id,
+                      ] as const,
+                    ] as const,
+                  ],
+            )
+            .sort(([left], [right]) => left.localeCompare(right)),
+        ).values(),
+      ];
+      let reconciliationCandidates: ReconciliationCandidate[] = candidates.map((candidate) => {
+        const importedSource = this.db
+          .prepare("SELECT 1 AS found FROM sync_inbox_events WHERE event_id = ?")
+          .get(candidate.source_event_id) as { found: number } | undefined;
+        const sourceRow = this.db
+          .prepare(
+            "SELECT event_id, event_json FROM canonical_events WHERE event_id = ? AND trust_zone_id = ?",
+          )
+          .get(candidate.source_event_id, input.trust_zone_id) as
+          | { event_id: string; event_json: string }
+          | undefined;
+        if (sourceRow === undefined) {
+          return {
+            ...candidate,
+            unsafe_reason_code: importedSource === undefined ? "missing_unsafe" : "imported_unsafe",
+          };
+        }
+        let source: CanonicalEvent;
+        try {
+          source = JSON.parse(sourceRow.event_json) as CanonicalEvent;
+        } catch {
+          return {
+            ...candidate,
+            unsafe_reason_code: "lineage_unsafe",
+            taint_reason_codes: ["unproved_conformance_global_taint"],
+          };
+        }
+        if (
+          !validateConformance("canonicalEvent", source).valid ||
+          sourceRow.event_id !== candidate.source_event_id ||
+          source.event_id !== candidate.source_event_id ||
+          source.event_type !== "EvidenceArtifact" ||
+          source.trust_zone.trust_zone_id !== input.trust_zone_id ||
+          source.payload.artifact_id !== candidate.artifact_id
+        ) {
+          return {
+            ...candidate,
+            unsafe_reason_code: "lineage_unsafe",
+            taint_reason_codes: ["unproved_conformance_global_taint"],
+          };
+        }
+        const observations = this.db
+          .prepare(
+            `SELECT event_id, event_json FROM canonical_events
+             WHERE trust_zone_id = ? AND event_type = 'Observation'
+               AND idempotency_key IN (?, ?)`,
+          )
+          .all(
+            input.trust_zone_id,
+            observationIdempotencyForPolicy(candidate.source_event_id, input.from_policy),
+            observationIdempotencyForPolicy(candidate.source_event_id, input.to_policy),
+          ) as Array<{ event_id: string; event_json: string }>;
+        let observationConformanceUnproved = false;
+        const matchingObservation = (policyVersion: string): CanonicalEvent<"Observation">[] =>
+          observations.flatMap((row) => {
+            try {
+              const event = JSON.parse(row.event_json) as CanonicalEvent;
+              if (
+                !validateConformance("canonicalEvent", event).valid ||
+                event.event_id !== row.event_id ||
+                event.event_type !== "Observation" ||
+                event.trust_zone.trust_zone_id !== input.trust_zone_id
+              ) {
+                observationConformanceUnproved = true;
+                return [];
+              }
+              const matches =
+                event.lifecycle_status === "active" &&
+                event.idempotency_key ===
+                  observationIdempotencyForPolicy(candidate.source_event_id, policyVersion) &&
+                event.subject_ref === source.subject_ref &&
+                event.payload.evidence_artifact_refs.includes(candidate.artifact_id) &&
+                event.provenance.some(
+                  (ref) =>
+                    ref.ref_type === "event" &&
+                    ref.ref_id === candidate.source_event_id &&
+                    ref.relationship === "derived_from",
+                );
+              return matches ? [event] : [];
+            } catch {
+              observationConformanceUnproved = true;
+              return [];
+            }
+          });
+        const oldTargets = matchingObservation(input.from_policy);
+        const replacements = matchingObservation(input.to_policy);
+        const candidateGraphFacts = {
+          lineage_event_ids: [
+            ...new Set(
+              [...oldTargets, ...replacements].flatMap((event) => [
+                event.event_id,
+                ...event.provenance
+                  .filter((ref) => ref.ref_type === "event")
+                  .map((ref) => ref.ref_id),
+              ]),
+            ),
+          ].sort(),
+          supersession_relations: knownSupersessionRelations,
+        };
+        const toDisposition = this.db
+          .prepare(
+            `SELECT disposition FROM knowledge_dispositions
+             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version = ?`,
+          )
+          .all(candidate.source_event_id, input.trust_zone_id, input.to_policy) as Array<{
+          disposition: KnowledgeDisposition;
+        }>;
+        if (observationConformanceUnproved) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: "lineage_unsafe",
+            taint_reason_codes: ["unproved_conformance_global_taint"],
+          };
+        }
+        if (toDisposition.length !== 1) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: toDisposition.length === 0 ? "missing_unsafe" : "ambiguous_unsafe",
+          };
+        }
+        if (oldTargets.length !== 1) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: oldTargets.length === 0 ? "missing_unsafe" : "ambiguous_unsafe",
+          };
+        }
+        const oldTarget = oldTargets[0];
+        if (oldTarget === undefined) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: "missing_unsafe",
+          };
+        }
+        if (toDisposition[0]?.disposition === "reject") {
+          const targetEventId = oldTarget.event_id;
+          if (targetEventId === undefined) {
+            return {
+              ...candidate,
+              ...candidateGraphFacts,
+              unsafe_reason_code: "missing_unsafe",
+            };
+          }
+          const allRelations = [
+            ...localSupersessions.values(),
+            ...importedSupersessions.values(),
+          ].filter((event) => event.payload.supersedes_event_id === targetEventId);
+          const localMatches = allRelations.filter(
+            (event) =>
+              localSupersessions.has(event.event_id) &&
+              event.payload.replacement_event_id === undefined,
+          );
+          const importedMatches = allRelations.filter(
+            (event) =>
+              importedSupersessions.has(event.event_id) &&
+              event.payload.replacement_event_id === undefined,
+          );
+          if (
+            allRelations.some((event) => event.trust_zone.trust_zone_id !== input.trust_zone_id)
+          ) {
+            return {
+              ...candidate,
+              ...candidateGraphFacts,
+              target_event_id: targetEventId,
+              unsafe_reason_code: "zone_unsafe",
+            };
+          }
+          if (allRelations.some((event) => event.payload.replacement_event_id !== undefined)) {
+            return {
+              ...candidate,
+              ...candidateGraphFacts,
+              target_event_id: targetEventId,
+              unsafe_reason_code: "conflicting_intent_unsafe",
+            };
+          }
+          if (importedMatches.length > 0)
+            return {
+              ...candidate,
+              ...candidateGraphFacts,
+              target_event_id: targetEventId,
+              unsafe_reason_code: "imported_unsafe",
+            };
+          if (localMatches.length === 1)
+            return {
+              ...candidate,
+              ...candidateGraphFacts,
+              target_event_id: targetEventId,
+              classification: "already_applied",
+            };
+          if (localMatches.length > 1)
+            return {
+              ...candidate,
+              ...candidateGraphFacts,
+              target_event_id: targetEventId,
+              unsafe_reason_code: "ambiguous_unsafe",
+            };
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            classification: "invalidate",
+          };
+        }
+        if (toDisposition[0]?.disposition !== "promote") {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: "ambiguous_unsafe",
+          };
+        }
+        if (replacements.length !== 1) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: oldTarget.event_id,
+            unsafe_reason_code: replacements.length === 0 ? "missing_unsafe" : "ambiguous_unsafe",
+          };
+        }
+        const replacement = replacements[0];
+        if (replacement === undefined) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: "missing_unsafe",
+          };
+        }
+        const targetEventId = oldTarget.event_id;
+        const replacementEventId = replacement.event_id;
+        if (targetEventId === undefined || replacementEventId === undefined) {
+          return { ...candidate, ...candidateGraphFacts, unsafe_reason_code: "missing_unsafe" };
+        }
+        const allSupersessions = [
+          ...localSupersessions.values(),
+          ...importedSupersessions.values(),
+        ];
+        const relationEdges = allSupersessions.flatMap((event) =>
+          event.payload.replacement_event_id === undefined
+            ? []
+            : [[event.payload.supersedes_event_id, event.payload.replacement_event_id] as const],
+        );
+        const reaches = (start: string, goal: string): boolean => {
+          const visited = new Set<string>();
+          const pending = [start];
+          while (pending.length > 0) {
+            const current = pending.pop() as string;
+            if (current === goal) return true;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            for (const [from, to] of relationEdges) if (from === current) pending.push(to);
+          }
+          return false;
+        };
+        const matching = allSupersessions.filter(
+          (event) =>
+            event.payload.supersedes_event_id === targetEventId &&
+            (event.payload.replacement_event_id ?? null) === replacementEventId,
+        );
+        const targetRelations = allSupersessions.filter(
+          (event) => event.payload.supersedes_event_id === targetEventId,
+        );
+        if (
+          targetRelations.some((event) => event.trust_zone.trust_zone_id !== input.trust_zone_id)
+        ) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            replacement_event_id: replacementEventId,
+            unsafe_reason_code: "zone_unsafe",
+          };
+        }
+        if (matching.some((event) => importedSupersessions.has(event.event_id))) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            replacement_event_id: replacementEventId,
+            unsafe_reason_code: "imported_unsafe",
+          };
+        }
+        if (targetEventId === replacementEventId || reaches(replacementEventId, targetEventId)) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            replacement_event_id: replacementEventId,
+            unsafe_reason_code: "cycle_unsafe",
+          };
+        }
+        if (targetRelations.some((event) => !matching.includes(event))) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            replacement_event_id: replacementEventId,
+            unsafe_reason_code: "conflicting_intent_unsafe",
+          };
+        }
+        if (matching.length > 1) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            replacement_event_id: replacementEventId,
+            unsafe_reason_code: "ambiguous_unsafe",
+          };
+        }
+        if (matching.length === 1) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            target_event_id: targetEventId,
+            replacement_event_id: replacementEventId,
+            classification: "already_applied",
+          };
+        }
+        return {
+          ...candidate,
+          ...candidateGraphFacts,
+          target_event_id: targetEventId,
+          replacement_event_id: replacementEventId,
+          classification: "replace",
+        };
+      });
+      reconciliationCandidates = reconciliationCandidates.map((candidate) => ({
+        ...candidate,
+        supersession_relations: candidate.supersession_relations ?? knownSupersessionRelations,
+      }));
+      if (unprovedSupersessionConformance) {
+        reconciliationCandidates = reconciliationCandidates.map((candidate) => ({
+          ...candidate,
+          taint_reason_codes: [
+            ...new Set([
+              ...(candidate.taint_reason_codes ?? []),
+              "unproved_conformance_global_taint" as const,
+            ]),
+          ],
+        }));
+      }
+      const provisionalEntries = reconciliationCandidates.map(classifyPolicyReconciliationEntry);
+      const provisionalComponents = partitionReconciliationComponents(
+        provisionalEntries,
+        reconciliationCandidates,
+      );
+      const eligibleComponents = new Set(
+        provisionalEntries.flatMap((entry, index) =>
+          entry.bucket === "unsafe_unchanged" ? [] : [provisionalComponents[index] as string],
+        ),
+      );
+      reconciliationCandidates = reconciliationCandidates.map((candidate, index) =>
+        provisionalEntries[index]?.bucket === "unsafe_unchanged" &&
+        eligibleComponents.has(provisionalComponents[index] as string)
+          ? {
+              ...candidate,
+              taint_reason_codes: [
+                ...new Set([
+                  ...(candidate.taint_reason_codes ?? []),
+                  "unsafe_influences_eligible_global_taint" as const,
+                ]),
+              ],
+            }
+          : candidate,
+      );
+      const highWater = {
+        canonical_local_sequence_max: safeSqliteInteger(
+          (
+            this.db
+              .prepare("SELECT COALESCE(MAX(local_sequence), 0) AS n FROM canonical_events")
+              .get() as { n: unknown }
+          ).n,
+          "canonical_local_sequence_max",
+        ),
+        disposition_row_count: safeSqliteInteger(
+          (
+            this.db.prepare("SELECT COUNT(*) AS n FROM knowledge_dispositions").get() as {
+              n: unknown;
+            }
+          ).n,
+          "disposition_row_count",
+        ),
+        review_row_count: safeSqliteInteger(
+          (
+            this.db.prepare("SELECT COUNT(*) AS n FROM knowledge_disposition_reviews").get() as {
+              n: unknown;
+            }
+          ).n,
+          "review_row_count",
+        ),
+        outbox_id_max: safeSqliteInteger(
+          (
+            this.db.prepare("SELECT COALESCE(MAX(outbox_id), 0) AS n FROM outbox").get() as {
+              n: unknown;
+            }
+          ).n,
+          "outbox_id_max",
+        ),
+        supersession_event_count: safeSqliteInteger(
+          new Set([...localSupersessions.keys(), ...importedSupersessions.keys()]).size,
+          "supersession_event_count",
+        ),
+      };
+      const globalTaints = new Set<"unproved_conformance_global_taint">(
+        unprovedSupersessionConformance ? ["unproved_conformance_global_taint"] : [],
+      );
+      const plan = buildPolicyReconciliationPlanV2({
+        ...input,
+        total_candidate_count: safeSqliteInteger(total.n, "total_candidate_count"),
+        high_water: highWater,
+        // Only explicit local canonical provenance and policy-specific
+        // materializations are eligible; every absent or ambiguous fact is unsafe.
+        candidates: reconciliationCandidates,
+        global_taint_reason_codes: [...globalTaints],
+      });
+      this.db.exec("COMMIT");
+      return plan;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   listDispositionHistory(sourceEventId: string): StoredDispositionPublic[] {
     const normalized = sourceEventId.trim();
     if (normalized.length === 0) {
