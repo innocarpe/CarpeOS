@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
+    "eval:retrieval": "node dist/retrieval-evaluation.js test/fixtures/retrieval-quality-v1.json",
     "test": "vitest run"
   },
   "dependencies": {
