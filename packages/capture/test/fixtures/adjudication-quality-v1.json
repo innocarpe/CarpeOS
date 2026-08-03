@@ -1,0 +1,253 @@
+{
+  "schema": "carpeos.adjudication-quality/v1",
+  "corpus_version": "adjudication-quality/v1",
+  "policy_version": "adj_v3",
+  "fixtures": [
+    {
+      "id": "adjq-promote-decision-session-end",
+      "classification": "promote",
+      "expected_disposition": "promote",
+      "required_reason_codes": ["lifecycle_boundary_signal", "value_terms", "promote_threshold"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionEnd",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Decision: adopt deterministic offline checks for every synthetic release.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 68,
+            "kind": "decision",
+            "text": "Decision: adopt deterministic offline checks for every synthetic release.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000001" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjq-promote-preference-stop",
+      "classification": "promote",
+      "expected_disposition": "promote",
+      "required_reason_codes": ["lifecycle_boundary_signal", "value_terms", "promote_threshold"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "Stop",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Preference: prefer stable metadata receipts before each synthetic release.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 71,
+            "kind": "preference",
+            "text": "Preference: prefer stable metadata receipts before each synthetic release.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000002" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjq-promote-constraint-precompact",
+      "classification": "promote",
+      "expected_disposition": "promote",
+      "required_reason_codes": ["lifecycle_boundary_signal", "value_terms", "promote_threshold"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "PreCompact",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Constraint: releases must pass public-boundary checks before publication.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 72,
+            "kind": "constraint",
+            "text": "Constraint: releases must pass public-boundary checks before publication.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000003" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjq-promote-procedure-session-end",
+      "classification": "promote",
+      "expected_disposition": "promote",
+      "required_reason_codes": ["lifecycle_boundary_signal", "value_terms", "promote_threshold"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionEnd",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Procedure: run offline checks before every release and verify the package output.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 77,
+            "kind": "procedure",
+            "text": "Procedure: run offline checks before every release and verify the package output.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000004" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjq-hold-metadata-only",
+      "classification": "hold",
+      "expected_disposition": "hold",
+      "required_reason_codes": ["no_safe_candidate_span", "metadata_only_weak", "hold_for_review"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionEnd",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "spans": []
+      }
+    },
+    {
+      "id": "adjq-hold-unspanned-decision",
+      "classification": "hold",
+      "expected_disposition": "hold",
+      "required_reason_codes": [
+        "no_safe_candidate_span",
+        "lifecycle_boundary_signal",
+        "signal_length",
+        "hold_for_review"
+      ],
+      "safety": {
+        "statement_must_be_safe": true,
+        "forbidden_statement_fragments": ["stable metadata receipts"]
+      },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionEnd",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Decision: retain stable metadata receipts for review.",
+        "spans": []
+      }
+    },
+    {
+      "id": "adjq-hold-unspanned-chatter",
+      "classification": "hold",
+      "expected_disposition": "hold",
+      "required_reason_codes": ["no_safe_candidate_span", "hold_for_review"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": ["weather"] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionEnd",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "First run to lunch, then check the weather before returning to the office.",
+        "spans": []
+      }
+    },
+    {
+      "id": "adjq-hold-user-prompt",
+      "classification": "hold",
+      "expected_disposition": "hold",
+      "required_reason_codes": ["user_prompt_needs_review", "hold_for_review"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "UserPromptSubmit",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Preference: prefer deterministic offline checks before each synthetic release.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 72,
+            "kind": "preference",
+            "text": "Preference: prefer deterministic offline checks before each synthetic release.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000008" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjq-reject-tool-noise",
+      "classification": "reject",
+      "expected_disposition": "reject",
+      "required_reason_codes": ["post_tool_use_noise"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "PostToolUse",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Decision: adopt deterministic offline checks for every synthetic release.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 68,
+            "kind": "decision",
+            "text": "Decision: adopt deterministic offline checks for every synthetic release.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000009" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjq-reject-noise-only",
+      "classification": "reject",
+      "expected_disposition": "reject",
+      "required_reason_codes": ["noise_only_signal"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "Stop",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "thanks",
+        "spans": []
+      }
+    },
+    {
+      "id": "adjq-reject-sensitive-signal",
+      "classification": "reject",
+      "expected_disposition": "reject",
+      "required_reason_codes": ["secret_like_material"],
+      "safety": {
+        "statement_must_be_safe": true,
+        "forbidden_statement_fragments": ["sk-synthetic123"]
+      },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionEnd",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Decision: retain sk-synthetic123 for the safety test.",
+        "spans": []
+      }
+    },
+    {
+      "id": "adjq-reject-ineligible-lifecycle",
+      "classification": "reject",
+      "expected_disposition": "reject",
+      "required_reason_codes": ["lifecycle_not_eligible"],
+      "safety": { "statement_must_be_safe": true, "forbidden_statement_fragments": [] },
+      "candidate": {
+        "provider": "synthetic-agent",
+        "hook_event_name": "SessionStart",
+        "kind": "message",
+        "subject_ref": "subject-adj-quality",
+        "signal_text": "Decision: adopt deterministic offline checks for every synthetic release.",
+        "spans": [
+          {
+            "start": 0,
+            "end": 68,
+            "kind": "decision",
+            "text": "Decision: adopt deterministic offline checks for every synthetic release.",
+            "evidence_refs": [{ "ref_type": "source_event", "ref_id": "evt_adjq_00000012" }]
+          }
+        ]
+      }
+    }
+  ]
+}
