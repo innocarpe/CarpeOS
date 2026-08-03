@@ -19,9 +19,9 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
 
-**최신 릴리스:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([변경 기록](CHANGELOG.md) · [product 2.0 DoD](docs/maintainers/product-2.0.0.md)).
-**다음 메이저(`3.0.0`)** 는 개발 중입니다 (동결·태그 없음).
+**최신 릴리스:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [v3.1.0 릴리스](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
@@ -87,7 +87,7 @@ Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture �
 
 ### 기억하기 전에 판정
 
-캡처 뒤 precision-first 규칙 판정기(`adj_v1`)가 disposition을 정합니다.
+캡처 뒤 precision-first 규칙 판정기(`adj_v2`)가 disposition을 정합니다.
 
 | Disposition | 의미 단위 | 기본 검색 |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ Evidence는 claim이 아닙니다. claim이 있다고 해서 바로 “맞다”
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> J[Adjudicate adj_v1]
+  E[EvidenceArtifact] --> J[Adjudicate adj_v2]
   J -->|promote| O[Observation active]
   J -->|hold| H[Observation draft]
   J -->|reject| R[Evidence only]
@@ -215,8 +215,10 @@ Context pack은 기본 16개 **expert-slot**으로 sparse 하게 채우고, acce
 draft보다 앞에 두는 cache-friendly 순서를 씁니다.
 [메모리 용량 아키텍처](docs/architecture/memory-capacity.md),
 [capacity 마스터 플랜](docs/plans/k3-memory-capacity-master-plan.md)을 보세요.
-그래프 기반 회상은 아직 계획 단계입니다:
-[GraphRAG 로드맵](docs/plans/graphrag-roadmap.md).
+교차 저장소 partition과 worktree facet을 포함한 retrieval-first 그래프/하이브리드
+회상은 3.0에 출시되었습니다. hosted graph adapter와 그 밖의 로드맵 작업은 아직
+계획 상태입니다. [product 3.0 DoD](docs/maintainers/product-3.0.0.md) 및
+[GraphRAG 로드맵](docs/plans/graphrag-roadmap.md)을 보세요.
 
 ---
 
@@ -253,10 +255,12 @@ carpeos setup show              # config.json 출력
 `--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
 `--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@2.0.0`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@3.1.0`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
 제품 마일스톤: [1.0 DoD](docs/maintainers/product-1.0.0.md) (파이프라인) ·
-[2.0 DoD](docs/maintainers/product-2.0.0.md) (판정, 패키지 2.0.0으로 출시).
+[2.0 DoD](docs/maintainers/product-2.0.0.md) (판정) ·
+[3.0 DoD](docs/maintainers/product-3.0.0.md) (retrieval-first 그래프) ·
+[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export).
 
 ### 개발자 (git checkout)
 
@@ -343,63 +347,75 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Product 1.0 DoD (파이프라인) | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
 | Product 2.0 DoD (판정) | [docs/maintainers/product-2.0.0.md](docs/maintainers/product-2.0.0.md) |
+| Product 3.0 DoD (retrieval-first 그래프) | [docs/maintainers/product-3.0.0.md](docs/maintainers/product-3.0.0.md) |
+| Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
 | 버전·릴리스 | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 | Memory capacity plan | [docs/plans/k3-memory-capacity-master-plan.md](docs/plans/k3-memory-capacity-master-plan.md) |
 
 ---
 
-## 제품 라인 (1.0 → 2.0 → 3.0)
+## 제품 라인 (1.0 → 2.0 → 3.0 → 3.1)
 
 | 패키지 / 제품 | 의미 | 상태 |
 | --- | --- | --- |
 | **1.0.0** | 로컬 **파이프라인 + 계약** freeze | **출시** — 인프라 기준선. “완성된 지식 OS” 아님 |
 | **2.0.0** | **판정된 의미**가 기본 제품 계약 (`adj_v1`, promoted-only 검색, held 리뷰, doctor, smoke) | **출시** (npm / `v2.0.0`) — 운영 가능한 MVP. 인간 수준 판단 아님 |
-| **3.0.0** | 다음 메이저 (개발 중) | **개발 중** — freeze·태그 없음 |
+| **3.0.0** | 교차 저장소 partition과 worktree facet을 갖춘 retrieval-first 그래프/하이브리드 회상 | **출시** (npm / `v3.0.0`) |
+| **3.1.0** | 추가된 **OKF v0.2 export projection** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0`; export만 지원하고 import 경로는 아님 |
 
-2.0.0 이후에도 남는 잔여 리스크: golden/dogfood는 synthetic, 세션 de-noise 한계,
-판정 경로의 Claim draft는 보류, 구 policy active 단위 optional cleanup 등.
-상세: [product-2.0.0 residual](docs/maintainers/product-2.0.0.md).
+남은 경계도 있습니다. golden/dogfood fixture는 synthetic이고, 세션 de-noise에는
+한계가 있으며, 판정 경로의 **Claim** draft는 보류되어 있고, 구 policy active 단위는
+optional cleanup이 필요할 수 있습니다. hosted graph adapter와 그 밖의 로드맵 작업은
+아직 출시되지 않았습니다. 상세:
+[product 2.0 residual](docs/maintainers/product-2.0.0.md) ·
+[product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md).
 
 용량·팩 경제·장기 구조는
 [memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md) 아래로
-이어지며 **3.0**에 반영될 수 있습니다. 이는 freeze 결정이 아닙니다.
+이어지며, 이는 출시된 3.0 retrieval 제품의 상태를 바꾸지 않습니다.
 
 ---
 
 ## 지금 구현된 것
 
-**배포됨:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0) ·
-[CHANGELOG](CHANGELOG.md#200---2026-07-30)).
+**공개 릴리스:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
+[CHANGELOG](CHANGELOG.md#310---2026-08-01) ·
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
+패키지 공개와 로컬 설치는 호스티드 배포를 뜻하지 않습니다.
 
 기본 로컬 루프 (CI 게이트):
 
 ```text
 hooks → 암호화 증거 → adjudicate (promote|hold|reject)
-  → 승격된 의미 → retrieval / MCP / CLI
-  (+ 선택 private sync, Obsidian projection)
+  → 승격된 의미 → retrieval-first 그래프/하이브리드 회상 → MCP / CLI
+  (+ 로컬 OKF v0.2 export, 선택 private sync, Obsidian projection)
 ```
 
 | 영역 | 상태 |
 | --- | --- |
 | Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md) 포함) |
 | Local capture + outbox | 출시 |
-| Knowledge adjudication (`adj_v1`) | 출시 — disposition, held 리뷰, policy history |
+| Knowledge adjudication (`adj_v2`) | 출시 — disposition, held 리뷰, policy history |
 | 기본 retrieval | **promoted/active only**; held는 opt-in |
 | Doctor 판정 health | 출시 |
 | Sync Worker/client + bounded `sync cycle` | 코드 + 로컬 테스트. production edge 주장 없음 |
 | MCP stdio (도구 8개) | 로컬만 |
 | Expert-slot context pack | CLI + MCP (로컬) |
+| Retrieval-first 그래프/하이브리드 회상 | **출시** — indexed graph traversal, 교차 저장소 partition, worktree facet |
+| Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
+| OKF v0.2 export projection | **3.1에 출시** — 로컬 export만, import 경로 없음 |
 | `carpeos setup` / one-stop install | npm `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
 | Hosted embeddings / multi-tenant SaaS | 이 저장소 목표 아님 |
-| GraphRAG | 계획 — [로드맵](docs/plans/graphrag-roadmap.md) |
-| **3.0.0 product freeze** | 미완 — 개발 중 |
+| **3.0.0 product freeze** | **출시** — `v3.0.0` |
+| **3.1.0 public release** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
 
-**NOT DEPLOYED:** hosted Worker, D1/R2 production, private vault, hosted MCP 는
-이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI
+**NOT DEPLOYED:** hosted Worker, D1/R2 production, hosted graph adapter/service,
+private vault, hosted MCP 는 이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI
 ([versioning](docs/maintainers/versioning-and-releases.md)).
 
 어댑터 설치, 실제 Cloudflare 운영, hosted MCP, 인간 수준 판정 품질을 “완료”로

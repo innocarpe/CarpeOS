@@ -20,9 +20,9 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest release:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([notes](CHANGELOG.md) · [product 2.0 DoD](docs/maintainers/product-2.0.0.md)).
-**Next major (`3.0.0`)** is in active development (not frozen; no tag yet).
+**Latest release:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([notes](CHANGELOG.md) · [v3.1.0 release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -92,7 +92,7 @@ keeps metadata and references. Host hooks stay **fail-open and fast**.
 
 ### Adjudicate before “memory”
 
-After capture, a precision-first rule adjudicator (`adj_v1`) decides disposition:
+After capture, a precision-first rule adjudicator (`adj_v2`) decides disposition:
 
 | Disposition | Meaning unit | Default search |
 | --- | --- | --- |
@@ -113,7 +113,7 @@ into one paragraph of vector text.
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> J[Adjudicate adj_v1]
+  E[EvidenceArtifact] --> J[Adjudicate adj_v2]
   J -->|promote| O[Observation active]
   J -->|hold| H[Observation draft]
   J -->|reject| R[Evidence only]
@@ -223,7 +223,9 @@ Context packs use sparse **expert-slot** allocation (default 16 slots) and a
 cache-friendly section order so accepted facts stay ahead of high-churn drafts.
 See the [memory capacity architecture note](docs/architecture/memory-capacity.md)
 and the [capacity master plan](docs/plans/k3-memory-capacity-master-plan.md).
-Graph-oriented recall remains planned:
+Retrieval-first graph/hybrid recall — including cross-repository partitioning and
+worktree facets — shipped in 3.0; hosted graph adapters and other roadmap work
+remain planned. See the [product 3.0 DoD](docs/maintainers/product-3.0.0.md) and
 [GraphRAG roadmap](docs/plans/graphrag-roadmap.md).
 
 ---
@@ -262,9 +264,11 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@2.0.0`. Changelog: [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@3.1.0`. Changelog: [CHANGELOG.md](CHANGELOG.md).
 Product milestones: [1.0 DoD](docs/maintainers/product-1.0.0.md) (pipeline) ·
-[2.0 DoD](docs/maintainers/product-2.0.0.md) (adjudication, shipped as package 2.0.0).
+[2.0 DoD](docs/maintainers/product-2.0.0.md) (adjudication) ·
+[3.0 DoD](docs/maintainers/product-3.0.0.md) (retrieval-first graph) ·
+[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export).
 
 ### Developers (git checkout)
 
@@ -352,6 +356,8 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Product 1.0 DoD (pipeline) | [docs/maintainers/product-1.0.0.md](docs/maintainers/product-1.0.0.md) |
 | Product 2.0 DoD (adjudication) | [docs/maintainers/product-2.0.0.md](docs/maintainers/product-2.0.0.md) |
+| Product 3.0 DoD (retrieval-first graph) | [docs/maintainers/product-3.0.0.md](docs/maintainers/product-3.0.0.md) |
+| Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Compatibility / deprecations | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
 | Local store migrations | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
@@ -360,59 +366,68 @@ Keep install **idempotent** and **out of the git tree** for private data.
 
 ---
 
-## Product line (1.0 → 2.0 → 3.0)
+## Product line (1.0 → 2.0 → 3.0 → 3.1)
 
 | Package / product | Meaning | Status |
 | --- | --- | --- |
 | **1.0.0** | Local **pipeline + contract** freeze (hooks → evidence → extract shell → search) | **Shipped** — infrastructure baseline; not “finished knowledge OS” |
 | **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
-| **3.0.0** | Next major product step (in development) | **Active development** — no freeze / no tag yet |
+| **3.0.0** | Retrieval-first graph/hybrid recall with cross-repository partitions and worktree facets | **Shipped** on npm / `v3.0.0` |
+| **3.1.0** | Additive **OKF v0.2 export projection** | **Shipped** as `@innocarpe/carpeos@3.1.0` / `v3.1.0` — export only, not an import path |
 
-Honest residual risks after 2.0.0 (still true): golden/dogfood fixtures are synthetic;
-session de-noising is limited; adjudicated **Claim** drafts remain deferred; older-policy
-active units may need optional cleanup. Details:
-[product-2.0.0 residual risk](docs/maintainers/product-2.0.0.md).
+Residual boundaries remain: golden/dogfood fixtures are synthetic; session de-noising
+is limited; adjudicated **Claim** drafts remain deferred; and older-policy active
+units may need optional cleanup. Hosted graph adapters and other roadmap work remain
+unshipped. Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
+[product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md).
 
 Capacity / pack economics and long-horizon structure work continue under the
-[memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md) and
-may feed **3.0** — that is **not** a freeze decision.
+[memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md); this
+does not change the shipped 3.0 retrieval product.
 
 ---
 
 ## What works today
 
-**Published:** [`@innocarpe/carpeos@2.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v2.0.0) ·
-[CHANGELOG](CHANGELOG.md#200---2026-07-30)).
+**Public release:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
+[CHANGELOG](CHANGELOG.md#310---2026-08-01) ·
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
+Package publication and local installation do not imply a hosted deployment.
 
 Default local loop (CI-gated):
 
 ```text
 hooks → encrypted evidence → adjudicate (promote|hold|reject)
-  → promoted meaning → retrieval / MCP / CLI
-  (+ optional private sync, Obsidian projection)
+  → promoted meaning → retrieval-first graph/hybrid recall → MCP / CLI
+  (+ local OKF v0.2 export, optional private sync, Obsidian projection)
 ```
 
 | Area | Status |
 | --- | --- |
 | Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md)) |
 | Local capture + outbox | Shipped |
-| Knowledge adjudication (`adj_v1`) | Shipped — dispositions, held review, policy history |
+| Knowledge adjudication (`adj_v2`) | Shipped — dispositions, held review, policy history |
 | Default retrieval | **Promoted/active only**; held opt-in |
 | Doctor adjudication health | Shipped (`setup doctor`, `adjudicate --stats`) |
 | Sync Worker/client + bounded `sync cycle` | Code + local tests; no production edge claimed |
 | MCP stdio server (8 tools) | Local only |
 | Expert-slot context packs | CLI + MCP (local) |
+| Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
+| Hosted graph adapters / services | Planned; not shipped or deployed |
+| OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
 | `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |
 | Hosted embeddings / multi-tenant SaaS | Not goals of this repo |
-| GraphRAG traversal | Planned — [roadmap](docs/plans/graphrag-roadmap.md) |
-| **3.0.0 product freeze** | Not done — in development |
+| **3.0.0 product freeze** | **Shipped** — `v3.0.0` |
+| **3.1.0 public release** | **Shipped** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
 
-**NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, private vault
-adoption, or hosted MCP is proven by this repository. npm publish is gated by
-SemVer tags + CI ([versioning](docs/maintainers/versioning-and-releases.md)).
+**NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, hosted graph
+adapters/services, private vault adoption, or hosted MCP is proven by this
+repository. npm publish is gated by SemVer tags + CI
+([versioning](docs/maintainers/versioning-and-releases.md)).
 
 Do not treat adapter install, a live Cloudflare setup, hosted MCP, or
 calibrated human-level judgment as finished until this repo says so with tests and docs.
