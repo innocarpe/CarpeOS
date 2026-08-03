@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,12 @@ describe("@innocarpe/carpeos packaging", () => {
     assert.equal(existsSync(join(pkg, "dist/cli.js")), true);
     assert.equal(existsSync(join(pkg, "dist/mcp-server.js")), true);
     assert.equal(existsSync(join(pkg, "bin/carpeos.js")), true);
+  });
+  it("declares the canonical publishable package identity", () => {
+    const manifest = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8"));
+    assert.equal(manifest.name, "@innocarpe/carpeos");
+    assert.match(manifest.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/);
+    assert.equal(manifest.private, false);
   });
 
   it("cli entry prints help without starting mcp server", () => {
