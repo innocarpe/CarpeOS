@@ -1,10 +1,13 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -1401,6 +1404,22 @@ describe("carpeos CLI", () => {
   });
 });
 
+function runtimeFileDigests(root: string): Record<string, string> {
+  const files: Record<string, string> = {};
+  const visit = (directory: string, relative: string) => {
+    for (const name of readdirSync(directory)) {
+      const path = join(directory, name);
+      const next = relative.length === 0 ? name : join(relative, name);
+      const stat = statSync(path);
+      if (stat.isDirectory()) visit(path, next);
+      else if (stat.isFile()) {
+        files[next] = createHash("sha256").update(readFileSync(path)).digest("hex");
+      }
+    }
+  };
+  visit(root, "");
+  return files;
+}
 function makeContext(): { home: string; cwd: string } {
   const home = mkdtempSync(join(tmpdir(), "carpeos-cli-home-"));
   const cwd = mkdtempSync(join(tmpdir(), "carpeos-cli-workspace-"));
@@ -1443,6 +1462,233 @@ function runJson(
   };
 }
 
+describe("reconcile-policy CLI", () => {
+  it("rejects every unsupported reconciliation apply and acknowledgement flag before store open", async () => {
+    for (const flag of [
+      "--plan-digest",
+      "--expected-total-count",
+      "--expected-eligible-write-count",
+      "--expected-eligible-noop-count",
+      "--expected-unsafe-count",
+      "--apply",
+      "--apply-safe-subset",
+      "--acknowledge-unsafe-count",
+      "--pin",
+      "--event-id",
+      "--policy-version",
+      "--home",
+      "--project-id",
+    ]) {
+      const args = [
+        "adjudicate",
+        "reconcile-policy",
+        "--from-policy",
+        "adj_v1",
+        "--to-policy",
+        "adj_v3",
+        "--trust-zone",
+        "tz_synthetic",
+        "--limit",
+        "1",
+        flag,
+      ];
+      if (!["--apply", "--apply-safe-subset"].includes(flag)) args.push("synthetic");
+      expect((await captureHelp(args)).status).toBe(2);
+    }
+  });
+
+  it("rejects every forbidden reconciliation flag even with help before home creation", async () => {
+    const context = makeContext();
+    rmSync(context.home, { recursive: true, force: true });
+    for (const flag of [
+      "--plan-digest",
+      "--expected-total-count",
+      "--expected-eligible-write-count",
+      "--expected-eligible-noop-count",
+      "--expected-unsafe-count",
+      "--apply",
+      "--apply-safe-subset",
+      "--acknowledge-unsafe-count",
+      "--pin",
+    ]) {
+      const args = ["adjudicate", "reconcile-policy", flag, "--help"];
+      if (!["--apply", "--apply-safe-subset"].includes(flag)) args.splice(3, 0, "synthetic");
+      expect((await runCliJson(args, context)).status).toBe(2);
+      expect(existsSync(context.home)).toBe(false);
+    }
+  });
+  it("requires every exact reconciliation flag before opening a store", async () => {
+    expect((await captureHelp(["adjudicate", "reconcile-policy"])).status).toBe(2);
+    expect(
+      (
+        await captureHelp([
+          "adjudicate",
+          "reconcile-policy",
+          "--from-policy",
+          "adj_v1",
+          "--to-policy",
+          "adj_v3",
+          "--trust-zone",
+          "tz_synthetic",
+          "--limit",
+          "201",
+        ])
+      ).status,
+    ).toBe(2);
+  });
+});
+describe("reconcile-policy success", () => {
+  it("emits a bare byte-identical read-only plan without body leakage", async () => {
+    const context = makeContext();
+    const store = new LocalCaptureStore({
+      runtimeDir: context.home,
+      workspaceRoot: context.cwd,
+      trustZoneId: "tz_synthetic",
+      keyProvider: new StaticKeyProvider(new Uint8Array(32).fill(4)),
+    });
+    const captured = store.captureHook({
+      provider: "codex",
+      hook_event_name: "SessionEnd",
+      captured_at: "2026-01-01T00:00:00Z",
+      session_id: "session_reconcile_cli",
+      media_type: "application/json",
+      subject_ref: "subject_synthetic",
+      payload: { decision: "CLI BODY SENTINEL MUST NOT LEAK" },
+    });
+    store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_old" });
+    store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_new" });
+    store.close();
+
+    const direct = LocalCaptureStore.openExistingPreview({
+      runtimeDir: context.home,
+      workspaceRoot: context.cwd,
+      trustZoneId: "tz_synthetic",
+    });
+    const plan = direct.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    direct.close();
+    const before = runtimeFileDigests(context.home);
+    const result = await runCliJson(
+      [
+        "adjudicate",
+        "reconcile-policy",
+        "--from-policy",
+        "adj_old",
+        "--to-policy",
+        "adj_new",
+        "--trust-zone",
+        "tz_synthetic",
+        "--limit",
+        "10",
+      ],
+      context,
+    );
+    expect(result.status).toBe(0);
+    expect(result.rawStdout).toBe(JSON.stringify(plan));
+    expect(result.stdout).toEqual(plan);
+    expect(result.rawStdout).not.toContain("CLI BODY SENTINEL");
+    expect(runtimeFileDigests(context.home)).toEqual(before);
+  });
+
+  it("reports bounded and same-policy empty previews", async () => {
+    const context = makeContext();
+    const store = new LocalCaptureStore({
+      runtimeDir: context.home,
+      workspaceRoot: context.cwd,
+      trustZoneId: "tz_synthetic",
+      keyProvider: new StaticKeyProvider(new Uint8Array(32).fill(5)),
+    });
+    for (const suffix of ["z", "a"]) {
+      const captured = store.captureHook({
+        provider: "codex",
+        hook_event_name: "SessionEnd",
+        captured_at: "2026-01-01T00:00:00Z",
+        session_id: `session_reconcile_${suffix}`,
+        media_type: "application/json",
+        subject_ref: "subject_synthetic",
+        payload: { decision: `Synthetic ${suffix}` },
+      });
+      store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_old" });
+    }
+    store.close();
+    const bounded = await runCliJson(
+      [
+        "adjudicate",
+        "reconcile-policy",
+        "--from-policy",
+        "adj_old",
+        "--to-policy",
+        "adj_new",
+        "--trust-zone",
+        "tz_synthetic",
+        "--limit",
+        "1",
+      ],
+      context,
+    );
+    expect(bounded.status).toBe(0);
+    expect(bounded.stdout).toMatchObject({
+      total_candidate_count: 2,
+      classified_count: 1,
+      truncated: true,
+      plan_admissible: false,
+    });
+    expect(bounded.stdout.global_taint_reason_codes as string[]).toContain(
+      "incomplete_enumeration_global_taint",
+    );
+    const same = await runCliJson(
+      [
+        "adjudicate",
+        "reconcile-policy",
+        "--from-policy",
+        "adj_new",
+        "--to-policy",
+        "adj_new",
+        "--trust-zone",
+        "tz_synthetic",
+        "--limit",
+        "1",
+      ],
+      context,
+    );
+    expect(same.status).toBe(0);
+    expect(same.stdout.entries).toEqual([]);
+  });
+
+  it("rejects invalid use before creating a home and fails closed after valid parsing", async () => {
+    const context = makeContext();
+    rmSync(context.home, { recursive: true, force: true });
+    const base = [
+      "adjudicate",
+      "reconcile-policy",
+      "--from-policy",
+      "adj_v1",
+      "--to-policy",
+      "adj_v3",
+      "--trust-zone",
+      "tz_synthetic",
+      "--limit",
+      "1",
+    ];
+    for (const suffix of [
+      ["--limit", "2"],
+      ["unexpected"],
+      ["--home", "elsewhere"],
+      ["--from-policy", "BAD"],
+      ["--limit", "0"],
+      ["--limit", "abc"],
+    ]) {
+      expect((await runCliJson([...base, ...suffix], context)).status).toBe(2);
+      expect(existsSync(context.home)).toBe(false);
+    }
+    expect((await runCliJson(base, context)).status).toBe(1);
+    expect(existsSync(context.home)).toBe(false);
+  });
+});
 async function captureHelp(args: string[]): Promise<{ status: number; stdout: string }> {
   const originalStdoutWrite = process.stdout.write.bind(process.stdout);
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
