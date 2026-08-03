@@ -167,12 +167,11 @@ PR06 owns planned preview symbols in `packages/local-store/src/policy-reconcilia
 
 For every eligible write, the planned PR07 builder verifies that the target is an active, non-erased, local canonical Observation from `from_policy` with `epistemic_authority: observed`. For `replace`, it also verifies a non-null replacement that is an active, non-erased, non-superseded local canonical Observation from `to_policy` in the same trust zone with the same resolved subject. For `invalidate`, replacement is `null`. An identical already-committed Supersession is `eligible_noop`/`already_applied`. Any conflicting existing Supersession, cycle, authority, zone, or subject condition is classified by planned PR06 as unsafe or global taint and is never resolved during apply. Existing store guarantees used here are canonical-event conformance and idempotency/write invariants; this ADR does not claim existing Supersession-specific conflict or replay rules.
 
-For each eligible-write entry, PR07 uses only this canonical identity preimage:
+For each eligible-write entry, PR07 uses only this edge-stable identity preimage. `plan_digest`, `component_id`, high-water, counts, limit, wall clock, client ID, and display/body data are excluded. Plan digest and component ID are admission and receipt evidence only. The same logical edge/policy/zone/source therefore converges across admissible plans and stores.
 
 ```ts
-const entryIdentityPreimage = {
-  schema: "carpeos.policy-reconciliation-entry/v2",
-  plan_digest: plan.plan_digest,
+const edgeIdentityPreimage = {
+  schema: "carpeos.policy-reconciliation-edge/v2",
   trust_zone_id: plan.trust_zone_id,
   from_policy: plan.from_policy,
   to_policy: plan.to_policy,
@@ -180,15 +179,120 @@ const entryIdentityPreimage = {
   target_event_id: entry.target_event_id,
   replacement_event_id: entry.replacement_event_id,
   action: entry.action,
-  reason_code: entry.reason_code,
-  component_id: entry.component_id,
 };
-const identity_hash = sha256Hex(stableJson(entryIdentityPreimage));
+const identity_hash = sha256Hex(stableJson(edgeIdentityPreimage));
 ```
 
-All identity inputs are normalized and validated before hashing. The planned builder derives `idempotency_key` as `idem_reconcile_v2_${identity_hash}`, `event_id` as `evt_${identity_hash.slice(0, 32)}`, `supersession_id` as `sup_${identity_hash.slice(32, 64)}`, `protected_value_id` as `pv_${identity_hash.slice(0, 32)}`, and `request_fingerprint` as `sha-256:${identity_hash}`. It validates each output respectively against `IdempotencyKey`, `EventId`, schema-compatible `Identifier`, `ProtectedValueId`, and `RequestFingerprint`, then asserts uniqueness against both the normalized plan and store before any insert. Free-form input, randomness, time, body content, and CLI display values never influence identities. The builder fixes Supersession lifecycle, epistemic authority, and reason; the CLI cannot control them.
+All edge inputs are normalized and validated before hashing. The planned builder derives `idempotency_key` as `idem_reconcile_v2_${identity_hash}`, `event_id` as `evt_${identity_hash.slice(0, 32)}`, `supersession_id` as `sup_${identity_hash.slice(32, 64)}`, `protected_value_id` as `pv_${identity_hash.slice(0, 32)}`, and `request_fingerprint` as `sha-256:${identity_hash}`. Each output validates respectively against `IdempotencyKey`, `EventId`, schema-compatible `Identifier`, `ProtectedValueId`, and `RequestFingerprint`, and is unique against the normalized plan and store before any insert. Free-form input, randomness, apply time, body content, and CLI display values never influence identity. The builder fixes Supersession lifecycle, authority, and reason; the CLI cannot control them.
 
-It preserves the existing store write invariant in this order for every eligible event: `protected_values`, then `canonical_events`, then pending `outbox`, in the one transaction. It validates every eligible write and uniqueness before any insert. Unsafe/noop entries receive no protected/canonical/outbox rows. Any validation or insert failure rolls back every eligible write; no catch/continue, nested commit, or partial success is permitted. After commit, planned PR06 classification recognizes the identical committed edge as `eligible_noop`/`already_applied`; the stale original digest fails rather than writing again.
+### Planned canonical source and Supersession construction
+
+The planned PR06 classifier freezes inputs before PR07 can apply: `source_event_id` is an active, non-erased local canonical event matching a recognized materialization family; `target_event_id` is an active, non-erased local canonical Observation from `from_policy` with `epistemic_authority: observed`. For `replace`, `replacement_event_id` is a non-null active, non-erased, non-superseded local canonical Observation from `to_policy`. For `invalidate`, replacement is `null`. Source, target, and non-null replacement must have the exact same validated trust-zone object and the same resolved `subject_ref`. An identical committed edge is classified as `eligible_noop`/`already_applied`; any conflict, cycle, authority, zone, subject, or lineage uncertainty is planned PR06 unsafe/global-taint classification, never apply-time repair.
+
+PR07 constructs this exact planned `CanonicalEvent<"Supersession">`. `maxTimestamp` validates every present input against the UTC schema timestamp, parses each to epoch milliseconds, takes the numeric maximum, then emits `new Date(maxMs).toISOString().replace(".000Z", "Z")`. An absent replacement contributes no value:
+
+```ts
+const lineageEvents = replacement === undefined
+  ? [source, target]
+  : [source, target, replacement];
+
+function maxTimestamp(starts: readonly string[]): string {
+  const epochMilliseconds = starts.map((timestamp) => {
+    assertSchemaUtcTimestamp(timestamp);
+    const milliseconds = Date.parse(timestamp);
+    if (!Number.isFinite(milliseconds)) throw new Error("invalid schema timestamp");
+    return milliseconds;
+  });
+  const maxMs = Math.max(...epochMilliseconds);
+  return new Date(maxMs).toISOString().replace(".000Z", "Z");
+}
+
+const event: CanonicalEvent<"Supersession"> = {
+  schema_version: "v1",
+  event_id,
+  event_type: "Supersession",
+  subject_ref: target.subject_ref,
+  valid_time: {
+    start: maxTimestamp(lineageEvents.map((lineage) => lineage.valid_time.start)),
+    end: null,
+  },
+  recorded_time: {
+    start: maxTimestamp(lineageEvents.map((lineage) => lineage.recorded_time.start)),
+    end: null,
+  },
+  lifecycle_status: "active",
+  epistemic_authority: "verified",
+  trust_zone: target.trust_zone,
+  provenance: replacement === undefined
+    ? [
+        { ref_type: "event", ref_id: source.event_id, relationship: "derived_from" },
+        { ref_type: "event", ref_id: target.event_id, relationship: "supersedes" },
+      ]
+    : [
+        { ref_type: "event", ref_id: source.event_id, relationship: "derived_from" },
+        { ref_type: "event", ref_id: target.event_id, relationship: "supersedes" },
+        { ref_type: "event", ref_id: replacement.event_id, relationship: "derived_from" },
+      ],
+  idempotency_key,
+  request_fingerprint,
+  payload: replacement === undefined
+    ? {
+        supersession_id,
+        supersedes_event_id: target.event_id,
+        reason: "Policy reconciliation invalidated an older-policy Observation.",
+      }
+    : {
+        supersession_id,
+        supersedes_event_id: target.event_id,
+        replacement_event_id: replacement.event_id,
+        reason: "Policy reconciliation replaced an older-policy Observation.",
+      },
+};
+```
+
+`zone_sequence` is omitted locally. The `valid_time` and `recorded_time` maxima are deterministic source-lineage time, never apply wall clock. Provenance has precisely the shown order; duplicate provenance references are rejected.
+
+### Planned protected, canonical, and outbox rows
+
+The exact UTF-8 protected plaintext is `stableJson` of this object and contains no statement, body, component, or plan digest:
+
+```ts
+const protectedPlaintext = {
+  schema: "carpeos.policy-reconciliation-protected/v2",
+  trust_zone_id: plan.trust_zone_id,
+  from_policy: plan.from_policy,
+  to_policy: plan.to_policy,
+  source_event_id: entry.source_event_id,
+  target_event_id: entry.target_event_id,
+  replacement_event_id: entry.replacement_event_id,
+  action: entry.action,
+};
+```
+
+PR07 uses existing AES-256-GCM `encrypt` for a device-local row. `protected_value_id`, SHA-256 plaintext digest, and UTF-8 plaintext size are edge-stable; nonce, tag, and ciphertext can differ by device and remain local-only. The protected row is exactly: `protected_value_id`; `vault_ref: "vault_local"`; `key_ref: "key_local_active"`; `nonce_ref: "nonce_${protected_value_id.slice(3)}"`; `tag_ref: "tag_${protected_value_id.slice(3)}"`; AES-256-GCM nonce/tag/ciphertext; plaintext digest/size; and `created_at: event.recorded_time.start`.
+
+The canonical row is exactly `event_id`, `event_type: "Supersession"`, `trust_zone_id`, edge-derived `idempotency_key`, edge-derived `request_fingerprint`, derived `protected_value_id`, `event_json: stableJson(event)`, and `recorded_at: event.recorded_time.start`. The pending outbox row is exactly `event_id`, `state: "pending"`, `attempts: 0`, `available_at: event.recorded_time.start`, `push_request_json: stableJson(pushRequest)`, `created_at: event.recorded_time.start`, and `updated_at: event.recorded_time.start`, with this exact sync push request:
+
+```ts
+const pushRequest = {
+  schema_version: "v1",
+  request_id: `req_${sha256Hex(stableJson({ event_id, client_id })).slice(0, 32)}`,
+  client_id,
+  trust_zone_id: plan.trust_zone_id,
+  idempotency_key,
+  request_fingerprint,
+  events: [event],
+  erasures: [],
+};
+```
+
+Validate the request against sync conformance. Request envelope/client ID and local ciphertext may differ across stores; canonical event bytes, idempotency key, request fingerprint, and protected plaintext digest converge. Sync classifies the converged event as replay, never conflict.
+
+Before insertion, identical existing key, event ID, fingerprint, and canonical bytes are noop. Any same key or event ID with a different fingerprint or canonical bytes is global taint and zero writes. Apply never repairs either case. In one `BEGIN IMMEDIATE`, validate all eligible writes and uniqueness before any insert, then preserve existing order: `protected_values`, `canonical_events`, pending `outbox`. Unsafe/noop entries receive no rows; any failure rolls back all eligible writes, with no catch/continue, nested transaction, or partial success. A fresh preview classifies the identical committed edge as `eligible_noop`/`already_applied`; the stale original digest fails rather than writing again.
+
+### Planned convergence acceptance
+
+Planned tests must prove that two admissible plans differing only in plan digest, high-water, counts, limit, or component for one edge produce identical edge preimage, IDs, and canonical event bytes. Two independent same-zone stores with differing `clientId`, clock, and local sequence must produce identical event bytes, idempotency key, request fingerprint, and protected plaintext digest and sync replay; only request envelope and local ciphertext may differ. Changing source, target, replacement, policy, zone, or action must change identity. An injected ID, fingerprint, or canonical-byte conflict must abort with zero writes.
 
 ## Exact apply receipt
 
