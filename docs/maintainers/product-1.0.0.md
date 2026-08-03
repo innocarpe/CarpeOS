@@ -15,13 +15,13 @@ Related:
 
 - **[Product 2.0.0 DoD](product-2.0.0.md)** — knowledge adjudication (next major product)
 - [v1 Readiness](v1-readiness.md) — contract freeze gates G1–G9 (necessary packaging)
-- [v1 Freeze Decision](v1-freeze-decision.md) — Approve recorded; tag cut
+- [v1 Freeze Decision](v1-freeze-decision.md) — Approve and release recorded
 - [Versioning and Releases](versioning-and-releases.md) — SemVer + release process
 - [Release Readiness](release-readiness.md) — per-release CI/local evidence
 - Public package: `@innocarpe/carpeos@1.0.0`
 
-Historical note: cutting `1.0.0` required this loop green + freeze Approve. That
-bar was **pipeline completeness**, not the original “only store what a brain
+Historical note: the `1.0.0` release required this loop green and freeze Approve.
+That bar was **pipeline completeness**, not the original “only store what a brain
 would keep” thesis.
 
 ---
@@ -46,7 +46,7 @@ durable knowledge. Contract freeze is packaging; **knowledge OS completeness is
 | 5. Retrieval surface | Memory search + context-pack return those meaningful units (not only artifact metadata) |
 | 6. Safe upgrades | Existing homes upgrade safely (migrations, no silent wipe) |
 | 7. Gates | Automated product E2E gate + a few manual scenarios pass |
-| 8. Freeze + ship | Then public contract freeze + CHANGELOG Notes + tag `v1.0.0` + npm publish |
+| 8. Freeze + ship | Public contract freeze and the recorded `v1.0.0` release |
 
 ### Relationship to contract checklist (G1–G9)
 
@@ -54,7 +54,7 @@ durable knowledge. Contract freeze is packaging; **knowledge OS completeness is
 | --- | --- | --- |
 | **Product loop** | This file | Sufficient product completion criteria |
 | **Contract freeze** | [v1-readiness.md](v1-readiness.md) | Necessary packaging; freezes public surfaces once product loop is real |
-| **Human gate** | [v1-freeze-decision.md](v1-freeze-decision.md) | Explicit Approve before tag/publish |
+| **Human gate** | [v1-freeze-decision.md](v1-freeze-decision.md) | Explicit Approve recorded for the release |
 
 ---
 
@@ -69,7 +69,7 @@ These stay **post-1.0** unless a later story explicitly pulls them in:
 | Hosted Cloudflare as a **public** product | Edge remains private/operator territory |
 | Production embedding providers | Deterministic local-dev embeddings are OK for 1.0 |
 | Logging every PostToolUse by default | Noise; lifecycle-heavy extraction preferred |
-| Cutting `v1.0.0` without maintainer **Approve** after product gate | Hard stop |
+| Releasing `v1.0.0` without maintainer **Approve** after product gate | Hard stop |
 
 Private Cloudflare sync should **keep working** if already configured; it must not
 block or define 1.0.0.
@@ -78,7 +78,8 @@ block or define 1.0.0.
 
 ## Product gate checklist (living)
 
-Status values: `done` · `partial` · `todo` · `blocked`. Update as stories land.
+Status values: `done` · `partial` · `todo` · `blocked`. This is the historical
+release record.
 
 | # | Criterion | Status | Evidence |
 | --- | --- | --- | --- |
@@ -90,11 +91,11 @@ Status values: `done` · `partial` · `todo` · `blocked`. Update as stories lan
 | P6 | Named product E2E script in CI (capture fixture → extract → rebuild → search/context-pack) | **done** | `pnpm smoke:product` + CI (G006) |
 | P7 | Doctor reports hooks + recent capture + meaningful units; README EN/KO path matches reality; no false “1.0 shipped” claims | **done** | doctor store probe + README product path (G007) |
 | P8 | Scenario checklist below ticked (public-safe notes); critical bugs fixed | **done** | S1–S5 notes (G008) |
-| P9 | Product gate decision doc + draft CHANGELOG `## [1.0.0]` Notes; Decision remains Defer until human Approve | **done** | Gate doc + **Approve** 2026-07-30 (G009/G010) |
+| P9 | Product gate decision doc + `CHANGELOG.md` `## [1.0.0]` Notes; Decision **Approve** recorded | **done** | Gate doc + **Approve** 2026-07-30 (G009/G010) |
 | P10 | Contract freeze G1–G9 still green on [v1-readiness.md](v1-readiness.md) | **done** | G1–G8 done; G9 **Approve** |
-| P11 | Maintainer Approve + release (`node scripts/release.mjs 1.0.0`, tag, npm) | **in progress** | G010 after chat **Approve** |
+| P11 | Maintainer Approve and public `1.0.0` release | **done** | Annotated `v1.0.0` → `2b61da6c8ea60842d38d797bfb49af6ac9ba9fb5`; npm `@innocarpe/carpeos@1.0.0` reports the same `gitHead`; GitHub Release published 2026-07-30 (non-draft, non-prerelease) |
 
-**Product loop (P1–P9): green.** Decision **Approve** recorded — cut `1.0.0`.
+**Product loop (P1–P11): shipped.** **Approve** and the `1.0.0` release are recorded.
 
 ---
 
@@ -175,29 +176,27 @@ story when possible.
 | G007 | Doctor, README, operator path |
 | G008 | Scenario dogfood + fixes |
 | G009 | Product gate decision (no tag) |
-| G010 | SemVer 1.0.0 release (**only** after explicit Approve) |
+| G010 | SemVer 1.0.0 release record (after explicit Approve) |
 
 ---
 
-## Suggested CHANGELOG shape (draft only in G009)
+## Historical release evidence
 
-```markdown
-## [1.0.0] - YYYY-MM-DD
-
-### Notes
-
-- First stable **product** release: capture → evidence → meaningful units →
-  search/context-pack works end-to-end on the local path.
-- First stable **public contract** for CLI, setup, MCP tools, and local store
-  layout; breaking changes after this release require a MAJOR bump.
-```
-
-Do not paste or publish this section until G009/G010.
+- [CHANGELOG 1.0.0 entry](../../CHANGELOG.md#100---2026-07-30) records the
+  2026-07-30 stable release.
+- Annotated tag [`v1.0.0`](https://github.com/innocarpe/carpeos/tree/v1.0.0)
+  resolves to `2b61da6c8ea60842d38d797bfb49af6ac9ba9fb5`.
+- npm [`@innocarpe/carpeos@1.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos/v/1.0.0)
+  reports that same `gitHead`.
+- [GitHub Release `v1.0.0`](https://github.com/innocarpe/carpeos/releases/tag/v1.0.0)
+  is published, non-draft, and non-prerelease, dated 2026-07-30.
 
 ---
 
 ## Current recommendation
 
-Stay on **`0.y.z`** until product gates **P1–P9** are green (or waived) **and** a
-maintainer records **Approve** in [v1-freeze-decision.md](v1-freeze-decision.md).
-Contract-only readiness is **not** enough to ship `1.0.0`.
+Treat `1.0.0` as the shipped baseline for the frozen public CLI, setup, MCP, and
+local-store contract. Use the recorded tag and package identity; do not retag or
+republish this release. The baseline remains pipeline/contract completeness, not
+finished brain-level knowledge adjudication; that work belongs to
+[Product 2.0.0](product-2.0.0.md).
