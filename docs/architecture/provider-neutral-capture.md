@@ -1,111 +1,62 @@
 # Provider-Neutral Capture and MCP
 
-Status: G004 local capture implemented; MCP and remote retrieval planned.
-
-CarpeOS works across AI agents by normalizing provider lifecycle payloads into a
-common capture envelope. Provider adapters parse provider-specific hook JSON.
-The capture core writes exactly one raw `EvidenceArtifact` for the local runtime
-and leaves extraction, claims, acceptance, retrieval, and projection to later
-stages.
-
-## Capture Pipeline
-
-```text
-Codex / Claude Code / Grok Build hook JSON
-  -> provider adapter
-  -> capture envelope
-  -> AES-256-GCM protected value
-  -> metadata-only EvidenceArtifact
-  -> local append-only SQLite rows
-  -> durable outbox item
-  -> remote sync                 <- planned G005+
-  -> retrieval and MCP           <- planned
-```
-
-The current store is local-only. It uses Node 22.22+ `node:sqlite`; Node prints
-an `ExperimentalWarning` because the built-in SQLite module is still marked
-experimental in Node 22.22.
-
-## Implemented Adapter Surface
-
-The CLI supports:
-
-- `carpeos capture-hook --provider codex`;
-- `carpeos capture-hook --provider claude`;
-- `carpeos capture-hook --provider grok`;
-- `--input stdin` for command hooks that pass JSON on standard input;
-- `--input argv` for Codex notification-style payloads passed as one JSON
-  argument;
-- `--fail-open` to return exit code 0 when local capture fails;
-- `--quiet` to suppress successful hook output.
-
-The adapter normalizes:
-
-- Codex and Claude snake_case fields such as `hook_event_name`, `session_id`,
-  `turn_id`, `workspace_root`, and `cwd`;
-- Grok camelCase fields such as `hookEventName`, `sessionId`, `turnId`, and
-  `workspaceRoot`;
-- Codex notify fields such as `type` and `thread-id`.
-
-Each captured payload becomes an encrypted protected value. The canonical event
-contains a `ProtectedValueRef` with the same `protected_value_id` used by local
-encrypted storage and future erasure targeting, plus provenance, idempotency
-metadata, and request fingerprint. It does not include the raw hook JSON inline.
-
-When a provider supplies a valid timestamp, it becomes the evidence event's
-`valid_time.start`. The local store clock independently sets
-`recorded_time.start`, preserving the bitemporal distinction defined by the
-canonical model. Source-valid capture time participates in derived idempotency
-and request fingerprint identity; local recording time and workspace paths do
+Status: current-main audit. The documented local capture adapters and local MCP
+server are shipped; remote, hosted, and unimplemented adapter/MCP surfaces are
 not.
 
-## Hook Templates
+Provider-specific lifecycle payloads are normalized at the boundary and captured
+as local evidence. The adapter boundary prevents a provider's field names,
+availability, or output from becoming canonical authority.
 
-Public templates live in `adapters/`:
+## Shipped local capture path
 
-| Provider | Template | Notes |
-| --- | --- | --- |
-| Codex | `adapters/codex/hooks.json.example` | Command hooks receive JSON on standard input. The template does not claim async hook support. |
-| Codex notify | `adapters/codex/notify.toml.example` | Separate user-level notification example. It uses `--input argv` and is not a general lifecycle hook replacement. |
-| Claude Code | `adapters/claude/settings.json.example` | Command hooks receive JSON on standard input. The template uses Claude Code's documented `async: true`. |
-| Grok Build | `adapters/grok/hooks.json.example` | Command hooks receive JSON on standard input. The template makes no native async claim. |
+```text
+documented provider hook JSON
+  -> local adapter
+  -> protected value
+  -> metadata-only EvidenceArtifact + local append-only rows
+  -> local retrieval/projection consumers
+```
 
-Official references:
+`carpeos capture-hook` supports the documented Codex, Claude Code, and Grok
+templates in [`adapters/`](../../adapters/), including stdin/argv handling and
+`--fail-open`. The source and synthetic coverage are
+[`packages/capture`](../../packages/capture/src/) and
+[`packages/capture/test`](../../packages/capture/test/). The local store keeps
+the protected value outside the canonical event; the event stores its
+`ProtectedValueRef`, provenance, idempotency metadata, and fingerprint rather
+than raw hook JSON.
 
-- Codex hooks: <https://learn.chatgpt.com/docs/hooks>
-- Claude Code hooks: <https://code.claude.com/docs/en/hooks>
-- Grok Build hooks: <https://docs.x.ai/build/features/hooks>
+A valid source timestamp supplies `valid_time.start`; local recording sets
+`recorded_time.start`. Workspace paths and recording time are not logical
+identity. By default, eligible `capture-hook` input captures an
+`EvidenceArtifact` and then applies policy-bounded extraction to append an
+`Observation`; `--no-extract` disables that extraction. Capture never
+automatically creates a Claim, AcceptanceDecision, or Supersession.
 
-## Adapter Responsibilities
+## Responsibilities and limits
 
-Adapters SHOULD:
+Adapters preserve non-empty provenance, attach idempotency metadata, keep
+provider details behind the boundary, and may fail open when capture failure
+would interrupt host work. They must not expose protected values, assign a
+canonical `zone_sequence`, mutate a claim into a fact, or treat provider output
+as authoritative.
 
-- preserve non-empty provider and session provenance;
-- write raw provider content as protected `EvidenceArtifact`;
-- attach idempotency key and request fingerprint;
-- keep provider-specific field names behind the adapter boundary;
-- fail open in lifecycle hooks when capture would otherwise interrupt agent
-  work.
+The shipped local MCP implementation is source-backed by
+[`apps/carpeos-mcp-server`](../../apps/carpeos-mcp-server/src/) and is limited
+to its implemented, tested tool inventory. It resolves local, explicitly
+visible trust zones and returns projections rather than canonical mutations.
+A template, a roadmap mention, or an adapter-shaped interface does not ship a
+new provider integration or MCP tool.
 
-Adapters MUST NOT:
+## Planned and deferred work
 
-- store raw provider payload inline in canonical events;
-- derive `Observation`, `Claim`, `AcceptanceDecision`, or `Supersession` during
-  raw capture;
-- mutate claims into accepted facts;
-- make provider output authoritative by default;
-- expose protected values to unauthorized clients;
-- assign canonical `zone_sequence` locally.
+Remote sync, hosted capture or retrieval, unimplemented provider adapters, and
+unimplemented MCP tools remain planned. Product 3.2 does not change this
+boundary: B0 is a planned explicit local reconciliation preview, never a hook
+or MCP side effect. B1 apply, automatic Claim/AcceptanceDecision creation, and
+sync convergence are deferred. See [ADR 0015](../adr/0015-policy-version-reconciliation.md)
+and [Product 3.2.0](../maintainers/product-3.2.0.md).
 
-## MCP Responsibilities
-
-MCP tools are planned. They should eventually return:
-
-- query-time accepted facts;
-- visible lineage;
-- conflicts and gaps;
-- redacted protected-value markers;
-- projection freshness metadata when available.
-
-MCP tools MUST enforce trust-zone boundaries before returning content. The G004
-runtime does not expose an MCP server or retrieval API yet.
+All examples and fixtures must remain synthetic and body-free at public
+boundaries.

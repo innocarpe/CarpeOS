@@ -1,116 +1,81 @@
 # CarpeOS Architecture Overview
 
-Status: planned architecture for the v1 MVP.
+Status: current-main architecture audit. Product 3.2 runtime work is planned unless
+its Product 3.2 gate is marked done.
 
-CarpeOS is a public implementation for private knowledge systems. Its core
-architecture is an append-only canonical event store with rebuildable,
-non-authoritative projections.
+CarpeOS keeps private knowledge in a local canonical store and derives
+rebuildable, non-authoritative read models from it. The canonical boundary is not
+a graph, vector index, MCP response, export, or provider payload.
 
-## System Shape
+## Current-main boundary
+
+| Surface | Current-main status | Authority |
+| --- | --- | --- |
+| Local canonical event store | Shipped | Source of truth |
+| Disposition and review history | Shipped; append-only local history | Source evidence, not a claim mutation |
+| Retrieval and context-pack projections | Shipped locally; promoted/active-only defaults apply | Rebuildable projection |
+| Deterministic local vector and graph projections | Shipped locally | Candidate and lineage projection |
+| Provider-neutral local hook capture and fail-open hook behavior | Shipped for the documented adapters | Captured evidence only |
+| Hosted graph/vector, remote sync, online learning, adaptive ranking, and unimplemented provider or MCP surfaces | Planned or deferred | Not shipped |
+| Product 3.2 B0 reconciliation preview | Planned | Metadata-only, zero-write preview |
+| Product 3.2 B1 apply and sync convergence | Deferred | Not part of 3.2 |
+
+Source evidence: [local store](../../packages/local-store/src/store.ts),
+[retrieval](../../packages/retrieval/src/query.ts),
+[graph projection](../../packages/retrieval/src/graph-projection.ts),
+[local embedding provider](../../packages/retrieval/src/embedding-provider.ts),
+[MCP tools](../../apps/carpeos-mcp-server/src/tools.ts), and their synthetic
+tests under the corresponding `test/` directories.
+
+## System shape
 
 ```text
-Provider lifecycle hooks
-  -> capture adapters
-  -> local append-only outbox
-  -> private canonical event store
-  -> query-time accepted-fact engine
-  -> rebuildable projections
-  -> MCP and human interfaces
+provider hook
+  -> provider-neutral local capture adapter
+  -> protected value + metadata-only EvidenceArtifact
+  -> local append-only canonical and review/disposition history
+  -> policy-checked query-time derivation
+  -> rebuildable local retrieval, graph, vector, MCP, and export projections
 ```
 
-The runtime is planned. This document defines the target architecture and
-invariants, not completed implementation.
+The shipped path is local. A provider adapter normalizes input but does not make
+provider output authoritative. Hooks may fail open so capture cannot interrupt
+host work. Remote synchronization, hosted services, and adapter surfaces not
+implemented and tested in current main remain planned.
 
-## Canonical Layer
+## Canonical and derived layers
 
-The canonical layer stores immutable `CanonicalEvent` records. The only v1
-canonical payload types are:
+The schema-v1 canonical event types are `EvidenceArtifact`, `Observation`,
+`Claim`, `AcceptanceDecision`, and `Supersession`. Events are append-only;
+Claims are immutable; acceptance and supersession are represented by their own
+events. Protected plaintext is outside canonical events. Trust zones are
+physical isolation boundaries, and replay is idempotent within a zone.
 
-- `EvidenceArtifact`;
-- `Observation`;
-- `Claim`;
-- `AcceptanceDecision`;
-- `Supersession`.
+Derived outputs may be deleted or rebuilt without changing canonical knowledge.
+Retrieval rechecks candidates against visible canonical records and exposes
+promoted/active knowledge by default. Graph and vector results never establish
+acceptance on their own. See [projections](projections.md) and
+[provider-neutral capture](provider-neutral-capture.md).
 
-Every canonical event carries bitemporal time, lifecycle status, epistemic
-authority, trust-zone metadata, non-empty provenance, idempotency metadata, and
-eventually a server-assigned per-zone sequence.
+## Product 3.2 boundary
 
-## Derived Layer
+[ADR 0015](../adr/0015-policy-version-reconciliation.md) selects only B0:
+a deterministic, bounded, metadata-only reconciliation preview that writes
+nothing. It retains schema v1, trust zones, append-only history, fail-open
+hooks, and promoted-active-only defaults. Automatic Claim or
+AcceptanceDecision creation remains off.
 
-The derived layer computes:
+B0 is not implemented merely because this architecture is documented. B1
+safe-subset apply, Supersession construction, protected-value transfer, and sync
+convergence are deferred. The authoritative gate status is
+[Product 3.2.0](../maintainers/product-3.2.0.md); do not infer K2--K12,
+release, installation, or publication completion from this document.
 
-- accepted facts;
-- lineage graphs;
-- open-loop views;
-- session summaries;
-- Obsidian notes;
-- vector indexes;
-- graph indexes;
-- MCP context packs;
-- dashboards.
+## Synthetic example
 
-Derived artifacts are projections. They may be cached, deleted, rebuilt, or
-redacted without changing canonical knowledge.
-
-## Invariants
-
-1. Canonical events are append-only after acceptance.
-2. Claims are immutable.
-3. Acceptance is represented by `AcceptanceDecision`, not claim mutation.
-4. Supersession is represented by `Supersession`, not destructive update.
-5. Accepted facts are query-time derivations.
-6. Valid time and recorded time are independent.
-7. Every query resolves both time axes either from supplied filters or normative
-   defaults: omitted valid time means any visible valid time, and omitted
-   recorded time means latest recorded knowledge visible to the requester.
-8. Stored lifecycle status is only `draft` or `active`; superseded and erased
-   are derived from visible ledger events.
-9. Epistemic authority is only `unverified`, `self_reported`, `observed`,
-   `imported`, `derived`, or `verified`; acceptance outcomes live only in
-   `AcceptanceDecision`.
-10. Trust zones are physical isolation boundaries limited to `local_device`,
-   `user_cloud`, and `managed_service`.
-11. Public network reachability is external-reference metadata, not a trust-zone
-    isolation class.
-12. Protected plaintext is stored outside canonical events.
-13. Erasure is recorded through `ErasureLedger` with method-compatible target
-    references and applied to projections.
-14. Idempotent replay does not append duplicate events.
-15. Idempotency conflicts are rejected within `(trust_zone_id, idempotency_key)`.
-16. Sync push batches are single-zone; batch records must match the request
-    trust zone.
-17. `zone_sequence` is monotonic only within a trust zone and may be assigned to
-    erasure ledger records for deterministic replay.
-18. Provider-specific details remain behind adapters.
-
-## Failure Modes
-
-| Area | Failure mode | Architectural response |
-| --- | --- | --- |
-| Capture | Duplicate hook delivery | Idempotency replay. |
-| Capture | Provider transcript is incomplete | Store evidence with incomplete lineage or reject. |
-| Sync | Same `(trust_zone_id, idempotency_key)`, different fingerprint | Reject as conflict. |
-| Sync | Batch mixes trust zones | Reject before sequence assignment. |
-| Query | Conflicting acceptance decisions | Return conflicted or review-required derived state. |
-| Security | Protected value access denied | Return redacted lineage. |
-| Projection | Projection is stale | Rebuild from canonical events and sequences. |
-| Erasure | Plaintext remains in projection | Delete or rebuild projection output from erasure ledger. |
-
-## Memory Capacity
-
-Store capacity, working-memory activation, procedural memory, and product
-projections are separate axes. See
-[Memory Capacity Architecture](memory-capacity.md) and
-[ADR 0009](../adr/0009-memory-capacity-model.md). Context packs and retrieval
-results express active capacity only; they do not redefine canonical authority.
-
-## Synthetic Flow
-
-1. Example Alpha hook captures a synthetic work message.
-2. The adapter creates an `EvidenceArtifact` with a protected-value reference.
-3. Extraction creates an `Observation`.
-4. A model proposes a `Claim`.
-5. A later review emits an `AcceptanceDecision`.
-6. A query derives the accepted fact from the visible claim and decision.
-7. An Obsidian note and vector entry are generated as projections.
+A synthetic provider hook can create protected evidence metadata in a local
+trust zone. Later, an explicitly authorized review may append a disposition or
+AcceptanceDecision. Retrieval, graph/vector candidates, context packs, and
+exports may then reflect visible promoted/active records, while preserving
+lineage and redaction metadata. None of those projections changes canonical
+authority.
