@@ -54,11 +54,40 @@ jobs:
       - name: Build npm package
         run: pnpm --filter @innocarpe/carpeos build
 
-      - name: Publish to npm
-        working-directory: packages/carpeos
+      - name: Pack approved release artifact once
+        id: artifact
+        run: |
+          node scripts/pack-once.mjs pack \
+            --sha "$GITHUB_SHA" \
+            --tag "${{ steps.pkg.outputs.tag }}" \
+            --version "${{ steps.pkg.outputs.version }}" \
+            --out-dir .release-artifact
+          echo "manifest=$GITHUB_WORKSPACE/.release-artifact/release-artifact.json" >> "$GITHUB_OUTPUT"
+          echo "tarball=$GITHUB_WORKSPACE/.release-artifact/$(node -p "require('./.release-artifact/release-artifact.json').filename")" >> "$GITHUB_OUTPUT"
+
+      - name: Install and smoke the packed artifact
+        env:
+          MANIFEST: ${{ steps.artifact.outputs.manifest }}
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
+        run: |
+          node scripts/pack-once.mjs assert-artifact --manifest "$MANIFEST" --tarball "$TARBALL"
+          mkdir -p .release-smoke
+          npm install --prefix .release-smoke "$TARBALL"
+          .release-smoke/node_modules/.bin/carpeos --help
+
+      - name: Publish packed artifact to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+          MANIFEST: ${{ steps.artifact.outputs.manifest }}
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
+        run: |
+          node scripts/pack-once.mjs assert-artifact --manifest "$MANIFEST" --tarball "$TARBALL"
+          npm publish "$TARBALL" --access public --provenance
+
+      - name: Verify published registry artifact
+        env:
+          MANIFEST: ${{ steps.artifact.outputs.manifest }}
+        run: node scripts/pack-once.mjs verify-registry --manifest "$MANIFEST"
 
       - name: Extract changelog section
         id: notes
