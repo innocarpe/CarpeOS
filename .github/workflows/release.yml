@@ -65,15 +65,30 @@ jobs:
           echo "manifest=$GITHUB_WORKSPACE/.release-artifact/release-artifact.json" >> "$GITHUB_OUTPUT"
           echo "tarball=$GITHUB_WORKSPACE/.release-artifact/$(node -p "require('./.release-artifact/release-artifact.json').filename")" >> "$GITHUB_OUTPUT"
 
-      - name: Install and smoke the packed artifact
+      - name: Install and smoke the exact packed artifact before publish
         env:
           MANIFEST: ${{ steps.artifact.outputs.manifest }}
           TARBALL: ${{ steps.artifact.outputs.tarball }}
+          PACKAGE_VERSION: ${{ steps.pkg.outputs.version }}
         run: |
           node scripts/pack-once.mjs assert-artifact --manifest "$MANIFEST" --tarball "$TARBALL"
-          mkdir -p .release-smoke
-          npm install --prefix .release-smoke "$TARBALL"
-          .release-smoke/node_modules/.bin/carpeos --help
+          SMOKE_ROOT="$(mktemp -d "$RUNNER_TEMP/carpeos-release-smoke.XXXXXX")"
+          cleanup() {
+            rm -rf "$SMOKE_ROOT"
+          }
+          trap cleanup EXIT HUP INT TERM
+          export HOME="$SMOKE_ROOT/home"
+          export CARPEOS_HOME="$HOME"
+          export npm_config_cache="$SMOKE_ROOT/npm-cache"
+          mkdir -p "$HOME" "$npm_config_cache"
+          npm install --prefix "$SMOKE_ROOT/install" "$TARBALL"
+          CLI="$SMOKE_ROOT/install/node_modules/.bin/carpeos"
+          test -x "$CLI"
+          VERSION_JSON="$("$CLI" --version)"
+          INSTALLED_VERSION="$(VERSION_JSON="$VERSION_JSON" node -e 'const value = JSON.parse(process.env.VERSION_JSON); if (value.ok !== true || value.name !== "@innocarpe/carpeos" || typeof value.version !== "string") process.exit(1); process.stdout.write(value.version)')"
+          test "$INSTALLED_VERSION" = "$PACKAGE_VERSION"
+          "$CLI" setup doctor
+          node scripts/smoke-dogfood.mjs --cli "$CLI"
 
       - name: Publish packed artifact to npm
         env:
