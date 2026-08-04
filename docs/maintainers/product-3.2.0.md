@@ -20,31 +20,36 @@ The fixed-201-row availability advisory is fail-closed: it does not claim comple
 | --- | --- | --- |
 | K0 | Product 1.0 P11 correction, PR #140 | **complete** |
 | K1 | 3.2 DoD/index/decision preimage, PR #141 | **complete** |
-| K2 | Chronology, correction, exact-normalized deduplication, and `adj_v3`, PR #147 | **complete** |
+| K2 | Chronology, correction, exact-normalized deduplication, and `adj_v3`, PRs #147, #160, #164 | **complete** |
 | K3 | Deterministic adjudication evaluator, PR #150 | **complete** |
 | K4 | Evidence-only knowledge-form evaluator with automatic Claim creation off, PR #152 | **complete** |
 | K5 | Policy-aware held review and terminal protection, PR #151 | **complete** |
 | K6 | Bounded B0 preview, global taint, and digest proof, PRs #153, #162, #166, #170, #171 | **complete** |
 | K7 | B0 selected; unsupported apply flags fail before reconciliation writes; B1 deferred/absent | **complete** |
 | K8 | Retrieval evaluator and observed graph branches, PRs #148, #161, #167, #169 | **complete** |
-| K9 | Synthetic dogfood, documentation truth, pack-once/release proofs, and CI evaluator build, PRs #154–#159, #163–#165, #168 | **complete** |
+| K9 | Synthetic dogfood, documentation truth, pack-once/release proofs, and CI evaluator build, PRs #149, #154–#159, #163, #165, #168 | **complete** |
 | K10 | This freeze audit is complete; separate PR14 approval has not occurred | **audit complete / Approve pending** |
 | K11 | Exact tagged SHA, tarball, registry, and GitHub release identity | **pending** |
 | K12 | Public-safe activation receipt | **pending** |
 
 ## Observed verification evidence
 
-The full check recorded for the implementation boundary completed its formatter check, build, typecheck, test, and public-boundary stages. Lint completed with its recorded existing warnings; this audit does not alter or waive them. Final cleaner result: **PASS**. Architect review: **CLEAR / CLEAR / CLEAR — APPROVE**. QA: **passed**.
+The implementation-gate evidence is bound to `42b974947b3e713acd0ca394d473583a05d50017`: `pnpm check` exited `0`; `pnpm --filter @carpeos/capture eval:adjudication`, `pnpm --filter @carpeos/capture eval:knowledge-form`, and `pnpm --filter @carpeos/retrieval eval:retrieval` each exited `0`; `pnpm smoke:mcp`, `pnpm smoke:product`, `pnpm smoke:knowledge`, and `pnpm smoke:dogfood` each exited `0`; sync E2E exited `0`; and `node --test scripts/test/*.test.mjs` completed all seven pack/release tests with exit `0`. The public-boundary check passed for 305 public files. PR #172 retains durable CI references: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30877973348) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30877973329). These are implementation-gate records, not publication, installation, deployment, activation, or approval evidence. Final cleaner result: **PASS**. Architect review: **CLEAR / CLEAR / CLEAR — APPROVE**. QA: **passed**.
 
 | Area | Observed result |
 | --- | --- |
 | Adjudication | `adj_v3`; digest `sha256:cf19f02d226e4cf8313394b0675c3a68379c421b50a4faa5b99f710b799bf626`; accuracy `1`; zero false promotions, assertion failures, and authority writes |
 | Knowledge form | digest `sha256:a6a94b6e306c21a9b091cd7bfaf86773c49cd367c587ba9eb296cef59ded50fc`; accuracy, Claim precision/recall, and Observation preservation `1`; zero false candidates, failures, and automatic writes |
 | Retrieval | corpus `sha-256:b829314559282d228b2bdd50964a9e6f2f8bdd84f7367b0c67f519c291518c5e`; rebuild `sha-256:e3edf25562ee8a6deb731ea524ef38a94c010dd78dd5039cd2d2005b4c8e95de`; 8/8 canonical branches; recall@3 and MRR `1`; zero failures or mutation |
-| Smokes and sync | MCP, product loop, knowledge, and synthetic dogfood smokes passed; sync E2E passed |
-| Pack/release | Seven pack/release tests passed, including pack-once and release-artifact workflow proofs |
+| Smokes and sync | `pnpm smoke:mcp`, `pnpm smoke:product`, `pnpm smoke:knowledge`, `pnpm smoke:dogfood`, and sync E2E each exited `0` |
+| Pack/release | Seven pack/release tests exited `0`, including pack-once and release-artifact workflow proofs |
 | Public boundary | Passed for 305 public files |
-| Final source | `sourceHash` `sha256:3d5c79211c4619f85858a9ce8344ea44f6c73c8d634e1514ed752b92a5135b63` |
+| Implementation-gate source | `sourceHash` `sha256:3d5c79211c4619f85858a9ce8344ea44f6c73c8d634e1514ed752b92a5135b63` |
+## B0 canonical preview evidence
+
+The implemented-and-tested B0 wire schema is `carpeos.policy-reconciliation-plan/v2`. Its public-safe all-zero canonical result has zero high-water values, zero primary and reason counts, no entries or taints, `plan_admissible=true`, and digest `sha256:131f346f95646f32abb1ee39b30df40970b75c15d2466ff96c353cbb204204e6`.
+
+The populated synthetic golden result has digest `sha256:3f25159769480ee4cce2740146b7c2e5faacf4edbdace5e6190ef0f2d50039f8`; `eligible_write=1`, `eligible_noop=1`, `unsafe_unchanged=1`, `replace=1`, `invalidate=0`, and `already_applied=1`; its reason counts include `missing_unsafe=1`. It is inadmissible under `unproved_conformance_global_taint` and `unproved_zero_write_global_taint`. Its synthetic metadata-only entry IDs are `evt_source0001`, `evt_source0002`, and `evt_source0003`, with targets `evt_target0001` and `evt_target0002`, replacement `evt_replace001`, and components `cmp:` plus 64 each of `a`, `b`, and `c`; no protected or canonical bodies are present.
 
 The observed B0 preview is deterministic and metadata-only: bounded emitted prefixes and digest evidence are reviewable, over-limit totals receive `incomplete_enumeration_global_taint` and are inadmissible, and preview writes zero rows. Apply, pin, and acknowledgement flags fail with exit `2` before reconciliation writes. Automatic/adjudicated Claim creation remains off (`allow_auto_claim=false`), no AcceptanceDecision is created, and retrieval remains offline with no online-feedback or adaptive-ranking mutation.
 
@@ -84,9 +89,10 @@ The observed B0 preview is deterministic and metadata-only: bounded emitted pref
 | #169 | `b8e906eacfe26d65c130ec255308e8546137dbae` | `fix/3.2-gen4-retrieval-graph` | fix(retrieval): prove graph branch semantics |
 | #170 | `1caa4a61d56e0e93d67a2093240ea6fa963f20eb` | `fix/3.2-gen4-policy-proof` | fix(local-store): prove production preview digest |
 | #171 | `42b974947b3e713acd0ca394d473583a05d50017` | `fix/3.2-gen5-digest-proof` | test(policy): close digest proof masking |
+| #172 | `7dc180547afac27fafdf290eae138692021b6813` | `docs/3.2-freeze-audit` | docs: freeze Product 3.2 audit |
 
 ## Residuals and next decision
 
 B1 safe-subset apply, Supersession construction, protected transfer/lifecycle, sync convergence, automatic/adjudicated Claims, AcceptanceDecision, online feedback, adaptive ranking, fuzzy deduplication, and any unsafe repair or mutation remain deferred or prohibited. Unsafe entries remain unchanged.
 
-PR14 will record the separate pre-tag **Approve** or continued **Defer** decision. PR13's merge commit becomes the immutable freeze SHA that PR14 records after this audit merges. PR14 does not publish, install, or activate 3.2. K11 and K12 remain future release-cycle work; PR15 may record only a public-safe preview-only activation receipt after those gates are evidenced.
+PR #172's rejected PR13 snapshot has `sourceHash` `sha256:e96b0e639867956ca1e9deae66694755df8102c53bf5d804be7f58cd760b5090`; it failed PR14 readiness and will be replaced after G016. No final freeze hash is recorded here. PR14 will record the separate pre-tag **Approve** or continued **Defer** decision. PR14 does not publish, install, deploy, or activate 3.2. K11 and K12 remain future release-cycle work; PR15 may record only a public-safe preview-only activation receipt after those gates are evidenced.

@@ -1,6 +1,6 @@
 # ADR 0015: Policy-version reconciliation requires bounded, digest-pinned preview plans
 
-Status: **Accepted for Product 3.2 B0; preview implementation pending; B1 deferred**
+Status: **Accepted for Product 3.2 B0; implemented and tested on current main for pre-release validation; unpublished, uninstalled, and undeployed; B1 deferred and absent**
 
 Date: 2026-08-03
 
@@ -8,7 +8,7 @@ Date: 2026-08-03
 
 Historical extraction, policy-scoped materialization, and held-review promotion can leave older-policy local canonical Observations active. Reconciliation must make that debt reviewable without granting authority, mutating ambiguity, or hiding uncertainty.
 
-Canonical/review/disposition history remains append-only and bitemporal. Schema v1, event types, trust zones, fail-open hooks, and promoted-active-only defaults remain unchanged. Reconciliation is a planned explicit local trust-zone CLI operation, never automatic through hooks, MCP, open, migration, or sync.
+Canonical/review/disposition history remains append-only and bitemporal. Schema v1, event types, trust zones, fail-open hooks, and promoted-active-only defaults remain unchanged. Reconciliation is an implemented, explicit local trust-zone CLI operation on current main for pre-release validation; it is never automatic through hooks, MCP, open, migration, or sync, and is not published, installed, or deployed.
 
 ## Decision
 
@@ -73,7 +73,7 @@ Permitted entry combinations are exhaustive: `eligible_write/replace/replace` ha
 
 ### Components, normalization, and global taint
 
-Planned `partitionReconciliationComponents` builds an undirected graph over the emitted entries’ sources, non-null target/replacement IDs, materialization lineage IDs, and existing/prospective Supersession relations. A component is its lexicographically sorted vertex IDs; `component_id` is `cmp:${sha256Hex(stableJson(componentVertexIds))}`. Components are recomputed, never accepted from CLI input, and describe emitted entries only.
+`partitionReconciliationComponents` builds an undirected graph over the emitted entries’ sources, non-null target/replacement IDs, materialization lineage IDs, and existing/prospective Supersession relations. A component is its lexicographically sorted vertex IDs; `component_id` is `cmp:${sha256Hex(stableJson(componentVertexIds))}`. Components are recomputed, never accepted from CLI input, and describe emitted entries only.
 
 Sort `reason_code_counts` by reason code; sort/deduplicate global-taint reasons/components/entry IDs lexicographically; sort entries by `(source_event_id,bucket,action,target_event_id-or-empty,replacement_event_id-or-empty,reason_code,component_id)`. Reason counts cover every emitted entry reason exactly once. The primary counts sum to `classified_count`; `replace_count + invalidate_count = eligible_write_count`; `already_applied_count = eligible_noop_count`.
 
@@ -81,7 +81,7 @@ An unsafe emitted entry is isolated only when its emitted component is disjoint 
 
 ### Canonical plan digest
 
-The sole normalized digest preimage is exactly this object; `plan_digest` is excluded. Store, CLI, and planned fixtures must produce exact UTF-8 `stableJson` bytes and actual SHA-256 equality.
+The sole normalized digest preimage is exactly this object; `plan_digest` is excluded. Store, CLI, and fixtures produce exact UTF-8 `stableJson` bytes and actual SHA-256 equality.
 
 ```ts
 const digestPreimage = {
@@ -122,7 +122,7 @@ No acknowledgement, apply result, receipt timestamp, display/error text, or body
 
 ## Exact B0 CLI contract
 
-The planned CLI path is preview-only:
+The implemented B0 CLI path is preview-only on current main for pre-release validation; it is not published, installed, or deployed:
 
 ```sh
 carpeos adjudicate reconcile-policy \
