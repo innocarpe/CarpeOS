@@ -77,7 +77,7 @@ The observed B0 preview is deterministic and metadata-only: bounded emitted pref
 | #156 | `7b685be08f1e0379c88b179ebd426b9c9ec364ca` | `fix/3.2-installed-release-proof` | fix(release): dogfood the installed tarball |
 | #157 | `1c9ef3765fbe5517053abac99c39c3d0a4433fab` | `docs/3.2-architecture-truth` | docs: align Product 3.2 architecture truth |
 | #158 | `c13ba6198a9e2e51cca54dc682838cd0dc704549` | `docs/3.2-session-wording` | docs: qualify session noise reduction |
-| #159 | `5f9b80ff1d8ff0d089f72f0df147f68a9aa5b4bb` | `chore/3.2-ci-evaluator-build` | chore(ci): reuse the capture evaluator build |
+| #159 | `5f9b80ff1d8ff0d089f72c0df147f68a9aa5b4bb` | `chore/3.2-ci-evaluator-build` | chore(ci): reuse the capture evaluator build |
 | #160 | `bde5da4bf658f673653a89544d4a1b4c84ee7c30` | `fix/3.2-correction-semantics` | fix(capture): preserve post-correction reassertions |
 | #161 | `a141838f9a8ce05aa943bce59d0ede7139b6e513` | `fix/3.2-retrieval-observed-eval` | fix(retrieval): derive quality evidence from execution |
 | #162 | `555b42bed0e8a47932559255d4aa8c6c94f30e5d` | `fix/3.2-policy-preview-proof` | fix(local-store): harden policy preview evidence |
