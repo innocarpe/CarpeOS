@@ -31,6 +31,7 @@ type Candidate = {
   project_id?: string;
   canonical_source?: "present" | "omitted";
   acceptance?: "accepted" | "rejected" | "needs_review";
+  provenance?: "linked" | "none";
 };
 type EvaluationCase = {
   id: string;
@@ -38,7 +39,12 @@ type EvaluationCase = {
   candidates: Candidate[];
   relevant_ids: string[];
   forbidden_ids?: string[];
-  budget?: { max_nodes: number; required_ids?: string[]; omitted_ids?: string[] };
+  budget?: {
+    max_nodes: number;
+    required_ids?: string[];
+    omitted_ids?: string[];
+    minimum_provenance_edges?: number;
+  };
 };
 
 export type RetrievalQualityCorpus = {
@@ -97,7 +103,11 @@ export function evaluateRetrievalQuality(corpus: unknown): RetrievalQualityRepor
     budgetViolations += observed.budgetViolated ? 1 : 0;
     falseAcceptanceCount += observed.falseAcceptance ? 1 : 0;
     assertionFailures +=
-      !topThree.some((id) => relevant.has(id)) || !observed.canonicalRechecked ? 1 : 0;
+      !topThree.some((id) => relevant.has(id)) ||
+      !observed.canonicalRechecked ||
+      !observed.graphContractSatisfied
+        ? 1
+        : 0;
     onlineFeedbackMutated ||= observed.onlineFeedbackMutated;
     adaptiveRankingMutated ||= observed.adaptiveRankingMutated;
     rebuildRows.push({
@@ -133,6 +143,7 @@ type ObservedPath = {
   budgetViolated: boolean;
   falseAcceptance: boolean;
   canonicalRechecked: boolean;
+  graphContractSatisfied: boolean;
   onlineFeedbackMutated: boolean;
   adaptiveRankingMutated: boolean;
   graph: { nodes_used: number; max_nodes: number } | undefined;
@@ -180,36 +191,39 @@ function executeEvidencePath(evaluationCase: EvaluationCase, caseIndex: number):
             eventIds,
           );
     const graphBudget = evaluationCase.budget;
+    const requiresAcceptanceGraph = evaluationCase.branch === "graph-no-acceptance-inference";
     const graphEvidence =
-      graphBudget === undefined
+      graphBudget === undefined && !requiresAcceptanceGraph
         ? undefined
         : (() => {
             const relevantId = requiredCorpusValue(
               evaluationCase.relevant_ids[0],
               "relevant id is missing during evaluation",
             );
-            const rootId = requiredCorpusValue(
+            const rootEventId = requiredCorpusValue(
               eventIds.get(relevantId),
               "relevant event mapping is missing during evaluation",
             );
             return {
-              maxNodes: graphBudget.max_nodes,
-              requiredEventIds: (graphBudget.required_ids ?? []).map((id) =>
+              rootEventId,
+              maxNodes: graphBudget?.max_nodes ?? 10,
+              minimumProvenanceEdges: graphBudget?.minimum_provenance_edges ?? 0,
+              requiredEventIds: (graphBudget?.required_ids ?? []).map((id) =>
                 requiredCorpusValue(
                   eventIds.get(id),
                   "required graph event mapping is missing during evaluation",
                 ),
               ),
-              omittedEventIds: (graphBudget.omitted_ids ?? []).map((id) =>
+              omittedEventIds: (graphBudget?.omitted_ids ?? []).map((id) =>
                 requiredCorpusValue(
                   eventIds.get(id),
                   "omitted graph event mapping is missing during evaluation",
                 ),
               ),
               walk: walkGraphNeighborhood(db, {
-                root_id: rootId,
+                root_id: rootEventId,
                 max_depth: 2,
-                max_nodes: graphBudget.max_nodes,
+                max_nodes: graphBudget?.max_nodes ?? 10,
                 visible_trust_zone_ids: [trustZoneId],
               }),
             };
@@ -235,6 +249,50 @@ function executeEvidencePath(evaluationCase: EvaluationCase, caseIndex: number):
         item.lineage.source_records.some((source) => source.event_type === "Claim") &&
         item.lineage.accepted_decision_event_ids !== undefined,
     );
+    const graphContainsClaimDecisionLineage =
+      graphEvidence !== undefined &&
+      graphEvidence.walk.nodes.some((node) => node.source_event_id === graphEvidence.rootEventId) &&
+      graphEvidence.walk.nodes.some((node) => {
+        const event =
+          node.source_event_id === undefined
+            ? undefined
+            : events.find((candidate) => candidate.event_id === node.source_event_id);
+        return event?.event_type === "AcceptanceDecision";
+      }) &&
+      graphEvidence.walk.edges.some(
+        (edge) =>
+          edge.edge_kind === "accepted_by" &&
+          edge.from_node_id === `evt:${graphEvidence.rootEventId}` &&
+          events.some(
+            (event) =>
+              event.event_type === "AcceptanceDecision" &&
+              edge.to_node_id === `evt:${event.event_id}`,
+          ),
+      );
+    const graphHasAcceptedDecision =
+      graphEvidence?.walk.nodes.some((node) => {
+        const event =
+          node.source_event_id === undefined
+            ? undefined
+            : events.find((candidate) => candidate.event_id === node.source_event_id);
+        return event?.event_type === "AcceptanceDecision" && event.payload.decision === "accepted";
+      }) ?? false;
+    const graphProvenanceSatisfied =
+      graphEvidence === undefined ||
+      graphEvidence.minimumProvenanceEdges === 0 ||
+      graphEvidence.requiredEventIds.every(
+        (eventId) =>
+          graphSourceIds.has(eventId) &&
+          hasProvenancePath(
+            graphEvidence.walk.edges,
+            graphEvidence.rootEventId,
+            eventId,
+            graphEvidence.minimumProvenanceEdges,
+          ),
+      );
+    const graphContractSatisfied =
+      !requiresAcceptanceGraph ||
+      (graphContainsClaimDecisionLineage && !graphHasAcceptedDecision && !falseAcceptance);
     const rankingSnapshot = stableJson(result.results);
     const repeatedRankingSnapshot = stableJson(
       searchLocalRetrievalIndex(db, { query, events: recheckEvents }).results,
@@ -247,9 +305,11 @@ function executeEvidencePath(evaluationCase: EvaluationCase, caseIndex: number):
         graphEvidence !== undefined &&
         (graphEvidence.walk.budgets.nodes_used > graphEvidence.maxNodes ||
           graphEvidence.requiredEventIds.some((eventId) => !graphSourceIds.has(eventId)) ||
-          graphEvidence.omittedEventIds.some((eventId) => !omittedGraphEventIds.has(eventId))),
+          graphEvidence.omittedEventIds.some((eventId) => !omittedGraphEventIds.has(eventId)) ||
+          !graphProvenanceSatisfied),
       falseAcceptance,
       canonicalRechecked,
+      graphContractSatisfied,
       onlineFeedbackMutated: canonicalSnapshot !== canonicalAfter,
       adaptiveRankingMutated: rankingSnapshot !== repeatedRankingSnapshot,
       graph:
@@ -289,6 +349,43 @@ function candidateIdsFromResults(
   return [...new Set(rankedIds)];
 }
 
+function hasProvenancePath(
+  edges: readonly {
+    edge_kind: string;
+    from_node_id: string;
+    to_node_id: string;
+  }[],
+  rootEventId: string,
+  targetEventId: string,
+  minimumEdges: number,
+): boolean {
+  const rootNodeId = `evt:${rootEventId}`;
+  const targetNodeId = `evt:${targetEventId}`;
+  const adjacency = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (edge.edge_kind !== "derived_from") continue;
+    const from = adjacency.get(edge.from_node_id) ?? new Set<string>();
+    from.add(edge.to_node_id);
+    adjacency.set(edge.from_node_id, from);
+    const to = adjacency.get(edge.to_node_id) ?? new Set<string>();
+    to.add(edge.from_node_id);
+    adjacency.set(edge.to_node_id, to);
+  }
+  const queue: Array<{ nodeId: string; edges: number }> = [{ nodeId: rootNodeId, edges: 0 }];
+  const visited = new Set<string>([rootNodeId]);
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined) break;
+    if (current.nodeId === targetNodeId) return current.edges >= minimumEdges;
+    for (const adjacent of adjacency.get(current.nodeId) ?? []) {
+      if (visited.has(adjacent)) continue;
+      visited.add(adjacent);
+      queue.push({ nodeId: adjacent, edges: current.edges + 1 });
+    }
+  }
+  return false;
+}
+
 function openEvaluationDatabase(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   db.exec(`
@@ -312,6 +409,7 @@ function syntheticEvent(
   eventIds: ReadonlyMap<string, string>,
 ): CanonicalEvent {
   const previous = candidateIndex === 0 ? undefined : [...eventIds.values()][candidateIndex - 1];
+  const linkedPrevious = candidate.provenance === "none" ? undefined : previous;
   const base = {
     schema_version: "v1" as const,
     event_id: eventId,
@@ -322,9 +420,15 @@ function syntheticEvent(
     epistemic_authority: "derived" as const,
     trust_zone: { trust_zone_id: trustZoneId, isolation: "local_device" as const },
     provenance:
-      previous === undefined
+      linkedPrevious === undefined
         ? []
-        : [{ ref_type: "event" as const, ref_id: previous, relationship: "derived_from" as const }],
+        : [
+            {
+              ref_type: "event" as const,
+              ref_id: linkedPrevious,
+              relationship: "derived_from" as const,
+            },
+          ],
     idempotency_key: `idem_${eventId}`,
     request_fingerprint: `sha-256:${String(candidateIndex).padStart(64, "0")}`,
     zone_sequence: candidateIndex + 1,
@@ -338,14 +442,14 @@ function syntheticEvent(
         statement: `Synthetic retrieval evaluation ${candidate.kind} for ${caseId}`,
         claim_type: "inference",
         support:
-          previous === undefined
+          linkedPrevious === undefined
             ? []
-            : [{ ref_type: "event", ref_id: previous, relationship: "supports" }],
+            : [{ ref_type: "event", ref_id: linkedPrevious, relationship: "supports" }],
       },
     };
   }
   if (candidate.kind === "decision") {
-    const claim = previous === undefined ? undefined : `claim_${previous}`;
+    const claim = linkedPrevious === undefined ? undefined : `claim_${linkedPrevious}`;
     return {
       ...base,
       event_type: "AcceptanceDecision",
@@ -489,7 +593,9 @@ function validateCorpus(value: unknown): RetrievalQualityCorpus {
         (candidate.canonical_source !== undefined &&
           !["present", "omitted"].includes(candidate.canonical_source as string)) ||
         (candidate.acceptance !== undefined &&
-          !["accepted", "rejected", "needs_review"].includes(candidate.acceptance as string))
+          !["accepted", "rejected", "needs_review"].includes(candidate.acceptance as string)) ||
+        (candidate.provenance !== undefined &&
+          !["linked", "none"].includes(candidate.provenance as string))
       )
         invalid("candidate is malformed");
       candidateIds.add(candidate.id);
@@ -517,7 +623,11 @@ function validateCorpus(value: unknown): RetrievalQualityCorpus {
             !budget.required_ids.every((id) => typeof id === "string" && candidateIds.has(id)))) ||
         (budget.omitted_ids !== undefined &&
           (!Array.isArray(budget.omitted_ids) ||
-            !budget.omitted_ids.every((id) => typeof id === "string" && candidateIds.has(id))))
+            !budget.omitted_ids.every((id) => typeof id === "string" && candidateIds.has(id)))) ||
+        (budget.minimum_provenance_edges !== undefined &&
+          (typeof budget.minimum_provenance_edges !== "number" ||
+            !Number.isInteger(budget.minimum_provenance_edges) ||
+            budget.minimum_provenance_edges < 1))
       )
         invalid("budget is invalid");
     }

@@ -59,11 +59,19 @@ describe("retrieval quality evaluation", () => {
   it("fails a graph contract when the executed bounded walk omits a required node", () => {
     const corpus = clone(fixture);
     const graphCase = requiredCase(corpus, "rq-graph-multihop");
-    graphCase.budget = { max_nodes: 1, required_ids: ["claim-graph-nonroot"] };
+    graphCase.budget = { max_nodes: 1, required_ids: ["evidence-graph-distal"] };
     const report = evaluateRetrievalQuality(corpus);
     expect(report.budget_violations).toBe(1);
     expect(passesRetrievalQualityGate(report)).toBe(false);
     expect(retrievalQualityExitCode(corpus)).toBe(1);
+  });
+  it("fails when the middle provenance edge no longer connects the required distal event", () => {
+    const corpus = clone(fixture);
+    const graphCase = requiredCase(corpus, "rq-graph-multihop");
+    requiredCandidate(graphCase, "evidence-graph-distal").provenance = "none";
+    const report = evaluateRetrievalQuality(corpus);
+    expect(report.budget_violations).toBeGreaterThan(0);
+    expect(passesRetrievalQualityGate(report)).toBe(false);
   });
 
   it("fails when a foreign synthetic origin is observable through the scoped query", () => {
@@ -87,8 +95,8 @@ describe("retrieval quality evaluation", () => {
   });
   it("fails when an observed accepted decision would falsely accept its claim", () => {
     const corpus = clone(fixture);
-    const acceptanceCase = requiredCase(corpus, "rq-recheck-acceptance");
-    requiredCandidate(acceptanceCase, "decision-recheck-review").acceptance = "accepted";
+    const acceptanceCase = requiredCase(corpus, "rq-graph-acceptance");
+    requiredCandidate(acceptanceCase, "decision-graph-review").acceptance = "accepted";
     const report = evaluateRetrievalQuality(corpus);
     expect(report.false_acceptance_count).toBeGreaterThan(0);
     expect(passesRetrievalQualityGate(report)).toBe(false);
