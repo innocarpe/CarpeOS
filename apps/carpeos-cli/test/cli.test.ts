@@ -217,6 +217,7 @@ describe("carpeos CLI", () => {
     expect(adjudicateTopic.stdout).toContain("--policy-version");
     expect(adjudicateTopic.stdout).toContain("Neither path creates an AcceptanceDecision");
     expect(adjudicateTopic.stdout).toContain("adj_v3");
+    expect(adjudicateTopic.stdout).toContain("defaults to current");
     expect(adjudicateTopic.stdout.match(/^ {2}--limit <n>/gm) ?? []).toHaveLength(1);
     expect(adjudicateTopic.stdout.match(/^ {2}--trust-zone <id>/gm) ?? []).toHaveLength(1);
   });
@@ -482,7 +483,7 @@ describe("carpeos CLI", () => {
     });
 
     const listed = runJson(
-      ["adjudicate", "list-held", "--limit", "10", "--policy-version", ADJUDICATION_POLICY_VERSION],
+      ["adjudicate", "list-held", "--limit", "10"],
       context,
     );
     expect(listed.status).toBe(0);
@@ -501,14 +502,7 @@ describe("carpeos CLI", () => {
     expect(held.every((item) => !("statement" in item))).toBe(true);
 
     const promoted = runJson(
-      [
-        "adjudicate",
-        "promote-held",
-        "--event-id",
-        promoteEventId,
-        "--policy-version",
-        ADJUDICATION_POLICY_VERSION,
-      ],
+      ["adjudicate", "promote-held", "--event-id", promoteEventId],
       context,
     );
     expect(promoted.status).toBe(0);
@@ -523,14 +517,7 @@ describe("carpeos CLI", () => {
     });
 
     const rejected = runJson(
-      [
-        "adjudicate",
-        "reject-held",
-        "--event-id",
-        rejectEventId,
-        "--policy-version",
-        ADJUDICATION_POLICY_VERSION,
-      ],
+      ["adjudicate", "reject-held", "--event-id", rejectEventId],
       context,
     );
     expect(rejected.status).toBe(0);
@@ -543,34 +530,12 @@ describe("carpeos CLI", () => {
       count: 1,
     });
     expect(
-      runJson(["adjudicate", "list-held", "--policy-version", ADJUDICATION_POLICY_VERSION], context)
-        .stdout,
+      runJson(["adjudicate", "list-held"], context).stdout,
     ).toMatchObject({ count: 0, policy_version: ADJUDICATION_POLICY_VERSION });
-
     expect(
-      runJson(
-        [
-          "adjudicate",
-          "promote-held",
-          "--event-id",
-          promoteEventId,
-          "--policy-version",
-          ADJUDICATION_POLICY_VERSION,
-        ],
-        context,
-      ).stdout,
+      runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context).stdout,
     ).toMatchObject({ status: "replay", decision: "promote", count: 1 });
-    const conflict = runJson(
-      [
-        "adjudicate",
-        "reject-held",
-        "--event-id",
-        promoteEventId,
-        "--policy-version",
-        ADJUDICATION_POLICY_VERSION,
-      ],
-      context,
-    );
+    const conflict = runJson(["adjudicate", "reject-held", "--event-id", promoteEventId], context);
     expect(conflict.status).toBe(1);
     expect(conflict.stdout).toMatchObject({ ok: false, status: "failed", count: 0 });
 
@@ -609,12 +574,14 @@ describe("carpeos CLI", () => {
       count: 1,
     });
     expect(
-      runJson(["adjudicate", "list-held", "--policy-version", ADJUDICATION_POLICY_VERSION], context)
-        .stdout,
+      runJson(["adjudicate", "list-held"], context).stdout,
     ).toMatchObject({ count: 0 });
-
-    const missingPolicy = runJson(["adjudicate", "list-held"], context);
-    expect(missingPolicy.status).toBe(2);
+    const defaultedPolicy = runJson(["adjudicate", "list-held"], context);
+    expect(defaultedPolicy.status).toBe(0);
+    expect(defaultedPolicy.stdout).toMatchObject({
+      policy_version: ADJUDICATION_POLICY_VERSION,
+      count: 0,
+    });
     const invalidPolicy = runJson(
       ["adjudicate", "list-held", "--policy-version", "invalid policy"],
       context,
@@ -622,17 +589,7 @@ describe("carpeos CLI", () => {
     expect(invalidPolicy.status).toBe(2);
     expect(invalidPolicy.stderr).toMatchObject({ ok: false, error: { code: "invalid_usage" } });
 
-    const invalidLimit = runJson(
-      [
-        "adjudicate",
-        "list-held",
-        "--limit",
-        "201",
-        "--policy-version",
-        ADJUDICATION_POLICY_VERSION,
-      ],
-      context,
-    );
+    const invalidLimit = runJson(["adjudicate", "list-held", "--limit", "201"], context);
     expect(invalidLimit.status).toBe(2);
     expect(invalidLimit.stderr).toMatchObject({ ok: false, error: { code: "invalid_usage" } });
   });
