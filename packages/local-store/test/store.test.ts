@@ -1571,18 +1571,12 @@ describe("policy reconciliation preview", () => {
       if (value === undefined) throw new Error(`missing required ${label}`);
       return value;
     };
-    const matrix: Array<{ field: string; mutate: (value: PolicyReconciliationPlanV2) => void }> = [
-      {
-        field: "schema",
-        mutate: (v) => ((v as { schema: string }).schema = "carpeos.policy-reconciliation-plan/v3"),
-      },
+    type Mutation = { field: string; mutate: (value: PolicyReconciliationPlanV2) => void };
+    const validMutations: Mutation[] = [
       { field: "trust_zone_id", mutate: (v) => (v.trust_zone_id = "tz_other") },
       { field: "from_policy", mutate: (v) => (v.from_policy = "adj_v2") },
       { field: "to_policy", mutate: (v) => (v.to_policy = "adj_v4") },
       { field: "limit", mutate: (v) => (v.limit = 4) },
-      { field: "total_candidate_count", mutate: (v) => (v.total_candidate_count = 4) },
-      { field: "classified_count", mutate: (v) => (v.classified_count = 4) },
-      { field: "truncated", mutate: (v) => (v.truncated = true) },
       {
         field: "high_water.canonical_local_sequence_max",
         mutate: (v) => (v.high_water.canonical_local_sequence_max = 16),
@@ -1591,14 +1585,69 @@ describe("policy reconciliation preview", () => {
         field: "high_water.disposition_row_count",
         mutate: (v) => (v.high_water.disposition_row_count = 16),
       },
-      { field: "high_water.review_row_count", mutate: (v) => (v.high_water.review_row_count = 16) },
-      { field: "high_water.outbox_id_max", mutate: (v) => (v.high_water.outbox_id_max = 16) },
+      {
+        field: "high_water.review_row_count",
+        mutate: (v) => (v.high_water.review_row_count = 16),
+      },
+      {
+        field: "high_water.outbox_id_max",
+        mutate: (v) => (v.high_water.outbox_id_max = 16),
+      },
       {
         field: "high_water.supersession_event_count",
         mutate: (v) => (v.high_water.supersession_event_count = 16),
       },
-      { field: "counts.eligible_write_count", mutate: (v) => (v.counts.eligible_write_count = 2) },
-      { field: "counts.eligible_noop_count", mutate: (v) => (v.counts.eligible_noop_count = 2) },
+      {
+        field: "global_taint_reason_codes[0]",
+        mutate: (v) => (v.global_taint_reason_codes[0] = "eligible_cross_zone_global_taint"),
+      },
+      {
+        field: "global_taint_component_ids[0]",
+        mutate: (v) => (v.global_taint_component_ids[0] = component("0")),
+      },
+      {
+        field: "global_taint_entry_ids[0]",
+        mutate: (v) => (v.global_taint_entry_ids[0] = "evt_00000000"),
+      },
+      {
+        field: "entries[0].source_event_id",
+        mutate: (v) => (required(v.entries[0], "entry").source_event_id = "evt_source0000"),
+      },
+      {
+        field: "entries[0].target_event_id",
+        mutate: (v) => (required(v.entries[0], "entry").target_event_id = "evt_target0009"),
+      },
+      {
+        field: "entries[0].replacement_event_id",
+        mutate: (v) => (required(v.entries[0], "entry").replacement_event_id = "evt_replace009"),
+      },
+      {
+        field: "entries[0].component_id",
+        mutate: (v) => (required(v.entries[0], "entry").component_id = component("0")),
+      },
+    ];
+    for (const { field, mutate } of validMutations) {
+      const changed = structuredClone(plan);
+      mutate(changed);
+      expect(digestPolicyReconciliationPlanV2(changed), field).not.toBe(golden);
+    }
+
+    const invalidMutations: Mutation[] = [
+      {
+        field: "schema",
+        mutate: (v) => ((v as { schema: string }).schema = "carpeos.policy-reconciliation-plan/v3"),
+      },
+      { field: "total_candidate_count", mutate: (v) => (v.total_candidate_count = 4) },
+      { field: "classified_count", mutate: (v) => (v.classified_count = 4) },
+      { field: "truncated", mutate: (v) => (v.truncated = true) },
+      {
+        field: "counts.eligible_write_count",
+        mutate: (v) => (v.counts.eligible_write_count = 2),
+      },
+      {
+        field: "counts.eligible_noop_count",
+        mutate: (v) => (v.counts.eligible_noop_count = 2),
+      },
       {
         field: "counts.unsafe_unchanged_count",
         mutate: (v) => (v.counts.unsafe_unchanged_count = 2),
@@ -1620,30 +1669,6 @@ describe("policy reconciliation preview", () => {
       },
       { field: "plan_admissible", mutate: (v) => (v.plan_admissible = true) },
       {
-        field: "global_taint_reason_codes[0]",
-        mutate: (v) => (v.global_taint_reason_codes[0] = "unproved_zero_write_global_taint"),
-      },
-      {
-        field: "global_taint_component_ids[0]",
-        mutate: (v) => (v.global_taint_component_ids[0] = component("d")),
-      },
-      {
-        field: "global_taint_entry_ids[0]",
-        mutate: (v) => (v.global_taint_entry_ids[0] = "evt_source0009"),
-      },
-      {
-        field: "entries[0].source_event_id",
-        mutate: (v) => (required(v.entries[0], "entry").source_event_id = "evt_source0009"),
-      },
-      {
-        field: "entries[0].target_event_id",
-        mutate: (v) => (required(v.entries[0], "entry").target_event_id = "evt_target0009"),
-      },
-      {
-        field: "entries[0].replacement_event_id",
-        mutate: (v) => (required(v.entries[0], "entry").replacement_event_id = "evt_replace009"),
-      },
-      {
         field: "entries[0].bucket",
         mutate: (v) => (required(v.entries[0], "entry").bucket = "eligible_noop"),
       },
@@ -1655,21 +1680,11 @@ describe("policy reconciliation preview", () => {
         field: "entries[0].reason_code",
         mutate: (v) => (required(v.entries[0], "entry").reason_code = "invalidate"),
       },
-      {
-        field: "entries[0].component_id",
-        mutate: (v) => (required(v.entries[0], "entry").component_id = component("d")),
-      },
     ];
-    for (const { field, mutate } of matrix) {
+    for (const { field, mutate } of invalidMutations) {
       const changed = structuredClone(plan);
       mutate(changed);
-      try {
-        expect(digestPolicyReconciliationPlanV2(changed), field).not.toBe(golden);
-      } catch (error) {
-        expect(() => {
-          throw error;
-        }, field).toThrow();
-      }
+      expect(() => digestPolicyReconciliationPlanV2(changed), field).toThrow();
     }
 
     expect(
