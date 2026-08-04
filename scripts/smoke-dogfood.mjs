@@ -114,7 +114,7 @@ export function resolveCliInvocation(argv, sourceEntry = cliEntry) {
   if (!installedStats.isFile() || (installedStats.mode & 0o111) === 0) {
     throw new Error(`--cli binary is not executable: ${argv[1]}`);
   }
-  if (installedEntry === realpathSync(sourceEntry)) {
+  if (existsSync(sourceEntry) && installedEntry === realpathSync(sourceEntry)) {
     throw new Error("--cli must not reference the repository CLI entry");
   }
   return { command: installedEntry, args: [], entry: installedEntry, kind: "installed" };
