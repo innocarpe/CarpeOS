@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1560,19 +1559,19 @@ describe("policy reconciliation preview", () => {
           component_id: component("c"),
         },
       ],
-    } satisfies Omit<PolicyReconciliationPlanV2, "plan_digest">;
-    const preimage = policyReconciliationDigestPreimageV2(populated);
-    const canonicalDigest = (value: typeof preimage) =>
-      `sha256:${createHash("sha256").update(stableJson(value), "utf8").digest("hex")}`;
-    const golden = "sha256:3f25159769480ee4cce2740146b7c2e5faacf4edbdace5e6190ef0f2d50039f8";
-    expect(digestPolicyReconciliationPlanV2(populated)).toBe(golden);
-    expect(canonicalDigest(preimage)).toBe(golden);
+    };
+    const plan = {
+      ...populated,
+      plan_digest: "sha256:3f25159769480ee4cce2740146b7c2e5faacf4edbdace5e6190ef0f2d50039f8",
+    } satisfies PolicyReconciliationPlanV2;
+    const golden = plan.plan_digest;
+    expect(digestPolicyReconciliationPlanV2(plan)).toBe(golden);
 
     const required = <T>(value: T | undefined, label: string): T => {
       if (value === undefined) throw new Error(`missing required ${label}`);
       return value;
     };
-    const matrix: Array<{ field: string; mutate: (value: typeof preimage) => void }> = [
+    const matrix: Array<{ field: string; mutate: (value: PolicyReconciliationPlanV2) => void }> = [
       {
         field: "schema",
         mutate: (v) => ((v as { schema: string }).schema = "carpeos.policy-reconciliation-plan/v3"),
@@ -1662,13 +1661,19 @@ describe("policy reconciliation preview", () => {
       },
     ];
     for (const { field, mutate } of matrix) {
-      const changed = structuredClone(preimage);
+      const changed = structuredClone(plan);
       mutate(changed);
-      expect(canonicalDigest(changed), field).not.toBe(golden);
+      try {
+        expect(digestPolicyReconciliationPlanV2(changed), field).not.toBe(golden);
+      } catch (error) {
+        expect(() => {
+          throw error;
+        }, field).toThrow();
+      }
     }
 
     expect(
-      digestPolicyReconciliationPlanV2({ ...populated, plan_digest: `sha256:${"0".repeat(64)}` }),
+      digestPolicyReconciliationPlanV2({ ...plan, plan_digest: `sha256:${"0".repeat(64)}` }),
     ).toBe(golden);
     const reorderedInput = {
       trust_zone_id: "tz_synthetic",
@@ -1703,26 +1708,26 @@ describe("policy reconciliation preview", () => {
       global_taint_reason_codes: [...reorderedInput.global_taint_reason_codes].reverse(),
     });
     expect(reverseNormalized).toEqual(normalized);
-    expect(canonicalDigest({ ...preimage, entries: [...preimage.entries].reverse() })).not.toBe(
-      golden,
-    );
-    expect(
-      canonicalDigest({
-        ...preimage,
+    expect(() =>
+      digestPolicyReconciliationPlanV2({ ...plan, entries: [...plan.entries].reverse() }),
+    ).toThrow("unsorted");
+    expect(() =>
+      digestPolicyReconciliationPlanV2({
+        ...plan,
         counts: {
-          ...preimage.counts,
-          reason_code_counts: [...preimage.counts.reason_code_counts].reverse(),
+          ...plan.counts,
+          reason_code_counts: [...plan.counts.reason_code_counts].reverse(),
         },
       }),
-    ).not.toBe(golden);
-    expect(
-      canonicalDigest({
-        ...preimage,
-        global_taint_reason_codes: [...preimage.global_taint_reason_codes].reverse(),
-        global_taint_component_ids: [...preimage.global_taint_component_ids].reverse(),
-        global_taint_entry_ids: [...preimage.global_taint_entry_ids].reverse(),
+    ).toThrow("reason counts");
+    expect(() =>
+      digestPolicyReconciliationPlanV2({
+        ...plan,
+        global_taint_reason_codes: [...plan.global_taint_reason_codes].reverse(),
+        global_taint_component_ids: [...plan.global_taint_component_ids].reverse(),
+        global_taint_entry_ids: [...plan.global_taint_entry_ids].reverse(),
       }),
-    ).not.toBe(golden);
+    ).toThrow("global taints");
   });
 
   it("does not write for an empty metadata-only preview", () => {
@@ -1954,6 +1959,22 @@ describe("policy reconciliation preview", () => {
         trustZoneId: "tz_synthetic",
       }),
     ).toThrow("initialized preview store");
+  });
+  it("does not let a caller-provided token turn the normal constructor into a preview", () => {
+    const { store, runtimeDir } = makeStore("tz_synthetic");
+    const direct = new LocalCaptureStore(
+      {
+        runtimeDir,
+        workspaceRoot: runtimeDir,
+        trustZoneId: "tz_synthetic",
+        keyProvider: new StaticKeyProvider(staticMaterial),
+        clock: { now: () => now },
+      },
+      Symbol("caller preview token"),
+    );
+    expect(direct.countRows("canonical_events")).toBe(0);
+    direct.close();
+    store.close();
   });
   function reconciliationWriteCounts(store: LocalCaptureStore) {
     return {

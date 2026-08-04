@@ -58,7 +58,6 @@ export type LocalStoreOptions = {
   execGit?: (args: string[], cwd: string) => string;
   dbPath?: string;
   trustZoneId?: string;
-  readOnlyPreview?: boolean;
   explicitProjectId?: string;
   keyProvider?: KeyProvider;
   clock?: Clock;
@@ -648,12 +647,12 @@ export class LocalCaptureStore {
   private readonly clock: Clock;
   private readonly keyBytes: Uint8Array;
 
-  constructor(options: LocalStoreOptions) {
+  constructor(options: LocalStoreOptions, previewOpenMarker?: symbol) {
     if (options.trustZoneId !== undefined && !isTrustZoneId(options.trustZoneId)) {
       throw new Error(`invalid trust zone id: ${options.trustZoneId}`);
     }
 
-    if (options.readOnlyPreview === true) {
+    if (previewOpenMarker === LocalCaptureStore.previewOpenMarker) {
       this.runtimeDir = options.runtimeDir;
       this.dbPath = options.dbPath ?? join(this.runtimeDir, "carpeos.sqlite");
       if (options.trustZoneId === undefined || !existsSync(this.dbPath)) {
@@ -726,13 +725,14 @@ export class LocalCaptureStore {
     this.upsertProject(identity.basis_kind);
   }
 
+  private static readonly previewOpenMarker = Symbol("LocalCaptureStore.preview");
   static openExistingPreview(options: {
     runtimeDir: string;
     workspaceRoot: string;
     trustZoneId: string;
     dbPath?: string;
   }): LocalCaptureStore {
-    return new LocalCaptureStore({ ...options, readOnlyPreview: true });
+    return new LocalCaptureStore(options, LocalCaptureStore.previewOpenMarker);
   }
   close(): void {
     this.db.close();
@@ -1616,34 +1616,43 @@ export class LocalCaptureStore {
     }
     this.db.exec("BEGIN");
     try {
-      const dispositionCandidates = this.db
+      const totalCandidateCount = safeSqliteInteger(
+        (
+          this.db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM knowledge_dispositions
+               WHERE trust_zone_id = ? AND policy_version = ?`,
+            )
+            .get(input.trust_zone_id, input.from_policy) as { n: unknown }
+        ).n,
+        "total_candidate_count",
+      );
+      // The preview contract emits only the deterministic bounded candidate prefix.
+      const candidatePrefix = this.db
         .prepare(
           `SELECT source_event_id, artifact_id, policy_version FROM knowledge_dispositions
            WHERE trust_zone_id = ? AND policy_version = ?
-           ORDER BY source_event_id COLLATE BINARY ASC, policy_version COLLATE BINARY ASC`,
+           ORDER BY source_event_id COLLATE BINARY ASC, policy_version COLLATE BINARY ASC
+           LIMIT ?`,
         )
-        .all(input.trust_zone_id, input.from_policy) as Array<{
+        .all(input.trust_zone_id, input.from_policy, input.limit) as Array<{
         source_event_id: string;
         artifact_id: string;
         policy_version: string;
       }>;
-      // Every exact from-policy disposition is a bounded preview candidate. Missing
-      // or unproved materializations are classified unsafe below; they never vanish.
-      const candidates = dispositionCandidates;
-      const totalCandidateCount = candidates.length;
-      const candidatePrefix = candidates.slice(0, input.limit);
+      const scanLimit = 201;
       const canonicalSupersessions = this.db
         .prepare(
           `SELECT event_id, trust_zone_id, event_json FROM canonical_events
            WHERE event_type = 'Supersession'
-           ORDER BY event_id COLLATE BINARY ASC`,
+           ORDER BY event_id COLLATE BINARY ASC LIMIT ?`,
         )
-        .all() as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
+        .all(scanLimit) as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
       const inboxRows = this.db
         .prepare(
-          "SELECT event_id, trust_zone_id, event_json FROM sync_inbox_events ORDER BY event_id COLLATE BINARY ASC",
+          "SELECT event_id, trust_zone_id, event_json FROM sync_inbox_events ORDER BY event_id COLLATE BINARY ASC LIMIT ?",
         )
-        .all() as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
+        .all(scanLimit) as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
       const inboxEvidence = new Map<string, CanonicalEvent | undefined>();
       for (const row of inboxRows) {
         try {
@@ -1664,7 +1673,8 @@ export class LocalCaptureStore {
       const inboxEventIds = new Set(inboxRows.map((row) => row.event_id));
       const localSupersessions = new Map<string, CanonicalEvent<"Supersession">>();
       const importedSupersessions = new Map<string, CanonicalEvent<"Supersession">>();
-      let unprovedSupersessionConformance = false;
+      let unprovedSupersessionConformance =
+        canonicalSupersessions.length === scanLimit || inboxRows.length === scanLimit;
       const loadSupersessions = (
         rows: Array<{ event_id: string; trust_zone_id: string; event_json: string }>,
         destination: Map<string, CanonicalEvent<"Supersession">>,
@@ -1767,49 +1777,105 @@ export class LocalCaptureStore {
           };
         }
         let observationConformanceUnproved = false;
+        const observationKeys = [
+          observationIdempotencyForPolicy(candidate.source_event_id, input.from_policy),
+          observationIdempotencyForPolicy(candidate.source_event_id, input.to_policy),
+          heldReviewObservationIdempotencyKey(
+            candidate.source_event_id,
+            input.trust_zone_id,
+            input.from_policy,
+          ),
+          heldReviewObservationIdempotencyKey(
+            candidate.source_event_id,
+            input.trust_zone_id,
+            input.to_policy,
+          ),
+        ];
+        const observationCount = safeSqliteInteger(
+          (
+            this.db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM canonical_events
+                 WHERE trust_zone_id = ? AND event_type = 'Observation'
+                   AND idempotency_key IN (?, ?, ?, ?)`,
+              )
+              .get(input.trust_zone_id, ...observationKeys) as { n: unknown }
+          ).n,
+          "matching observation count",
+        );
+        const observationLimit = 9;
         const observations = this.db
           .prepare(
             `SELECT event_id, event_json FROM canonical_events
              WHERE trust_zone_id = ? AND event_type = 'Observation'
-               AND idempotency_key IN (?, ?, ?, ?)`,
+               AND idempotency_key IN (?, ?, ?, ?)
+             ORDER BY event_id COLLATE BINARY ASC LIMIT ?`,
           )
-          .all(
-            input.trust_zone_id,
-            observationIdempotencyForPolicy(candidate.source_event_id, input.from_policy),
-            observationIdempotencyForPolicy(candidate.source_event_id, input.to_policy),
-            heldReviewObservationIdempotencyKey(
-              candidate.source_event_id,
-              input.trust_zone_id,
-              input.from_policy,
-            ),
-            heldReviewObservationIdempotencyKey(
-              candidate.source_event_id,
-              input.trust_zone_id,
-              input.to_policy,
-            ),
-          ) as Array<{ event_id: string; event_json: string }>;
+          .all(input.trust_zone_id, ...observationKeys, observationLimit) as Array<{
+          event_id: string;
+          event_json: string;
+        }>;
+        if (observationCount >= observationLimit) observationConformanceUnproved = true;
+        const policyDispositionCount = safeSqliteInteger(
+          (
+            this.db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM knowledge_dispositions
+                 WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)`,
+              )
+              .get(
+                candidate.source_event_id,
+                input.trust_zone_id,
+                input.from_policy,
+                input.to_policy,
+              ) as { n: unknown }
+          ).n,
+          "matching disposition count",
+        );
         const policyDispositions = this.db
           .prepare(
             `SELECT policy_version, disposition FROM knowledge_dispositions
-             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)`,
+             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)
+             ORDER BY policy_version COLLATE BINARY ASC LIMIT ?`,
           )
           .all(
             candidate.source_event_id,
             input.trust_zone_id,
             input.from_policy,
             input.to_policy,
+            3,
           ) as Array<{ policy_version: string; disposition: KnowledgeDisposition }>;
+        const heldReviewCount = safeSqliteInteger(
+          (
+            this.db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM knowledge_disposition_reviews
+                 WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)`,
+              )
+              .get(
+                candidate.source_event_id,
+                input.trust_zone_id,
+                input.from_policy,
+                input.to_policy,
+              ) as { n: unknown }
+          ).n,
+          "matching review count",
+        );
         const heldReviews = this.db
           .prepare(
             `SELECT policy_version, review_decision FROM knowledge_disposition_reviews
-             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)`,
+             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)
+             ORDER BY policy_version COLLATE BINARY ASC, review_id COLLATE BINARY ASC LIMIT ?`,
           )
           .all(
             candidate.source_event_id,
             input.trust_zone_id,
             input.from_policy,
             input.to_policy,
+            3,
           ) as Array<{ policy_version: string; review_decision: HeldReviewDecision }>;
+        if (policyDispositionCount >= 3 || heldReviewCount >= 3)
+          observationConformanceUnproved = true;
         const materializationAuthority = (
           policyVersion: string,
         ): "ordinary" | "held" | undefined => {
