@@ -482,10 +482,7 @@ describe("carpeos CLI", () => {
       count: 1,
     });
 
-    const listed = runJson(
-      ["adjudicate", "list-held", "--limit", "10"],
-      context,
-    );
+    const listed = runJson(["adjudicate", "list-held", "--limit", "10"], context);
     expect(listed.status).toBe(0);
     expect(listed.stdout).toMatchObject({
       ok: true,
@@ -501,10 +498,7 @@ describe("carpeos CLI", () => {
     expect(JSON.stringify(listed.stdout)).not.toContain("Synthetic held candidate");
     expect(held.every((item) => !("statement" in item))).toBe(true);
 
-    const promoted = runJson(
-      ["adjudicate", "promote-held", "--event-id", promoteEventId],
-      context,
-    );
+    const promoted = runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context);
     expect(promoted.status).toBe(0);
     expect(promoted.stdout).toMatchObject({
       ok: true,
@@ -516,10 +510,7 @@ describe("carpeos CLI", () => {
       observation: { lifecycle_status: "active" },
     });
 
-    const rejected = runJson(
-      ["adjudicate", "reject-held", "--event-id", rejectEventId],
-      context,
-    );
+    const rejected = runJson(["adjudicate", "reject-held", "--event-id", rejectEventId], context);
     expect(rejected.status).toBe(0);
     expect(rejected.stdout).toMatchObject({
       ok: true,
@@ -529,9 +520,10 @@ describe("carpeos CLI", () => {
       policy_version: ADJUDICATION_POLICY_VERSION,
       count: 1,
     });
-    expect(
-      runJson(["adjudicate", "list-held"], context).stdout,
-    ).toMatchObject({ count: 0, policy_version: ADJUDICATION_POLICY_VERSION });
+    expect(runJson(["adjudicate", "list-held"], context).stdout).toMatchObject({
+      count: 0,
+      policy_version: ADJUDICATION_POLICY_VERSION,
+    });
     expect(
       runJson(["adjudicate", "promote-held", "--event-id", promoteEventId], context).stdout,
     ).toMatchObject({ status: "replay", decision: "promote", count: 1 });
@@ -573,9 +565,7 @@ describe("carpeos CLI", () => {
       policy_version: "adj_test_v2",
       count: 1,
     });
-    expect(
-      runJson(["adjudicate", "list-held"], context).stdout,
-    ).toMatchObject({ count: 0 });
+    expect(runJson(["adjudicate", "list-held"], context).stdout).toMatchObject({ count: 0 });
     const defaultedPolicy = runJson(["adjudicate", "list-held"], context);
     expect(defaultedPolicy.status).toBe(0);
     expect(defaultedPolicy.stdout).toMatchObject({
