@@ -1639,11 +1639,29 @@ export class LocalCaptureStore {
            ORDER BY event_id COLLATE BINARY ASC`,
         )
         .all() as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
-      const inboxSupersessions = this.db
+      const inboxRows = this.db
         .prepare(
           "SELECT event_id, trust_zone_id, event_json FROM sync_inbox_events ORDER BY event_id COLLATE BINARY ASC",
         )
         .all() as Array<{ event_id: string; trust_zone_id: string; event_json: string }>;
+      const inboxEvidence = new Map<string, CanonicalEvent | undefined>();
+      for (const row of inboxRows) {
+        try {
+          const event = JSON.parse(row.event_json) as CanonicalEvent;
+          if (
+            !validateConformance("canonicalEvent", event).valid ||
+            event.event_id !== row.event_id ||
+            event.trust_zone.trust_zone_id !== row.trust_zone_id
+          ) {
+            inboxEvidence.set(row.event_id, undefined);
+            continue;
+          }
+          inboxEvidence.set(row.event_id, event);
+        } catch {
+          inboxEvidence.set(row.event_id, undefined);
+        }
+      }
+      const inboxEventIds = new Set(inboxRows.map((row) => row.event_id));
       const localSupersessions = new Map<string, CanonicalEvent<"Supersession">>();
       const importedSupersessions = new Map<string, CanonicalEvent<"Supersession">>();
       let unprovedSupersessionConformance = false;
@@ -1675,7 +1693,16 @@ export class LocalCaptureStore {
         }
       };
       loadSupersessions(canonicalSupersessions, localSupersessions, true);
-      loadSupersessions(inboxSupersessions, importedSupersessions, false);
+      for (const row of inboxRows) {
+        const event = inboxEvidence.get(row.event_id);
+        if (event === undefined) {
+          unprovedSupersessionConformance = true;
+          continue;
+        }
+        if (event.event_type === "Supersession") {
+          importedSupersessions.set(event.event_id, event);
+        }
+      }
       // An inbox copy remains imported evidence even when a canonical row shares
       // its event id; local overlap must not upgrade origin authority.
       const knownSupersessionRelations = [
@@ -1698,9 +1725,7 @@ export class LocalCaptureStore {
         ).values(),
       ];
       let reconciliationCandidates: ReconciliationCandidate[] = candidatePrefix.map((candidate) => {
-        const importedSource = this.db
-          .prepare("SELECT 1 AS found FROM sync_inbox_events WHERE event_id = ?")
-          .get(candidate.source_event_id) as { found: number } | undefined;
+        const importedSource = inboxEventIds.has(candidate.source_event_id);
         const sourceRow = this.db
           .prepare(
             "SELECT event_id, event_json FROM canonical_events WHERE event_id = ? AND trust_zone_id = ?",
@@ -1711,10 +1736,10 @@ export class LocalCaptureStore {
         if (sourceRow === undefined) {
           return {
             ...candidate,
-            unsafe_reason_code: importedSource === undefined ? "missing_unsafe" : "imported_unsafe",
+            unsafe_reason_code: importedSource ? "imported_unsafe" : "missing_unsafe",
           };
         }
-        if (importedSource !== undefined) {
+        if (importedSource) {
           return { ...candidate, unsafe_reason_code: "imported_unsafe" };
         }
         let source: CanonicalEvent;
@@ -1742,49 +1767,6 @@ export class LocalCaptureStore {
           };
         }
         let observationConformanceUnproved = false;
-        const inboxObservationIds = new Set<string>();
-        const relevantObservationKeys = new Set([
-          observationIdempotencyForPolicy(candidate.source_event_id, input.from_policy),
-          observationIdempotencyForPolicy(candidate.source_event_id, input.to_policy),
-          heldReviewObservationIdempotencyKey(
-            candidate.source_event_id,
-            input.trust_zone_id,
-            input.from_policy,
-          ),
-          heldReviewObservationIdempotencyKey(
-            candidate.source_event_id,
-            input.trust_zone_id,
-            input.to_policy,
-          ),
-        ]);
-        const inboxObservations = this.db
-          .prepare(
-            `SELECT event_id, event_json FROM sync_inbox_events
-             WHERE trust_zone_id = ?`,
-          )
-          .all(input.trust_zone_id) as Array<{ event_id: string; event_json: string }>;
-        for (const row of inboxObservations) {
-          try {
-            const event = JSON.parse(row.event_json) as CanonicalEvent;
-            if (
-              event.event_type !== "Observation" ||
-              !relevantObservationKeys.has(event.idempotency_key)
-            )
-              continue;
-            if (
-              !validateConformance("canonicalEvent", event).valid ||
-              event.event_id !== row.event_id ||
-              event.trust_zone.trust_zone_id !== input.trust_zone_id
-            ) {
-              observationConformanceUnproved = true;
-              continue;
-            }
-            inboxObservationIds.add(event.event_id);
-          } catch {
-            // A malformed inbox body cannot be associated with this candidate
-            // without a validated policy key, so it is not a relevant fact.
-          }
-        }
         const observations = this.db
           .prepare(
             `SELECT event_id, event_json FROM canonical_events
@@ -1961,12 +1943,8 @@ export class LocalCaptureStore {
             unsafe_reason_code: "ambiguous_unsafe",
           };
         }
-        const importedOldTarget = oldTargets.find((event) =>
-          inboxObservationIds.has(event.event_id),
-        );
-        const importedReplacement = replacements.find((event) =>
-          inboxObservationIds.has(event.event_id),
-        );
+        const importedOldTarget = oldTargets.find((event) => inboxEventIds.has(event.event_id));
+        const importedReplacement = replacements.find((event) => inboxEventIds.has(event.event_id));
         if (importedOldTarget !== undefined || importedReplacement !== undefined) {
           return {
             ...candidate,
@@ -4020,11 +3998,12 @@ function normalizePolicyVersion(policyVersion: string): string {
 }
 
 /**
- * adj_v2 shipped with the historical extract key. Every later policy keeps its
- * own materialization identity so its lineage cannot collide with adj_v2.
+ * adj_v1 and adj_v2 shipped with the historical extract key. Later policies
+ * keep their own materialization identities so historical lineage cannot be
+ * inferred from unrelated keys.
  */
 function observationIdempotencyForPolicy(sourceEventId: string, policyVersion: string): string {
-  if (policyVersion === "adj_v2") {
+  if (policyVersion === "adj_v1" || policyVersion === "adj_v2") {
     return extractionObservationIdempotencyKey(sourceEventId);
   }
   return `idem_${hashHex(

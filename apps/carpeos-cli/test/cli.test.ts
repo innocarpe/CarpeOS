@@ -1622,6 +1622,7 @@ describe("reconcile-policy success", () => {
     expect(result.status).toBe(0);
     expect(result.rawStdout).toBe(JSON.stringify(plan));
     expect(result.stdout).toEqual(plan);
+    expect(result.stdout.plan_digest).toBe(plan.plan_digest);
     expect(result.rawStdout).not.toContain("CLI BODY SENTINEL");
     expect(runtimeDurableFileDigests(context.home)).toEqual(before);
   });

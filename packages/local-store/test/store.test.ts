@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,7 @@ import {
   buildPolicyReconciliationPlanV2,
   classifyPolicyReconciliationEntry,
   digestPolicyReconciliationPlanV2,
+  type PolicyReconciliationPlanV2,
   partitionReconciliationComponents,
   policyReconciliationDigestPreimageV2,
 } from "../src/policy-reconciliation.js";
@@ -1491,6 +1493,237 @@ describe("policy reconciliation preview", () => {
     );
     expect(digestPolicyReconciliationPlanV2(plan)).toBe(plan.plan_digest);
   });
+  it("pins every plan-v2 digest preimage field and normalization boundary", () => {
+    const component = (hex: string) => `cmp:${hex.repeat(64)}`;
+    const populated = {
+      schema: "carpeos.policy-reconciliation-plan/v2" as const,
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 3,
+      total_candidate_count: 3,
+      classified_count: 3,
+      truncated: false,
+      high_water: {
+        canonical_local_sequence_max: 11,
+        disposition_row_count: 12,
+        review_row_count: 13,
+        outbox_id_max: 14,
+        supersession_event_count: 15,
+      },
+      counts: {
+        eligible_write_count: 1,
+        eligible_noop_count: 1,
+        unsafe_unchanged_count: 1,
+        replace_count: 1,
+        invalidate_count: 0,
+        already_applied_count: 1,
+        reason_code_counts: [
+          { reason_code: "already_applied" as const, count: 1 },
+          { reason_code: "missing_unsafe" as const, count: 1 },
+          { reason_code: "replace" as const, count: 1 },
+        ],
+      },
+      plan_admissible: false,
+      global_taint_reason_codes: [
+        "unproved_conformance_global_taint" as const,
+        "unproved_zero_write_global_taint" as const,
+      ],
+      global_taint_component_ids: [component("a"), component("b")],
+      global_taint_entry_ids: ["evt_source0001", "evt_source0002"],
+      entries: [
+        {
+          source_event_id: "evt_source0001",
+          target_event_id: "evt_target0001",
+          replacement_event_id: "evt_replace001",
+          bucket: "eligible_write" as const,
+          action: "replace" as const,
+          reason_code: "replace" as const,
+          component_id: component("a"),
+        },
+        {
+          source_event_id: "evt_source0002",
+          target_event_id: "evt_target0002",
+          replacement_event_id: null,
+          bucket: "eligible_noop" as const,
+          action: "already_applied" as const,
+          reason_code: "already_applied" as const,
+          component_id: component("b"),
+        },
+        {
+          source_event_id: "evt_source0003",
+          target_event_id: null,
+          replacement_event_id: null,
+          bucket: "unsafe_unchanged" as const,
+          action: "none" as const,
+          reason_code: "missing_unsafe" as const,
+          component_id: component("c"),
+        },
+      ],
+    } satisfies Omit<PolicyReconciliationPlanV2, "plan_digest">;
+    const preimage = policyReconciliationDigestPreimageV2(populated);
+    const canonicalDigest = (value: typeof preimage) =>
+      `sha256:${createHash("sha256").update(stableJson(value), "utf8").digest("hex")}`;
+    const golden = "sha256:3f25159769480ee4cce2740146b7c2e5faacf4edbdace5e6190ef0f2d50039f8";
+    expect(digestPolicyReconciliationPlanV2(populated)).toBe(golden);
+    expect(canonicalDigest(preimage)).toBe(golden);
+
+    const required = <T>(value: T | undefined, label: string): T => {
+      if (value === undefined) throw new Error(`missing required ${label}`);
+      return value;
+    };
+    const matrix: Array<{ field: string; mutate: (value: typeof preimage) => void }> = [
+      {
+        field: "schema",
+        mutate: (v) => ((v as { schema: string }).schema = "carpeos.policy-reconciliation-plan/v3"),
+      },
+      { field: "trust_zone_id", mutate: (v) => (v.trust_zone_id = "tz_other") },
+      { field: "from_policy", mutate: (v) => (v.from_policy = "adj_v2") },
+      { field: "to_policy", mutate: (v) => (v.to_policy = "adj_v4") },
+      { field: "limit", mutate: (v) => (v.limit = 4) },
+      { field: "total_candidate_count", mutate: (v) => (v.total_candidate_count = 4) },
+      { field: "classified_count", mutate: (v) => (v.classified_count = 4) },
+      { field: "truncated", mutate: (v) => (v.truncated = true) },
+      {
+        field: "high_water.canonical_local_sequence_max",
+        mutate: (v) => (v.high_water.canonical_local_sequence_max = 16),
+      },
+      {
+        field: "high_water.disposition_row_count",
+        mutate: (v) => (v.high_water.disposition_row_count = 16),
+      },
+      { field: "high_water.review_row_count", mutate: (v) => (v.high_water.review_row_count = 16) },
+      { field: "high_water.outbox_id_max", mutate: (v) => (v.high_water.outbox_id_max = 16) },
+      {
+        field: "high_water.supersession_event_count",
+        mutate: (v) => (v.high_water.supersession_event_count = 16),
+      },
+      { field: "counts.eligible_write_count", mutate: (v) => (v.counts.eligible_write_count = 2) },
+      { field: "counts.eligible_noop_count", mutate: (v) => (v.counts.eligible_noop_count = 2) },
+      {
+        field: "counts.unsafe_unchanged_count",
+        mutate: (v) => (v.counts.unsafe_unchanged_count = 2),
+      },
+      { field: "counts.replace_count", mutate: (v) => (v.counts.replace_count = 2) },
+      { field: "counts.invalidate_count", mutate: (v) => (v.counts.invalidate_count = 1) },
+      {
+        field: "counts.already_applied_count",
+        mutate: (v) => (v.counts.already_applied_count = 2),
+      },
+      {
+        field: "counts.reason_code_counts[0].reason_code",
+        mutate: (v) =>
+          (required(v.counts.reason_code_counts[0], "reason count").reason_code = "invalidate"),
+      },
+      {
+        field: "counts.reason_code_counts[0].count",
+        mutate: (v) => (required(v.counts.reason_code_counts[0], "reason count").count = 2),
+      },
+      { field: "plan_admissible", mutate: (v) => (v.plan_admissible = true) },
+      {
+        field: "global_taint_reason_codes[0]",
+        mutate: (v) => (v.global_taint_reason_codes[0] = "unproved_zero_write_global_taint"),
+      },
+      {
+        field: "global_taint_component_ids[0]",
+        mutate: (v) => (v.global_taint_component_ids[0] = component("d")),
+      },
+      {
+        field: "global_taint_entry_ids[0]",
+        mutate: (v) => (v.global_taint_entry_ids[0] = "evt_source0009"),
+      },
+      {
+        field: "entries[0].source_event_id",
+        mutate: (v) => (required(v.entries[0], "entry").source_event_id = "evt_source0009"),
+      },
+      {
+        field: "entries[0].target_event_id",
+        mutate: (v) => (required(v.entries[0], "entry").target_event_id = "evt_target0009"),
+      },
+      {
+        field: "entries[0].replacement_event_id",
+        mutate: (v) => (required(v.entries[0], "entry").replacement_event_id = "evt_replace009"),
+      },
+      {
+        field: "entries[0].bucket",
+        mutate: (v) => (required(v.entries[0], "entry").bucket = "eligible_noop"),
+      },
+      {
+        field: "entries[0].action",
+        mutate: (v) => (required(v.entries[0], "entry").action = "invalidate"),
+      },
+      {
+        field: "entries[0].reason_code",
+        mutate: (v) => (required(v.entries[0], "entry").reason_code = "invalidate"),
+      },
+      {
+        field: "entries[0].component_id",
+        mutate: (v) => (required(v.entries[0], "entry").component_id = component("d")),
+      },
+    ];
+    for (const { field, mutate } of matrix) {
+      const changed = structuredClone(preimage);
+      mutate(changed);
+      expect(canonicalDigest(changed), field).not.toBe(golden);
+    }
+
+    expect(
+      digestPolicyReconciliationPlanV2({ ...populated, plan_digest: `sha256:${"0".repeat(64)}` }),
+    ).toBe(golden);
+    const reorderedInput = {
+      trust_zone_id: "tz_synthetic",
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      limit: 3,
+      total_candidate_count: 3,
+      high_water: zeroHighWater(),
+      candidates: [
+        { source_event_id: "evt_source0003", unsafe_reason_code: "missing_unsafe" as const },
+        {
+          source_event_id: "evt_source0001",
+          target_event_id: "evt_target0001",
+          replacement_event_id: "evt_replace001",
+          classification: "replace" as const,
+        },
+        {
+          source_event_id: "evt_source0002",
+          target_event_id: "evt_target0002",
+          classification: "already_applied" as const,
+        },
+      ],
+      global_taint_reason_codes: [
+        "unproved_zero_write_global_taint",
+        "unproved_conformance_global_taint",
+      ] as const,
+    };
+    const normalized = buildPolicyReconciliationPlanV2(reorderedInput);
+    const reverseNormalized = buildPolicyReconciliationPlanV2({
+      ...reorderedInput,
+      candidates: [...reorderedInput.candidates].reverse(),
+      global_taint_reason_codes: [...reorderedInput.global_taint_reason_codes].reverse(),
+    });
+    expect(reverseNormalized).toEqual(normalized);
+    expect(canonicalDigest({ ...preimage, entries: [...preimage.entries].reverse() })).not.toBe(
+      golden,
+    );
+    expect(
+      canonicalDigest({
+        ...preimage,
+        counts: {
+          ...preimage.counts,
+          reason_code_counts: [...preimage.counts.reason_code_counts].reverse(),
+        },
+      }),
+    ).not.toBe(golden);
+    expect(
+      canonicalDigest({
+        ...preimage,
+        global_taint_reason_codes: [...preimage.global_taint_reason_codes].reverse(),
+        global_taint_component_ids: [...preimage.global_taint_component_ids].reverse(),
+        global_taint_entry_ids: [...preimage.global_taint_entry_ids].reverse(),
+      }),
+    ).not.toBe(golden);
+  });
 
   it("does not write for an empty metadata-only preview", () => {
     const { store } = makeStore("tz_synthetic");
@@ -2239,6 +2472,53 @@ describe("policy reconciliation preview", () => {
     expect(plan.global_taint_reason_codes).toEqual([]);
     expect(plan.global_taint_component_ids).toEqual([]);
     expect(plan.global_taint_entry_ids).toEqual([]);
+  });
+  it("uses the shipped adj_v1 extract identity only as historical materialization evidence", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic historical policy procedure." } }),
+    );
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_v1" }).status,
+    ).toBe("promoted");
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_v3" }).status,
+    ).toBe("promoted");
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_v1",
+      to_policy: "adj_v3",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({ action: "replace", reason_code: "replace" }),
+    ]);
+  });
+  it("fails closed when malformed inbox evidence collides with a materialization", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_new" }).status,
+    ).toBe("promoted");
+    appendMalformedInboxRow(
+      store,
+      extractedObservation(oldResult).event_id,
+      captured.protected_value_id,
+    );
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({ action: "none", reason_code: "imported_unsafe" }),
+    ]);
   });
   it("keeps a conformant source duplicated into the inbox imported and unsafe", () => {
     const { store } = makeStore("tz_synthetic");
@@ -3231,6 +3511,22 @@ function appendInboxCopy(
       JSON.stringify(event),
       now.toISOString(),
     );
+  } finally {
+    db.close();
+  }
+}
+function appendMalformedInboxRow(
+  store: LocalCaptureStore,
+  eventId: string,
+  protectedValueId: string,
+): void {
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO sync_inbox_events (
+        event_id, trust_zone_id, zone_sequence, protected_value_id, event_json, imported_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(eventId, "tz_synthetic", 0, protectedValueId, "{not canonical json", now.toISOString());
   } finally {
     db.close();
   }
