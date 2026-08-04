@@ -1,18 +1,18 @@
 # Product 3.2.0 — pre-tag freeze audit
 
-Status: **Defer.** Implementation is frozen for the separate PR14 approval decision; this audit is not a publication, installation, or activation receipt.
+Status: **Approve for the release cutter.** The approved implementation freeze is still unpublished, uninstalled, undeployed, and unactivated; this pre-tag receipt does not publish, tag, install, deploy, or activate Product 3.2.
 
 Related: [PRD index](../PRD.md), [policy reconciliation decision](../adr/0015-policy-version-reconciliation.md), [versioning policy](versioning-and-releases.md), and [Product 3.1.0 DoD](product-3.1.0.md).
 
 ## Scope and immutable implementation boundary
 
-This audit covers implementation boundary `42b974947b3e713acd0ca394d473583a05d50017`.
+Earlier implementation-gate evidence is bound to `42b974947b3e713acd0ca394d473583a05d50017`. The immutable approved implementation freeze is commit `ed700072858c1b0062aabe136c807fd379e5698a`, tree `347163bc4093d697c3b7d8bbf7f9e10fab1a54ad`, and `sourceHash` `sha256:1a5172860215e99ad110fb18fcc9585b5c2c481588d6ccd12c6feb36fb67ef79`.
 
 CarpeOS 3.2 improves promoted-knowledge review and correction without widening accepted authority. Schema v1, event types, required CLI/MCP contracts and defaults, trust zones, fail-open hooks, append-only/bitemporal history, and promoted-active-only retrieval remain compatible. The public-boundary check passed for 305 public files.
 
 **B0 is the selected 3.2 boundary:** deterministic, bounded, metadata-only, zero-write reconciliation preview. **B1 remains deferred and absent:** there is no safe-subset apply, writer, apply command, apply receipt, Supersession construction, protected/canonical/outbox mutation, or authority widening. Unsafe entries are unchanged.
 
-The fixed-201-row availability advisory is fail-closed: it does not claim complete enumeration or availability beyond the bounded preview contract.
+The fixed-201-row availability advisory is fail-closed and non-blocking: it does not claim exhaustive enumeration or availability beyond the bounded preview contract.
 
 ## Gate ledger
 
@@ -28,13 +28,13 @@ The fixed-201-row availability advisory is fail-closed: it does not claim comple
 | K7 | B0 selected; unsupported apply flags fail before reconciliation writes; B1 deferred/absent | **complete** |
 | K8 | Retrieval evaluator and observed graph branches, PRs #148, #161, #167, #169 | **complete** |
 | K9 | Synthetic dogfood, documentation truth, pack-once/release proofs, and CI evaluator build, PRs #149, #154–#159, #163, #165, #168 | **complete** |
-| K10 | This freeze audit is complete; separate PR14 approval has not occurred | **audit complete / Approve pending** |
+| K10 | Pre-tag approval receipt authorizes the release cutter; no publication, installation, deployment, or activation occurs here | **complete / Approve** |
 | K11 | Exact tagged SHA, tarball, registry, and GitHub release identity | **pending** |
 | K12 | Public-safe activation receipt | **pending** |
 
 ## Observed verification evidence
 
-The implementation-gate evidence is bound to `42b974947b3e713acd0ca394d473583a05d50017`: `pnpm check` exited `0`; `pnpm --filter @carpeos/capture eval:adjudication`, `pnpm --filter @carpeos/capture eval:knowledge-form`, and `pnpm --filter @carpeos/retrieval eval:retrieval` each exited `0`; `pnpm smoke:mcp`, `pnpm smoke:product`, `pnpm smoke:knowledge`, and `pnpm smoke:dogfood` each exited `0`; sync E2E exited `0`; and `node --test scripts/test/*.test.mjs` completed all seven pack/release tests with exit `0`. The public-boundary check passed for 305 public files. PR #172 retains durable CI references: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30877973348) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30877973329). These are implementation-gate records, not publication, installation, deployment, activation, or approval evidence. Final cleaner result: **PASS**. Architect review: **CLEAR / CLEAR / CLEAR — APPROVE**. QA: **passed**.
+Earlier implementation-gate evidence remains bound to `42b974947b3e713acd0ca394d473583a05d50017`: `pnpm check` exited `0`; `pnpm --filter @carpeos/capture eval:adjudication`, `pnpm --filter @carpeos/capture eval:knowledge-form`, and `pnpm --filter @carpeos/retrieval eval:retrieval` each exited `0`; `pnpm smoke:mcp`, `pnpm smoke:product`, `pnpm smoke:knowledge`, and `pnpm smoke:dogfood` each exited `0`; sync E2E exited `0`; and `node --test scripts/test/*.test.mjs` completed all seven pack/release tests with exit `0`. The public-boundary check passed for 305 public files. PR #172 retains durable CI references: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30877973348) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30877973329). This is earlier implementation-gate evidence, not the final approved freeze or publication, installation, deployment, or activation evidence.
 
 | Area | Observed result |
 | --- | --- |
@@ -45,6 +45,9 @@ The implementation-gate evidence is bound to `42b974947b3e713acd0ca394d473583a05
 | Pack/release | Seven pack/release tests exited `0`, including pack-once and release-artifact workflow proofs |
 | Public boundary | Passed for 305 public files |
 | Implementation-gate source | `sourceHash` `sha256:3d5c79211c4619f85858a9ce8344ea44f6c73c8d634e1514ed752b92a5135b63` |
+## Pre-tag approval receipt
+
+The pre-tag **Approve** decision is bound to approved implementation freeze `ed700072858c1b0062aabe136c807fd379e5698a`, tree `347163bc4093d697c3b7d8bbf7f9e10fab1a54ad`, and `sourceHash` `sha256:1a5172860215e99ad110fb18fcc9585b5c2c481588d6ccd12c6feb36fb67ef79`. Cleaner: **PASS**. Architect: **CLEAR / CLEAR / CLEAR — APPROVE**. Executor QA: **passed**. Critic: **OKAY**. Current-source leader gates were `pnpm check`; the three Product 3.2 evaluators; four smokes; sync E2E; seven pack/release tests; public boundary 305; and clean status. Push CI for this SHA: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30880949088) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30880949113). This docs-only receipt authorizes the release cutter; it does not itself publish, tag, install, deploy, or activate Product 3.2.
 
 ## B0 canonical preview evidence
 
@@ -91,9 +94,12 @@ The observed B0 preview is deterministic and metadata-only: bounded emitted pref
 | #170 | `1caa4a61d56e0e93d67a2093240ea6fa963f20eb` | `fix/3.2-gen4-policy-proof` | fix(local-store): prove production preview digest |
 | #171 | `42b974947b3e713acd0ca394d473583a05d50017` | `fix/3.2-gen5-digest-proof` | test(policy): close digest proof masking |
 | #172 | `7dc180547afac27fafdf290eae138692021b6813` | `docs/3.2-freeze-audit` | docs: freeze Product 3.2 audit |
+| #173 | `75ab281024624ec1b487e59ad9df0d34820a1369` | `fix/3.2-held-cli-compat` | fix: preserve held CLI compatibility |
+| #174 | `b77f29b7ddfb0a0ed7956cfe518770af3ff3e741` | `docs/3.2-freeze-evidence-fix` | docs: correct Product 3.2 freeze evidence |
+| #175 | `ed700072858c1b0062aabe136c807fd379e5698a` | `docs/3.2-freeze-sha-fix` | docs: correct Product 3.2 PR159 SHA |
 
 ## Residuals and next decision
 
 B1 safe-subset apply, Supersession construction, protected transfer/lifecycle, sync convergence, automatic/adjudicated Claims, AcceptanceDecision, online feedback, adaptive ranking, fuzzy deduplication, and any unsafe repair or mutation remain deferred or prohibited. Unsafe entries remain unchanged.
 
-PR #172's rejected PR13 snapshot has `sourceHash` `sha256:e96b0e639867956ca1e9deae66694755df8102c53bf5d804be7f58cd760b5090`; it failed PR14 readiness and will be replaced after G016. No final freeze hash is recorded here. PR14 will record the separate pre-tag **Approve** or continued **Defer** decision. PR14 does not publish, install, deploy, or activate 3.2. K11 and K12 remain future release-cycle work; PR15 may record only a public-safe preview-only activation receipt after those gates are evidenced.
+The rejected PR13 snapshot `sourceHash` `sha256:e96b0e639867956ca1e9deae66694755df8102c53bf5d804be7f58cd760b5090` is superseded by the approved freeze recorded above. This docs-only PR14 receipt authorizes the release cutter but does not itself publish, tag, install, deploy, or activate 3.2. K11 and K12 remain pending release-cycle work.
