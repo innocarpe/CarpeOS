@@ -26,6 +26,10 @@ import type {
   SyncPushResult,
 } from "@carpeos/schema";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  digestPolicyReconciliationPlanV2,
+  type PolicyReconciliationPlanV2,
+} from "../../../packages/local-store/src/policy-reconciliation.js";
 import { runCli } from "../src/index.js";
 
 const packageRoot = resolve(import.meta.dirname, "..");
@@ -1620,9 +1624,11 @@ describe("reconcile-policy success", () => {
       context,
     );
     expect(result.status).toBe(0);
-    expect(result.rawStdout).toBe(JSON.stringify(plan));
-    expect(result.stdout).toEqual(plan);
-    expect(result.stdout.plan_digest).toBe(plan.plan_digest);
+    const cliPlan = result.stdout as unknown as PolicyReconciliationPlanV2;
+    expect(result.rawStdout).toBe(JSON.stringify(cliPlan));
+    expect(digestPolicyReconciliationPlanV2(plan)).toBe(plan.plan_digest);
+    expect(digestPolicyReconciliationPlanV2(cliPlan)).toBe(cliPlan.plan_digest);
+    expect(cliPlan.plan_digest).toBe(plan.plan_digest);
     expect(result.rawStdout).not.toContain("CLI BODY SENTINEL");
     expect(runtimeDurableFileDigests(context.home)).toEqual(before);
   });
