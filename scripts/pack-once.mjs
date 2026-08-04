@@ -11,6 +11,13 @@ const packageJsonPath = join(packageDir, "package.json");
 const manifestName = "release-artifact.json";
 const shaPattern = /^[0-9a-f]{40}$/;
 const versionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const slsaPredicateType = "https://slsa.dev/provenance/v1";
+const statementType = "https://in-toto.io/Statement/v1";
+const githubActionsBuildType =
+  "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1";
+const githubRepository = "https://github.com/innocarpe/CarpeOS";
+const githubWorkflowPath = ".github/workflows/release.yml";
+const githubHostedBuilder = "https://github.com/actions/runner/github-hosted";
 
 function fail(message) {
   throw new Error(`pack-once: ${message}`);
@@ -203,25 +210,139 @@ export function assertArtifact(manifestPath, tarballPath) {
     fail("tarball identity does not match manifest");
   return manifest;
 }
+function canonicalRegistryBase(registry) {
+  let base;
+  try {
+    base = new URL(registry);
+  } catch {
+    fail("registry URL is invalid");
+  }
+  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash)
+    fail("registry URL is invalid");
+  return `${base.origin}${base.pathname.replace(/\/+$/, "")}`;
+}
+
+function canonicalAttestationEndpoint(registry, manifest) {
+  return `${canonicalRegistryBase(registry)}/-/npm/v1/attestations/${encodeURIComponent(manifest.package_name)}@${encodeURIComponent(manifest.version)}`;
+}
+
+function provenanceInvocation(statement, manifest) {
+  const expectedSubject = `pkg:npm/%40innocarpe/carpeos@${manifest.version}`;
+  const expectedDigest = Buffer.from(manifest.sha512.slice("sha512-".length), "base64").toString(
+    "hex",
+  );
+  const expectedRef = `refs/tags/v${manifest.version}`;
+  const expectedDependency = `git+https://github.com/innocarpe/CarpeOS@${expectedRef}`;
+  const subject = statement?.subject;
+  const predicate = statement?.predicate;
+  const buildDefinition = predicate?.buildDefinition;
+  const workflow = buildDefinition?.externalParameters?.workflow;
+  const dependencies = buildDefinition?.resolvedDependencies;
+  const invocation = predicate?.runDetails?.metadata?.invocationId;
+  const invocationPrefix = `${githubRepository}/actions/runs/`;
+  if (
+    statement?._type !== statementType ||
+    statement?.predicateType !== slsaPredicateType ||
+    !Array.isArray(subject) ||
+    subject.length !== 1 ||
+    subject[0]?.name !== expectedSubject ||
+    subject[0]?.digest?.sha512 !== expectedDigest ||
+    buildDefinition?.buildType !== githubActionsBuildType ||
+    workflow?.repository !== githubRepository ||
+    workflow?.ref !== expectedRef ||
+    workflow?.path !== githubWorkflowPath ||
+    buildDefinition?.internalParameters?.github?.event_name !== "push" ||
+    !Array.isArray(dependencies) ||
+    dependencies.length !== 1 ||
+    dependencies[0]?.uri !== expectedDependency ||
+    dependencies[0]?.digest?.gitCommit !== manifest.git_sha ||
+    predicate?.runDetails?.builder?.id !== githubHostedBuilder ||
+    typeof invocation !== "string" ||
+    !invocation.startsWith(invocationPrefix) ||
+    !/^\d+\/attempts\/\d+$/.test(invocation.slice(invocationPrefix.length))
+  )
+    fail("SLSA provenance does not match manifest");
+  return invocation;
+}
+
+async function verifyProvenance(registry, manifest) {
+  const response = await fetch(canonicalAttestationEndpoint(registry, manifest), {
+    headers: { accept: "application/json" },
+    redirect: "error",
+  });
+  if (!response.ok) fail(`provenance lookup failed with HTTP ${response.status}`);
+  let provenance;
+  try {
+    provenance = await response.json();
+  } catch {
+    fail("provenance response is invalid");
+  }
+  const attestations = provenance?.attestations;
+  const matching = Array.isArray(attestations)
+    ? attestations.filter((attestation) => attestation?.predicateType === slsaPredicateType)
+    : [];
+  if (matching.length !== 1) fail("SLSA provenance is missing or ambiguous");
+  const envelope = matching[0]?.bundle?.dsseEnvelope;
+  if (
+    envelope?.payloadType !== "application/vnd.in-toto+json" ||
+    typeof envelope?.payload !== "string" ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(envelope.payload) ||
+    Buffer.from(envelope.payload, "base64").toString("base64") !== envelope.payload
+  )
+    fail("SLSA provenance envelope is invalid");
+  let statement;
+  try {
+    statement = JSON.parse(Buffer.from(envelope.payload, "base64").toString("utf8"));
+  } catch {
+    fail("SLSA provenance payload is invalid");
+  }
+  return provenanceInvocation(statement, manifest);
+}
 
 export async function verifyRegistry(manifestPath, registry = "https://registry.npmjs.org") {
   const manifest = readManifest(manifestPath);
-  const endpoint = `${registry.replace(/\/$/, "")}/${encodeURIComponent(manifest.package_name)}/${encodeURIComponent(manifest.version)}`;
-  const response = await fetch(endpoint, { headers: { accept: "application/json" } });
+  const registryBase = canonicalRegistryBase(registry);
+  const endpoint = `${registryBase}/${encodeURIComponent(manifest.package_name)}/${encodeURIComponent(manifest.version)}`;
+  const response = await fetch(endpoint, {
+    headers: { accept: "application/json" },
+    redirect: "error",
+  });
   if (!response.ok) fail(`registry lookup failed with HTTP ${response.status}`);
-  const published = await response.json();
+  let published;
+  try {
+    published = await response.json();
+  } catch {
+    fail("registry metadata is invalid");
+  }
   if (
     published.name !== manifest.package_name ||
     published.version !== manifest.version ||
-    published.dist?.integrity !== manifest.npm_integrity ||
-    published.gitHead !== manifest.git_sha
+    published.dist?.integrity !== manifest.npm_integrity
   )
     fail("registry metadata does not match manifest");
+  if (typeof published.gitHead === "string") {
+    if (published.gitHead !== manifest.git_sha) fail("registry metadata does not match manifest");
+    return {
+      package_name: published.name,
+      version: published.version,
+      npm_integrity: published.dist.integrity,
+      git_sha: manifest.git_sha,
+      source_identity: "gitHead",
+    };
+  }
+  if (
+    published.gitHead !== undefined ||
+    published.dist?.attestations?.provenance?.predicateType !== slsaPredicateType
+  )
+    fail("registry metadata does not match manifest");
+  const invocation = await verifyProvenance(registryBase, manifest);
   return {
     package_name: published.name,
     version: published.version,
     npm_integrity: published.dist.integrity,
-    git_sha: published.gitHead,
+    git_sha: manifest.git_sha,
+    source_identity: "slsa-provenance",
+    provenance_invocation: invocation,
   };
 }
 
