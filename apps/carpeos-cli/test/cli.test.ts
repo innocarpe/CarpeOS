@@ -26,10 +26,6 @@ import type {
   SyncPushResult,
 } from "@carpeos/schema";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import {
-  digestPolicyReconciliationPlanV2,
-  type PolicyReconciliationPlanV2,
-} from "../../../packages/local-store/src/policy-reconciliation.js";
 import { runCli } from "../src/index.js";
 
 const packageRoot = resolve(import.meta.dirname, "..");
@@ -37,6 +33,105 @@ const cliPath = join(packageRoot, "dist", "index.js");
 const createdDirs: string[] = [];
 const syncKey = new Uint8Array(32).fill(7);
 const syncCredential = "synthetic_sync_credential_00000000000000000001";
+type PlanV2OraclePlan = {
+  schema: string;
+  trust_zone_id: string;
+  from_policy: string;
+  to_policy: string;
+  limit: number;
+  total_candidate_count: number;
+  classified_count: number;
+  truncated: boolean;
+  high_water: {
+    canonical_local_sequence_max: number;
+    disposition_row_count: number;
+    review_row_count: number;
+    outbox_id_max: number;
+    supersession_event_count: number;
+  };
+  counts: {
+    eligible_write_count: number;
+    eligible_noop_count: number;
+    unsafe_unchanged_count: number;
+    replace_count: number;
+    invalidate_count: number;
+    already_applied_count: number;
+    reason_code_counts: Array<{ reason_code: string; count: number }>;
+  };
+  plan_admissible: boolean;
+  global_taint_reason_codes: string[];
+  global_taint_component_ids: string[];
+  global_taint_entry_ids: string[];
+  entries: Array<{
+    source_event_id: string;
+    target_event_id: string | null;
+    replacement_event_id: string | null;
+    bucket: string;
+    action: string;
+    reason_code: string;
+    component_id: string;
+  }>;
+  plan_digest: string;
+};
+
+type OracleJson = null | boolean | number | string | OracleJson[] | { [key: string]: OracleJson };
+
+function oracleStableJson(value: OracleJson): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(oracleStableJson).join(",")}]`;
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${oracleStableJson(value[key] as OracleJson)}`)
+    .join(",")}}`;
+}
+
+function reconstructPlanV2Preimage(plan: PlanV2OraclePlan): OracleJson {
+  return {
+    schema: plan.schema,
+    trust_zone_id: plan.trust_zone_id,
+    from_policy: plan.from_policy,
+    to_policy: plan.to_policy,
+    limit: plan.limit,
+    total_candidate_count: plan.total_candidate_count,
+    classified_count: plan.classified_count,
+    truncated: plan.truncated,
+    high_water: {
+      canonical_local_sequence_max: plan.high_water.canonical_local_sequence_max,
+      disposition_row_count: plan.high_water.disposition_row_count,
+      review_row_count: plan.high_water.review_row_count,
+      outbox_id_max: plan.high_water.outbox_id_max,
+      supersession_event_count: plan.high_water.supersession_event_count,
+    },
+    counts: {
+      eligible_write_count: plan.counts.eligible_write_count,
+      eligible_noop_count: plan.counts.eligible_noop_count,
+      unsafe_unchanged_count: plan.counts.unsafe_unchanged_count,
+      replace_count: plan.counts.replace_count,
+      invalidate_count: plan.counts.invalidate_count,
+      already_applied_count: plan.counts.already_applied_count,
+      reason_code_counts: plan.counts.reason_code_counts.map((row) => ({
+        reason_code: row.reason_code,
+        count: row.count,
+      })),
+    },
+    plan_admissible: plan.plan_admissible,
+    global_taint_reason_codes: [...plan.global_taint_reason_codes],
+    global_taint_component_ids: [...plan.global_taint_component_ids],
+    global_taint_entry_ids: [...plan.global_taint_entry_ids],
+    entries: plan.entries.map((entry) => ({
+      source_event_id: entry.source_event_id,
+      target_event_id: entry.target_event_id,
+      replacement_event_id: entry.replacement_event_id,
+      bucket: entry.bucket,
+      action: entry.action,
+      reason_code: entry.reason_code,
+      component_id: entry.component_id,
+    })),
+  };
+}
+
+const EMPTY_PLAN_V2_CANONICAL_BYTES =
+  '{"classified_count":0,"counts":{"already_applied_count":0,"eligible_noop_count":0,"eligible_write_count":0,"invalidate_count":0,"reason_code_counts":[],"replace_count":0,"unsafe_unchanged_count":0},"entries":[],"from_policy":"adj_old","global_taint_component_ids":[],"global_taint_entry_ids":[],"global_taint_reason_codes":[],"high_water":{"canonical_local_sequence_max":0,"disposition_row_count":0,"outbox_id_max":0,"review_row_count":0,"supersession_event_count":0},"limit":10,"plan_admissible":true,"schema":"carpeos.policy-reconciliation-plan/v2","to_policy":"adj_new","total_candidate_count":0,"truncated":false,"trust_zone_id":"tz_synthetic"}';
 
 beforeAll(() => {
   execFileSync(
@@ -1567,6 +1662,52 @@ describe("reconcile-policy CLI", () => {
   });
 });
 describe("reconcile-policy success", () => {
+  it("independently reconstructs the empty plan-v2 digest preimage from store and CLI output", async () => {
+    const context = makeContext();
+    const store = new LocalCaptureStore({
+      runtimeDir: context.home,
+      workspaceRoot: context.cwd,
+      trustZoneId: "tz_synthetic",
+      keyProvider: new StaticKeyProvider(new Uint8Array(32).fill(4)),
+    });
+    const storePlan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    store.close();
+
+    const result = await runCliJson(
+      [
+        "adjudicate",
+        "reconcile-policy",
+        "--from-policy",
+        "adj_old",
+        "--to-policy",
+        "adj_new",
+        "--trust-zone",
+        "tz_synthetic",
+        "--limit",
+        "10",
+      ],
+      context,
+    );
+    expect(result.status).toBe(0);
+    const cliPlan = result.stdout as PlanV2OraclePlan;
+    const storeBytes = oracleStableJson(reconstructPlanV2Preimage(storePlan));
+    const cliBytes = oracleStableJson(reconstructPlanV2Preimage(cliPlan));
+
+    expect(storeBytes).toBe(EMPTY_PLAN_V2_CANONICAL_BYTES);
+    expect(cliBytes).toBe(EMPTY_PLAN_V2_CANONICAL_BYTES);
+    expect(cliBytes).toBe(storeBytes);
+    expect(`sha256:${createHash("sha256").update(storeBytes).digest("hex")}`).toBe(
+      storePlan.plan_digest,
+    );
+    expect(`sha256:${createHash("sha256").update(cliBytes).digest("hex")}`).toBe(
+      cliPlan.plan_digest,
+    );
+  });
   it("emits a bare byte-identical read-only plan without body leakage", async () => {
     const context = makeContext();
     const store = new LocalCaptureStore({
@@ -1624,10 +1765,8 @@ describe("reconcile-policy success", () => {
       context,
     );
     expect(result.status).toBe(0);
-    const cliPlan = result.stdout as unknown as PolicyReconciliationPlanV2;
+    const cliPlan = result.stdout as PlanV2OraclePlan;
     expect(result.rawStdout).toBe(JSON.stringify(cliPlan));
-    expect(digestPolicyReconciliationPlanV2(plan)).toBe(plan.plan_digest);
-    expect(digestPolicyReconciliationPlanV2(cliPlan)).toBe(cliPlan.plan_digest);
     expect(cliPlan.plan_digest).toBe(plan.plan_digest);
     expect(result.rawStdout).not.toContain("CLI BODY SENTINEL");
     expect(runtimeDurableFileDigests(context.home)).toEqual(before);
