@@ -33,11 +33,12 @@ jobs:
 
       - name: Run checks
         run: pnpm check
+      - name: Build capture evaluators
+        run: pnpm --filter @carpeos/capture build
       - name: Evaluate capture adjudication
-        run: pnpm --filter @carpeos/capture eval:adjudication
-
+        run: pnpm --filter @carpeos/capture eval:adjudication:built
       - name: Evaluate capture knowledge form
-        run: pnpm --filter @carpeos/capture eval:knowledge-form
+        run: pnpm --filter @carpeos/capture eval:knowledge-form:built
 
       - name: Build and evaluate retrieval
         run: pnpm --filter @carpeos/retrieval build && pnpm --filter @carpeos/retrieval eval:retrieval
