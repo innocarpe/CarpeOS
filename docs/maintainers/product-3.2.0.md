@@ -1,6 +1,6 @@
-# Product 3.2.0 — pre-tag freeze audit
+# Product 3.2.0 — release and activation receipt
 
-Status: **Approve for the release cutter.** The approved implementation freeze is still unpublished, uninstalled, undeployed, and unactivated; this pre-tag receipt does not publish, tag, install, deploy, or activate Product 3.2.
+Status: **Released and activated.** Product 3.2.0 is published as npm `@innocarpe/carpeos@3.2.0`, tagged `v3.2.0`, and has a non-draft, non-prerelease [GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0). The pre-tag approval below remains historical evidence; this receipt records the completed release and public-safe activation.
 
 Related: [PRD index](../PRD.md), [policy reconciliation decision](../adr/0015-policy-version-reconciliation.md), [versioning policy](versioning-and-releases.md), and [Product 3.1.0 DoD](product-3.1.0.md).
 
@@ -10,7 +10,7 @@ Earlier implementation-gate evidence is bound to `42b974947b3e713acd0ca394d47358
 
 CarpeOS 3.2 improves promoted-knowledge review and correction without widening accepted authority. Schema v1, event types, required CLI/MCP contracts and defaults, trust zones, fail-open hooks, append-only/bitemporal history, and promoted-active-only retrieval remain compatible. The public-boundary check passed for 305 public files.
 
-**B0 is the selected 3.2 boundary:** deterministic, bounded, metadata-only, zero-write reconciliation preview. **B1 remains deferred and absent:** there is no safe-subset apply, writer, apply command, apply receipt, Supersession construction, protected/canonical/outbox mutation, or authority widening. Unsafe entries are unchanged.
+**B0 is the selected 3.2 boundary:** deterministic, bounded, metadata-only, zero-write reconciliation preview, supporting only `--from-policy`, `--to-policy`, `--trust-zone`, and `--limit`. **B1 remains deferred and absent:** there is no safe-subset apply, writer, apply command, apply receipt, Supersession construction, protected/canonical/outbox mutation, or authority widening. Unsafe entries are unchanged.
 
 The fixed-201-row availability advisory is fail-closed and non-blocking: it does not claim exhaustive enumeration or availability beyond the bounded preview contract.
 
@@ -28,9 +28,9 @@ The fixed-201-row availability advisory is fail-closed and non-blocking: it does
 | K7 | B0 selected; unsupported apply flags fail before reconciliation writes; B1 deferred/absent | **complete** |
 | K8 | Retrieval evaluator and observed graph branches, PRs #148, #161, #167, #169 | **complete** |
 | K9 | Synthetic dogfood, documentation truth, pack-once/release proofs, and CI evaluator build, PRs #149, #154–#159, #163, #165, #168 | **complete** |
-| K10 | Pre-tag approval receipt authorizes the release cutter; no publication, installation, deployment, or activation occurs here | **complete / Approve** |
-| K11 | Exact tagged SHA, tarball, registry, and GitHub release identity | **pending** |
-| K12 | Public-safe activation receipt | **pending** |
+| K10 | Pre-tag approval receipt authorized the release cutter | **complete / Approve** |
+| K11 | Exact tagged SHA, tarball, registry, provenance recovery, and GitHub Release identity | **complete** |
+| K12 | Public-safe activation receipt | **complete** |
 
 ## Observed verification evidence
 
@@ -48,7 +48,15 @@ Earlier implementation-gate evidence remains bound to `42b974947b3e713acd0ca394d
 
 ## Pre-tag approval receipt
 
-The pre-tag **Approve** decision is bound to approved implementation freeze `ed700072858c1b0062aabe136c807fd379e5698a`, tree `347163bc4093d697c3b7d8bbf7f9e10fab1a54ad`, and `sourceHash` `sha256:1a5172860215e99ad110fb18fcc9585b5c2c481588d6ccd12c6feb36fb67ef79`. Cleaner: **PASS**. Architect: **CLEAR / CLEAR / CLEAR — APPROVE**. Executor QA: **passed**. Critic: **OKAY**. Current-source leader gates were `pnpm check`; the three Product 3.2 evaluators; four smokes; sync E2E; seven pack/release tests; public boundary 305; and clean status. Push CI for this SHA: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30880949088) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30880949113). This docs-only receipt authorizes the release cutter; it does not itself publish, tag, install, deploy, or activate Product 3.2.
+The pre-tag **Approve** decision is historical evidence bound to approved implementation freeze `ed700072858c1b0062aabe136c807fd379e5698a`, tree `347163bc4093d697c3b7d8bbf7f9e10fab1a54ad`, and `sourceHash` `sha256:1a5172860215e99ad110fb18fcc9585b5c2c481588d6ccd12c6feb36fb67ef79`. Cleaner: **PASS**. Architect: **CLEAR / CLEAR / CLEAR — APPROVE**. Executor QA: **passed**. Critic: **OKAY**. Current-source leader gates were `pnpm check`; the three Product 3.2 evaluators; four smokes; sync E2E; seven pack/release tests; public boundary 305; and clean status. Push CI for this SHA: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30880949088) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30880949113). It authorized the release cutter but did not itself publish, tag, install, deploy, or activate Product 3.2.
+
+## Release and activation receipt
+
+**K11 — release identity.** Release commit SHA: `59328c0eb28096a8921ae5c7c8af4b06aa32dbc5`; annotated tag: `v3.2.0`; npm package: `@innocarpe/carpeos@3.2.0`; npm integrity: `sha512-oYDa+cEOp6LrStkoWOK5KHZDJU90QT2Sry+umNxIMi2gfSrfMSLPq5g4AdIBBe8askaSlt7VCcPaY1THAeHAww==`; release run: [30884802193](https://github.com/innocarpe/CarpeOS/actions/runs/30884802193); GitHub Release: <https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0>.
+
+The original release workflow published and installed/smoked the exact tarball, then remained red because its immutable tag-SHA code required missing npm `gitHead`. It did not become green. Recovery PR [#180](https://github.com/innocarpe/CarpeOS/pull/180), merged as `89fb488b7d06a2f1b86c6cbf631e305c94254a63`, added fail-closed exact SLSA provenance verification on main; live verification passed, and the missing GitHub Release was created without moving the tag or republishing.
+
+**K12 — public-safe Mac activation.** The exact global install resolved `3.2.0`, and `carpeos setup doctor` passed. The installed global CLI completed disposable synthetic capture, adjudication, held-review, B0-preview, and retrieval dogfood. Its OKF export and rebuild each wrote a conformant four-file projection with zero warnings. A synthetic secret sentinel was absent, and temporary homes and bundles were cleaned. B1 was not exercised because B0 was selected. This activation evidence uses only synthetic, disposable inputs and contains no production data.
 
 ## B0 canonical preview evidence
 
@@ -98,9 +106,14 @@ The observed B0 preview is deterministic and metadata-only: bounded emitted pref
 | #173 | `75ab281024624ec1b487e59ad9df0d34820a1369` | `fix/3.2-held-cli-compat` | fix(cli): preserve held review defaults |
 | #174 | `b77f29b7ddfb0a0ed7956cfe518770af3ff3e741` | `docs/3.2-freeze-evidence-fix` | docs: correct Product 3.2 freeze evidence |
 | #175 | `ed700072858c1b0062aabe136c807fd379e5698a` | `docs/3.2-freeze-sha-fix` | docs: correct Product 3.2 PR159 SHA |
+| #176 | `a8e4c9eb6198a0b5df8f0cb4c32738695cf24d8b` | `docs/3.2-pretag-approval` | docs: approve Product 3.2 release |
+| #177 | `2dcebb2b72dd7e9a9fb4ec04697af15f461c206c` | `fix/pack-once-version-agnostic` | test: make pack-once fixtures version agnostic |
+| #178 | `085685bfd76546514e0a7a4155c124700b90afe8` | `fix/pack-once-npm-json` | fix(release): parse npm pack lifecycle output |
+| #179 | `8d98162d88ebf5ac815a968c41b41231d90f0897` | `release/3.2.0-final2` | chore(release): @innocarpe/carpeos v3.2.0 |
+| #180 | `89fb488b7d06a2f1b86c6cbf631e305c94254a63` | `fix/release-provenance-verification` | fix(release): verify npm provenance without gitHead |
 
 ## Residuals and next decision
 
 B1 safe-subset apply, Supersession construction, protected transfer/lifecycle, sync convergence, automatic/adjudicated Claims, AcceptanceDecision, online feedback, adaptive ranking, fuzzy deduplication, and any unsafe repair or mutation remain deferred or prohibited. Unsafe entries remain unchanged.
 
-The rejected PR13 snapshot `sourceHash` `sha256:e96b0e639867956ca1e9deae66694755df8102c53bf5d804be7f58cd760b5090` is superseded by the approved freeze recorded above. This docs-only PR14 receipt authorizes the release cutter but does not itself publish, tag, install, deploy, or activate 3.2. K11 and K12 remain pending release-cycle work.
+The rejected PR13 snapshot `sourceHash` `sha256:e96b0e639867956ca1e9deae66694755df8102c53bf5d804be7f58cd760b5090` is superseded by the approved freeze recorded above. The historical pre-tag receipt authorized the release cutter; K11 and K12 are completed by the release and public-safe activation receipt above.

@@ -20,9 +20,9 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest release:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([notes](CHANGELOG.md) · [v3.1.0 release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
+**Latest release:** [`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([notes](CHANGELOG.md) · [v3.2.0 release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
+[product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -107,8 +107,11 @@ policy version. Re-adjudication appends history rather than rewriting it.
 Neither adjudication nor held review automatically creates a Claim or an
 `AcceptanceDecision`.
 
-Product 3.2.0 implementation on current main is pre-release. It includes synthetic,
-evidence-only adjudication and knowledge-form evaluators, a synthetic retrieval
+Product 3.2.0 is released as npm
+[`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos),
+annotated `v3.2.0`, with a non-draft, non-prerelease
+[GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0). It includes
+synthetic, evidence-only adjudication and knowledge-form evaluators, a synthetic retrieval
 evaluator, and the preview-only B0 policy reconciliation:
 
 ```sh
@@ -117,11 +120,9 @@ carpeos adjudicate reconcile-policy \
   --trust-zone tz_synthetic --limit 100
 ```
 
-B0 is metadata-only: its exact required flags are `--from-policy`,
-`--to-policy`, `--trust-zone`, and `--limit`. `--apply`,
-`--apply-safe-subset`, acknowledgements, receipts, and Supersession construction
-are unsupported. B1 write/apply/receipt work is deferred. Publication, global
-installation, and activation are not complete until the release cycle records them.
+B0 is metadata-only and supports only these exact flags: `--from-policy`, `--to-policy`,
+`--trust-zone`, and `--limit`. `--apply`, `--apply-safe-subset`, acknowledgements, receipts,
+and Supersession construction are unsupported. B1 write/apply/receipt work remains deferred.
 Dogfood inputs and outputs are synthetic and disposable.
 
 ### A model that does not flatten status
@@ -284,11 +285,12 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@3.1.0`. Changelog: [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@3.2.0`. Changelog: [CHANGELOG.md](CHANGELOG.md).
 Product milestones: [1.0 DoD](docs/maintainers/product-1.0.0.md) (pipeline) ·
 [2.0 DoD](docs/maintainers/product-2.0.0.md) (adjudication) ·
 [3.0 DoD](docs/maintainers/product-3.0.0.md) (retrieval-first graph) ·
-[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export).
+[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export) ·
+[3.2 DoD](docs/maintainers/product-3.2.0.md) (B0 reconciliation preview).
 
 ### Developers (git checkout)
 
@@ -378,6 +380,7 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | Product 2.0 DoD (adjudication) | [docs/maintainers/product-2.0.0.md](docs/maintainers/product-2.0.0.md) |
 | Product 3.0 DoD (retrieval-first graph) | [docs/maintainers/product-3.0.0.md](docs/maintainers/product-3.0.0.md) |
 | Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
+| Product 3.2 DoD (B0 reconciliation preview) | [docs/maintainers/product-3.2.0.md](docs/maintainers/product-3.2.0.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Compatibility / deprecations | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
 | Local store migrations | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
@@ -394,16 +397,16 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
 | **3.0.0** | Retrieval-first graph/hybrid recall with cross-repository partitions and worktree facets | **Shipped** on npm / `v3.0.0` |
 | **3.1.0** | Additive **OKF v0.2 export projection** | **Shipped** as `@innocarpe/carpeos@3.1.0` / `v3.1.0` — export only, not an import path |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **Pre-release validation on current main** — 3.1.0 remains the latest published/global release; 3.2.0 publication, global installation, and activation are incomplete until the release cycle records them; B0 is preview-only and B1 apply/writer/receipt is deferred |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **Shipped** as `@innocarpe/carpeos@3.2.0` / `v3.2.0`; public-safe global activation is recorded. B0 is preview-only and B1 apply/writer/receipt is deferred |
 
-3.2 implementation is present on current main for pre-release validation:
-`adj_v3` precision/session de-noising and policy-aware held review leave automatic
-Claim creation off, and no path creates an `AcceptanceDecision`. Its adjudication and
-knowledge-form evaluators are evidence-only, and its retrieval evaluator is synthetic.
-B0 reconcile-policy is preview-only; B1 apply/writer/receipt remains deferred. 3.1.0
-remains the latest published/global release; 3.2.0 publication, global installation,
-and activation are incomplete until the release cycle records them. Dogfood is synthetic
-and disposable. Hosted graph adapters and other roadmap work remain unshipped.
+3.2 is released as npm `@innocarpe/carpeos@3.2.0`, annotated `v3.2.0`, with a non-draft,
+non-prerelease GitHub Release. `adj_v3` precision/session de-noising and policy-aware held
+review leave automatic Claim creation off, and no path creates an `AcceptanceDecision`. Its
+adjudication and knowledge-form evaluators are evidence-only, and its retrieval evaluator is
+synthetic. B0 `reconcile-policy` is preview-only and supports only `--from-policy`,
+`--to-policy`, `--trust-zone`, and `--limit`; B1 apply/writer/receipt remains deferred.
+Dogfood is synthetic and disposable. Hosted graph adapters and other roadmap work remain
+unshipped.
 Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
 [product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
 [product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
@@ -416,10 +419,10 @@ does not change the shipped 3.0 retrieval product.
 
 ## What works today
 
-**Public release:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
-[CHANGELOG](CHANGELOG.md#310---2026-08-01) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
+**Public release:** [`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
+[CHANGELOG](CHANGELOG.md) ·
+[product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
 Package publication and local installation do not imply a hosted deployment.
 
 Default local loop (CI-gated):
@@ -434,7 +437,7 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | --- | --- |
 | Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md)) |
 | Local capture + outbox | Shipped |
-| Knowledge adjudication (`adj_v3`) | Present on current main for 3.2 pre-release validation — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
+| Knowledge adjudication (`adj_v3`) | **Shipped** in 3.2 — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
 | Default retrieval | **Promoted/active only**; held opt-in |
 | Doctor adjudication health | Shipped (`setup doctor`, `adjudicate --stats`) |
 | Sync Worker/client + bounded `sync cycle` | Code + local tests; no production edge claimed |
@@ -443,13 +446,14 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
-| **3.2.0 pre-release work** | Present on current main for pre-release validation: `adj_v3` and evaluators; B0 reconcile-policy preview-only; B1 apply/writer/receipt deferred. 3.1.0 remains the latest published/global release; 3.2.0 publication, global installation, and activation are incomplete until the release cycle records them |
+| **3.2.0** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; `adj_v3` and evaluators; B0 `reconcile-policy` preview-only with B1 apply/writer/receipt deferred; public-safe global activation recorded |
 | `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |
 | Hosted embeddings / multi-tenant SaaS | Not goals of this repo |
 | **3.0.0 product freeze** | **Shipped** — `v3.0.0` |
 | **3.1.0 public release** | **Shipped** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
+| **3.2.0 public release** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0` |
 
 **NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, hosted graph
 adapters/services, private vault adoption, or hosted MCP is proven by this

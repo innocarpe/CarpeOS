@@ -19,9 +19,9 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
 
-**최신 릴리스:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([변경 기록](CHANGELOG.md) · [v3.1.0 릴리스](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
+**최신 릴리스:** [`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [v3.2.0 릴리스](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
+[product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
@@ -101,9 +101,12 @@ held 리뷰는 policy-aware, terminal, append-only입니다.
 필요합니다. 재판정은 기존 이력을 덮어쓰지 않고 추가합니다. 판정과 held 리뷰는
 Claim이나 `AcceptanceDecision`을 자동 생성하지 않습니다.
 
-현재 main의 Product 3.2.0 구현은 pre-release입니다. 여기에는 synthetic evidence-only
-adjudication/knowledge-form evaluator, synthetic retrieval evaluator, preview-only B0
-policy reconciliation이 포함됩니다.
+Product 3.2.0은 npm
+[`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)으로
+릴리스되었고, annotated `v3.2.0` 태그와 draft도 prerelease도 아닌
+[GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0)가 있습니다.
+여기에는 synthetic evidence-only adjudication/knowledge-form evaluator, synthetic retrieval
+evaluator, preview-only B0 policy reconciliation이 포함됩니다.
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -111,11 +114,10 @@ carpeos adjudicate reconcile-policy \
   --trust-zone tz_synthetic --limit 100
 ```
 
-B0는 metadata-only입니다. 필요한 정확한 flag는 `--from-policy`, `--to-policy`,
-`--trust-zone`, `--limit`입니다. `--apply`, `--apply-safe-subset`, acknowledgement,
-receipt, Supersession construction은 지원하지 않습니다. B1 write/apply/receipt는
-deferred입니다. 게시, 전역 설치, 활성화는 릴리스 주기에 기록될 때까지 완료되지
-않습니다. dogfood 입력과 출력은 synthetic·disposable입니다.
+B0는 metadata-only이며 정확히 `--from-policy`, `--to-policy`, `--trust-zone`, `--limit`
+flag만 지원합니다. `--apply`, `--apply-safe-subset`, acknowledgement, receipt,
+Supersession construction은 지원하지 않습니다. B1 write/apply/receipt는 계속
+deferred입니다. dogfood 입력과 출력은 synthetic·disposable입니다.
 
 ### 상태를 뭉개지 않는 모델
 
@@ -273,12 +275,13 @@ carpeos setup show              # config.json 출력
 `--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
 `--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@3.1.0`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@3.2.0`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
 제품 마일스톤: [1.0 DoD](docs/maintainers/product-1.0.0.md) (파이프라인) ·
 [2.0 DoD](docs/maintainers/product-2.0.0.md) (판정) ·
 [3.0 DoD](docs/maintainers/product-3.0.0.md) (retrieval-first 그래프) ·
-[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export).
+[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export) ·
+[3.2 DoD](docs/maintainers/product-3.2.0.md) (B0 reconciliation preview).
 
 ### 개발자 (git checkout)
 
@@ -367,6 +370,7 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | Product 2.0 DoD (판정) | [docs/maintainers/product-2.0.0.md](docs/maintainers/product-2.0.0.md) |
 | Product 3.0 DoD (retrieval-first 그래프) | [docs/maintainers/product-3.0.0.md](docs/maintainers/product-3.0.0.md) |
 | Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
+| Product 3.2 DoD (B0 reconciliation preview) | [docs/maintainers/product-3.2.0.md](docs/maintainers/product-3.2.0.md) |
 | 버전·릴리스 | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 | Memory capacity plan | [docs/plans/k3-memory-capacity-master-plan.md](docs/plans/k3-memory-capacity-master-plan.md) |
@@ -381,16 +385,16 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | **2.0.0** | **판정된 의미**가 기본 제품 계약 (`adj_v1`, promoted-only 검색, held 리뷰, doctor, smoke) | **출시** (npm / `v2.0.0`) — 운영 가능한 MVP. 인간 수준 판단 아님 |
 | **3.0.0** | 교차 저장소 partition과 worktree facet을 갖춘 retrieval-first 그래프/하이브리드 회상 | **출시** (npm / `v3.0.0`) |
 | **3.1.0** | 추가된 **OKF v0.2 export projection** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0`; export만 지원하고 import 경로는 아님 |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held 리뷰, evidence-only quality evaluator, retrieval evaluator, B0 reconciliation preview | **현재 main에서 pre-release 검증 중** — 3.1.0은 최신 게시/전역 릴리스이며, 3.2.0의 게시·전역 설치·활성화는 릴리스 주기에 기록될 때까지 완료되지 않습니다. B0는 preview-only이고 B1 apply/writer/receipt는 deferred입니다 |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held 리뷰, evidence-only quality evaluator, retrieval evaluator, B0 reconciliation preview | **출시** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; public-safe 전역 활성화가 기록되었습니다. B0는 preview-only이고 B1 apply/writer/receipt는 deferred입니다 |
 
-3.2 구현은 현재 main에서 pre-release 검증을 위해 존재합니다. `adj_v3`
-precision/session de-noising과 policy-aware held 리뷰는 automatic Claim creation을
-꺼진 상태로 두며 어떤 경로도 `AcceptanceDecision`을 만들지 않습니다.
-adjudication/knowledge-form evaluator는 evidence-only이고 retrieval evaluator는
-synthetic입니다. B0 reconcile-policy는 preview-only이며 B1 apply/writer/receipt는
-deferred입니다. 3.1.0은 최신 게시/전역 릴리스이며, 3.2.0의 게시·전역 설치·활성화는
-릴리스 주기에 기록될 때까지 완료되지 않습니다. dogfood는 synthetic·disposable입니다.
-hosted graph adapter와 그 밖의 로드맵 작업은 아직 출시되지 않았습니다. 상세:
+3.2는 npm `@innocarpe/carpeos@3.2.0`으로 릴리스되었고, annotated `v3.2.0` 태그와
+draft도 prerelease도 아닌 GitHub Release가 있습니다. `adj_v3` precision/session
+de-noising과 policy-aware held 리뷰는 automatic Claim creation을 꺼진 상태로 두며 어떤
+경로도 `AcceptanceDecision`을 만들지 않습니다. adjudication/knowledge-form evaluator는
+evidence-only이고 retrieval evaluator는 synthetic입니다. B0 `reconcile-policy`는
+preview-only이며 `--from-policy`, `--to-policy`, `--trust-zone`, `--limit`만 지원합니다.
+B1 apply/writer/receipt는 deferred입니다. dogfood는 synthetic·disposable입니다. hosted
+graph adapter와 그 밖의 로드맵 작업은 아직 출시되지 않았습니다. 상세:
 [product 2.0 residual](docs/maintainers/product-2.0.0.md) ·
 [product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
 [product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
@@ -404,10 +408,10 @@ hosted graph adapter와 그 밖의 로드맵 작업은 아직 출시되지 않�
 
 ## 지금 구현된 것
 
-**공개 릴리스:** [`@innocarpe/carpeos@3.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.1.0) ·
-[CHANGELOG](CHANGELOG.md#310---2026-08-01) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md)).
+**공개 릴리스:** [`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
+[CHANGELOG](CHANGELOG.md) ·
+[product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
 패키지 공개와 로컬 설치는 호스티드 배포를 뜻하지 않습니다.
 
 기본 로컬 루프 (CI 게이트):
@@ -422,7 +426,7 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | --- | --- |
 | Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md) 포함) |
 | Local capture + outbox | 출시 |
-| Knowledge adjudication (`adj_v3`) | 현재 main에서 3.2 pre-release 검증용으로 존재 — precision/session de-noising, disposition, policy-aware held 리뷰, policy history; automatic Claim과 `AcceptanceDecision` 없음 |
+| Knowledge adjudication (`adj_v3`) | **3.2에 출시** — precision/session de-noising, disposition, policy-aware held 리뷰, policy history; automatic Claim과 `AcceptanceDecision` 없음 |
 | 기본 retrieval | **promoted/active only**; held는 opt-in |
 | Doctor 판정 health | 출시 |
 | Sync Worker/client + bounded `sync cycle` | 코드 + 로컬 테스트. production edge 주장 없음 |
@@ -431,13 +435,14 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | Retrieval-first 그래프/하이브리드 회상 | **출시** — indexed graph traversal, 교차 저장소 partition, worktree facet |
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
 | OKF v0.2 export projection | **3.1에 출시** — 로컬 export만, import 경로 없음 |
-| **3.2.0 pre-release 작업** | 현재 main에서 pre-release 검증용으로 존재: `adj_v3`와 evaluator, B0 reconcile-policy preview-only, B1 apply/writer/receipt deferred. 3.1.0은 최신 게시/전역 릴리스이며, 3.2.0의 게시·전역 설치·활성화는 릴리스 주기에 기록될 때까지 완료되지 않음 |
+| **3.2.0** | **출시** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; `adj_v3`와 evaluator; B0 `reconcile-policy`는 preview-only이고 B1 apply/writer/receipt는 deferred; public-safe 전역 활성화 기록됨 |
 | `carpeos setup` / one-stop install | npm `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
 | Hosted embeddings / multi-tenant SaaS | 이 저장소 목표 아님 |
 | **3.0.0 product freeze** | **출시** — `v3.0.0` |
 | **3.1.0 public release** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
+| **3.2.0 public release** | **출시** — `@innocarpe/carpeos@3.2.0` / `v3.2.0` |
 
 **NOT DEPLOYED:** hosted Worker, D1/R2 production, hosted graph adapter/service,
 private vault, hosted MCP 는 이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI
