@@ -85,7 +85,10 @@ export type ReconciliationCandidate = {
   policy_version?: string;
   lineage_event_ids?: readonly string[];
   supersession_relations?: readonly (readonly [string, string])[];
-  taint_reason_codes?: readonly GlobalTaintReasonCode[];
+  subject_ref?: string;
+  target_subject_ref?: string;
+  replacement_subject_ref?: string;
+  conformance_proved?: boolean;
 };
 
 export type ReconciliationHighWater = PolicyReconciliationPlanV2["high_water"];
@@ -587,15 +590,69 @@ export function buildPolicyReconciliationPlanV2(input: {
       .filter((entry) => eligible.some((other) => other.component_id === entry.component_id))
       .map((entry) => entry.component_id),
   );
-  if (causalComponentSet.size > 0) taints.add("eligible_unsafe_overlap_global_taint");
-  for (const candidate of candidates) {
-    const entry = entries.find((item) => item.source_event_id === candidate.source_event_id);
-    if (entry === undefined) continue;
-    for (const reason of candidate.taint_reason_codes ?? []) {
-      if (!GLOBAL_REASONS.has(reason)) throw new Error("invalid global taint");
-      taints.add(reason);
+  if (causalComponentSet.size > 0) {
+    taints.add("eligible_unsafe_overlap_global_taint");
+    taints.add("unsafe_influences_eligible_global_taint");
+  }
+  const candidatesBySource = new Map(
+    candidates.map((candidate) => [candidate.source_event_id, candidate]),
+  );
+  const eligibleWritesByTarget = new Map<string, PolicyReconciliationEntryV2[]>();
+  for (const entry of entries) {
+    if (entry.bucket !== "eligible_write" || entry.target_event_id === null) continue;
+    const group = eligibleWritesByTarget.get(entry.target_event_id) ?? [];
+    group.push(entry);
+    eligibleWritesByTarget.set(entry.target_event_id, group);
+  }
+  for (const group of eligibleWritesByTarget.values()) {
+    if (group.length < 2) continue;
+    taints.add("conflicting_eligible_intent_global_taint");
+    for (const entry of group) causalComponentSet.add(entry.component_id);
+  }
+  const normalizedEdges = candidates.flatMap((candidate) => candidate.supersession_relations ?? []);
+  for (const entry of entries)
+    if (entry.bucket === "eligible_write" && entry.replacement_event_id !== null)
+      normalizedEdges.push([entry.target_event_id as string, entry.replacement_event_id]);
+  const reaches = (start: string, goal: string): boolean => {
+    const visited = new Set<string>();
+    const pending = [start];
+    while (pending.length > 0) {
+      const current = pending.pop() as string;
+      if (current === goal) return true;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      for (const [from, to] of normalizedEdges) if (from === current) pending.push(to);
+    }
+    return false;
+  };
+  for (const entry of entries) {
+    const candidate = candidatesBySource.get(entry.source_event_id);
+    const subjectMismatch =
+      candidate?.subject_ref !== undefined &&
+      ((candidate.target_subject_ref !== undefined &&
+        candidate.target_subject_ref !== candidate.subject_ref) ||
+        (entry.replacement_event_id !== null &&
+          candidate.replacement_subject_ref !== undefined &&
+          candidate.replacement_subject_ref !== candidate.subject_ref));
+    const cyclic =
+      entry.replacement_event_id !== null &&
+      entry.target_event_id !== null &&
+      reaches(entry.replacement_event_id, entry.target_event_id);
+    if (entry.bucket !== "unsafe_unchanged" && subjectMismatch) {
+      taints.add("eligible_subject_uncertainty_global_taint");
       causalComponentSet.add(entry.component_id);
     }
+    if (entry.bucket !== "unsafe_unchanged" && cyclic) {
+      taints.add("eligible_reachable_cycle_global_taint");
+      causalComponentSet.add(entry.component_id);
+    }
+  }
+  for (const candidate of candidates) {
+    if (candidate.conformance_proved !== false) continue;
+    const entry = entries.find((item) => item.source_event_id === candidate.source_event_id);
+    if (entry === undefined) continue;
+    taints.add("unproved_conformance_global_taint");
+    causalComponentSet.add(entry.component_id);
   }
   const causalComponents = [...causalComponentSet].sort(compareRaw);
   for (const entry of unsafe) {

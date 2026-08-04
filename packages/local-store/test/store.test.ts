@@ -1762,6 +1762,249 @@ describe("policy reconciliation preview", () => {
     expect(JSON.stringify(plan)).not.toContain("synthetic deterministic installer");
     expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
   });
+  it("recognizes uniquely reviewed held materializations for both policy endpoints", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({
+        payload: { message: "Synthetic context without durable markers for operator review." },
+      }),
+    );
+    for (const policyVersion of ["adj_old", "adj_new"]) {
+      expect(store.adjudicateFromEventId(captured.event.event_id, { policyVersion })).toMatchObject(
+        {
+          status: "held",
+          policy_version: policyVersion,
+        },
+      );
+      const reviewed = store.reviewHeldDisposition(
+        captured.event.event_id,
+        "promote",
+        policyVersion,
+      );
+      expect(reviewed).toMatchObject({
+        status: "reviewed",
+        decision: "promote",
+        observation: { lifecycle_status: "active" },
+      });
+    }
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({
+        bucket: "eligible_write",
+        action: "replace",
+        reason_code: "replace",
+      }),
+    ]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("fails closed when held materialization authority is interrupted, absent, rejected, or conflicting", () => {
+    const interrupted = makeStore("tz_synthetic").store;
+    const interruptedSource = interrupted.captureHook(
+      makeEnvelope({
+        payload: { message: "Synthetic context without durable markers for operator review." },
+      }),
+    );
+    expect(
+      interrupted.adjudicateFromEventId(interruptedSource.event.event_id, {
+        policyVersion: "adj_old",
+      }),
+    ).toMatchObject({ status: "held" });
+    expect(
+      interrupted.adjudicateFromEventId(interruptedSource.event.event_id, {
+        policyVersion: "adj_new",
+      }),
+    ).toMatchObject({ status: "held" });
+    const interruption = vi
+      .spyOn(interrupted, "proposeObservationDraft")
+      .mockImplementationOnce(() => {
+        throw new Error("synthetic interrupted materialization");
+      });
+    expect(
+      interrupted.reviewHeldDisposition(interruptedSource.event.event_id, "promote", "adj_old"),
+    ).toMatchObject({ status: "failed" });
+    interruption.mockRestore();
+    expect(
+      interrupted.reviewHeldDisposition(interruptedSource.event.event_id, "promote", "adj_new"),
+    ).toMatchObject({ status: "reviewed" });
+    expectHeldPreviewUnsafe(interrupted, interruptedSource.event.event_id, "missing_unsafe");
+
+    const absent = makeStore("tz_synthetic").store;
+    const absentSource = absent.captureHook(
+      makeEnvelope({ payload: { message: "Synthetic unreviewed held authority." } }),
+      { extract: false },
+    );
+    const seed = absent.captureHook(
+      makeEnvelope({
+        session_id: "session_held_seed",
+        payload: { decision: "Use synthetic seed." },
+      }),
+    );
+    const seedObservation = extractedObservation(
+      absent.adjudicateFromEventId(seed.event.event_id, { policyVersion: "adj_seed" }),
+    );
+    appendHeldDisposition(absent, absentSource, "adj_old");
+    appendHeldDisposition(absent, absentSource, "adj_new");
+    appendSyntheticPolicyObservation(absent, seedObservation, absentSource, "adj_old", "held");
+    appendHeldReview(absent, absentSource.event.event_id, "adj_new", "promote");
+    appendSyntheticPolicyObservation(absent, seedObservation, absentSource, "adj_new", "held");
+    expectHeldPreviewUnsafe(absent, absentSource.event.event_id, "ambiguous_unsafe");
+
+    const rejected = makeStore("tz_synthetic").store;
+    const rejectedSource = rejected.captureHook(
+      makeEnvelope({
+        payload: { message: "Synthetic context without durable markers for operator review." },
+      }),
+    );
+    for (const policyVersion of ["adj_old", "adj_new"]) {
+      expect(
+        rejected.adjudicateFromEventId(rejectedSource.event.event_id, { policyVersion }),
+      ).toMatchObject({ status: "held" });
+    }
+    expect(
+      rejected.reviewHeldDisposition(rejectedSource.event.event_id, "reject", "adj_old"),
+    ).toMatchObject({ status: "reviewed", decision: "reject" });
+    expect(
+      rejected.reviewHeldDisposition(rejectedSource.event.event_id, "promote", "adj_new"),
+    ).toMatchObject({ status: "reviewed", decision: "promote" });
+    expectHeldPreviewUnsafe(rejected, rejectedSource.event.event_id, "missing_unsafe");
+
+    const conflicting = makeStore("tz_synthetic").store;
+    const conflictingSource = conflicting.captureHook(
+      makeEnvelope({ payload: { message: "Synthetic conflicting held authority." } }),
+      { extract: false },
+    );
+    const conflictingSeed = conflicting.captureHook(
+      makeEnvelope({
+        session_id: "session_conflict_seed",
+        payload: { decision: "Use synthetic seed." },
+      }),
+    );
+    const conflictingBase = extractedObservation(
+      conflicting.adjudicateFromEventId(conflictingSeed.event.event_id, {
+        policyVersion: "adj_seed",
+      }),
+    );
+    for (const policyVersion of ["adj_old", "adj_new"]) {
+      appendHeldDisposition(conflicting, conflictingSource, policyVersion);
+      appendHeldReview(conflicting, conflictingSource.event.event_id, policyVersion, "promote");
+      appendSyntheticPolicyObservation(
+        conflicting,
+        conflictingBase,
+        conflictingSource,
+        policyVersion,
+        "held",
+      );
+    }
+    appendSyntheticPolicyObservation(
+      conflicting,
+      conflictingBase,
+      conflictingSource,
+      "adj_old",
+      "policy",
+    );
+    expectHeldPreviewUnsafe(conflicting, conflictingSource.event.event_id, "ambiguous_unsafe");
+  });
+  it("keeps reject dispositions with matching ordinary policy keys unsafe", () => {
+    const { store } = makeStore("tz_synthetic");
+    const source = store.captureHook(
+      makeEnvelope({ payload: { message: "Synthetic ordinary-key reject authority." } }),
+      { extract: false },
+    );
+    const seed = store.captureHook(
+      makeEnvelope({
+        session_id: "session_reject_seed",
+        payload: { decision: "Use synthetic seed." },
+      }),
+    );
+    const base = extractedObservation(
+      store.adjudicateFromEventId(seed.event.event_id, { policyVersion: "adj_seed" }),
+    );
+    for (const policyVersion of ["adj_old", "adj_new"]) {
+      appendDisposition(store, source, policyVersion, "reject");
+      appendSyntheticPolicyObservation(store, base, source, policyVersion, "policy");
+    }
+    expectHeldPreviewUnsafe(store, source.event.event_id, "ambiguous_unsafe");
+  });
+  it("keeps unreviewed holds with ordinary policy keys unsafe", () => {
+    const { store } = makeStore("tz_synthetic");
+    const source = store.captureHook(
+      makeEnvelope({ payload: { message: "Synthetic unreviewed ordinary-key authority." } }),
+      { extract: false },
+    );
+    const seed = store.captureHook(
+      makeEnvelope({
+        session_id: "session_unreviewed_seed",
+        payload: { decision: "Use synthetic seed." },
+      }),
+    );
+    const base = extractedObservation(
+      store.adjudicateFromEventId(seed.event.event_id, { policyVersion: "adj_seed" }),
+    );
+    for (const policyVersion of ["adj_old", "adj_new"]) {
+      appendHeldDisposition(store, source, policyVersion);
+      appendSyntheticPolicyObservation(store, base, source, policyVersion, "policy");
+    }
+    expectHeldPreviewUnsafe(store, source.event.event_id, "ambiguous_unsafe");
+  });
+  it("keeps reviewed holds with ordinary-only or extra ordinary materializations unsafe", () => {
+    for (const extra of [false, true]) {
+      const { store } = makeStore("tz_synthetic");
+      const source = store.captureHook(
+        makeEnvelope({
+          session_id: `session_reviewed_ordinary_${extra}`,
+          payload: { message: "Synthetic reviewed ordinary-key authority." },
+        }),
+        { extract: false },
+      );
+      const seed = store.captureHook(
+        makeEnvelope({
+          session_id: `session_reviewed_seed_${extra}`,
+          payload: { decision: "Use synthetic seed." },
+        }),
+      );
+      const base = extractedObservation(
+        store.adjudicateFromEventId(seed.event.event_id, { policyVersion: "adj_seed" }),
+      );
+      for (const policyVersion of ["adj_old", "adj_new"]) {
+        appendHeldDisposition(store, source, policyVersion);
+        appendHeldReview(store, source.event.event_id, policyVersion, "promote");
+        appendSyntheticPolicyObservation(store, base, source, policyVersion, "policy");
+        if (extra) {
+          appendSyntheticPolicyObservation(store, base, source, policyVersion, "held");
+        }
+      }
+      expectHeldPreviewUnsafe(store, source.event.event_id, "ambiguous_unsafe");
+    }
+  });
+  it("keeps adj_v3 materialization distinct from discoverable shipped adj_v2 targets", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic deterministic installer." } }),
+    );
+    const v2 = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_v2",
+    });
+    const v3 = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_v3",
+    });
+    expect(v2.status).toBe("promoted");
+    expect(v3.status).toBe("promoted");
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_v2",
+      to_policy: "adj_v3",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]).toMatchObject({ action: "replace", reason_code: "replace" });
+    expect(plan.entries[0]?.target_event_id).not.toBe(plan.entries[0]?.replacement_event_id);
+  });
 
   it("emits invalidation from an explicit later rejected disposition without writes", () => {
     const { store } = makeStore("tz_synthetic");
@@ -1997,6 +2240,115 @@ describe("policy reconciliation preview", () => {
     expect(plan.global_taint_component_ids).toEqual([]);
     expect(plan.global_taint_entry_ids).toEqual([]);
   });
+  it("keeps a conformant source duplicated into the inbox imported and unsafe", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic imported-source procedure." } }),
+    );
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, {
+        policyVersion: "adj_old",
+      }).status,
+    ).toBe("promoted");
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, {
+        policyVersion: "adj_new",
+      }).status,
+    ).toBe("promoted");
+    appendInboxCopy(store, captured.event, captured.protected_value_id);
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({
+        source_event_id: captured.event.event_id,
+        bucket: "unsafe_unchanged",
+        action: "none",
+        reason_code: "imported_unsafe",
+      }),
+    ]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("keeps an inbox-duplicated exact from-policy materialization imported and unsafe", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic imported-old procedure." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    appendInboxCopy(store, oldObservation, captured.protected_value_id);
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({
+        source_event_id: captured.event.event_id,
+        bucket: "unsafe_unchanged",
+        action: "none",
+        reason_code: "imported_unsafe",
+        target_event_id: oldObservation.event_id,
+        replacement_event_id: null,
+      }),
+    ]);
+    expect(plan.entries[0]?.target_event_id).not.toBe(newObservation.event_id);
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(plan.global_taint_component_ids).toEqual([]);
+    expect(plan.global_taint_entry_ids).toEqual([]);
+    expect(plan.plan_admissible).toBe(true);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("keeps an inbox-duplicated exact to-policy materialization imported and unsafe", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use the synthetic imported-new procedure." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    const oldObservation = extractedObservation(oldResult);
+    const newObservation = extractedObservation(newResult);
+    appendInboxCopy(store, newObservation, captured.protected_value_id);
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries).toEqual([
+      expect.objectContaining({
+        source_event_id: captured.event.event_id,
+        bucket: "unsafe_unchanged",
+        action: "none",
+        reason_code: "imported_unsafe",
+        target_event_id: null,
+        replacement_event_id: newObservation.event_id,
+      }),
+    ]);
+    expect(plan.entries[0]?.replacement_event_id).not.toBe(oldObservation.event_id);
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(plan.global_taint_component_ids).toEqual([]);
+    expect(plan.global_taint_entry_ids).toEqual([]);
+    expect(plan.plan_admissible).toBe(true);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
   it("marks a cross-zone existing relation unsafe without applying it", () => {
     const { store } = makeStore("tz_synthetic");
     const captured = store.captureHook(
@@ -2145,17 +2497,12 @@ describe("policy reconciliation preview", () => {
           source_event_id: "evt_overlap0002",
           target_event_id: "evt_sharedtarget",
           unsafe_reason_code: "lineage_unsafe",
-          taint_reason_codes: [
-            "unproved_conformance_global_taint",
-            "unsafe_influences_eligible_global_taint",
-          ],
         },
       ],
     });
     expect(plan.entries[0]?.component_id).toBe(plan.entries[1]?.component_id);
     expect(plan.global_taint_reason_codes).toEqual([
       "eligible_unsafe_overlap_global_taint",
-      "unproved_conformance_global_taint",
       "unsafe_influences_eligible_global_taint",
     ]);
     expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
@@ -2192,6 +2539,7 @@ describe("policy reconciliation preview", () => {
       "eligible_cross_zone_global_taint",
       "eligible_imported_shared_lineage_global_taint",
       "eligible_unsafe_overlap_global_taint",
+      "unsafe_influences_eligible_global_taint",
     ]);
     expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
     expect(plan.global_taint_entry_ids).toEqual([
@@ -2273,6 +2621,7 @@ describe("policy reconciliation preview", () => {
     expect(plan.global_taint_reason_codes).toEqual([
       "eligible_reachable_cycle_global_taint",
       "eligible_unsafe_overlap_global_taint",
+      "unsafe_influences_eligible_global_taint",
     ]);
     expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
     expect(plan.global_taint_entry_ids).toEqual(["evt_cycleproof1", "evt_cycleproof4"]);
@@ -2307,6 +2656,89 @@ describe("policy reconciliation preview", () => {
     expect(plan.plan_admissible).toBe(false);
     expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
     expect(plan.global_taint_entry_ids).toEqual([captured.event.event_id]);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("retains a subject-mismatched real policy-key Observation as causal unsafe evidence", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use synthetic subject-mismatch procedure." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, {
+        policyVersion: "adj_new",
+        signalText: "thanks",
+      }).status,
+    ).toBe("rejected");
+    const oldObservation = extractedObservation(oldResult);
+    const beforeObservationCount = store.countRows("canonical_events");
+    appendSyntheticPolicyObservation(
+      store,
+      oldObservation,
+      captured,
+      "adj_new",
+      "policy",
+      "subject_other_synthetic",
+    );
+    expect(store.countRows("canonical_events")).toBe(beforeObservationCount + 1);
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      source_event_id: captured.event.event_id,
+      bucket: "unsafe_unchanged",
+      reason_code: "lineage_unsafe",
+      component_id: expect.any(String),
+    });
+    expect(plan.global_taint_reason_codes).toEqual([]);
+    expect(plan.global_taint_component_ids).toEqual([]);
+    expect(plan.global_taint_entry_ids).toEqual([]);
+    expect(plan.plan_admissible).toBe(true);
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("keeps a subject-mismatched malformed policy Observation as causal unsafe evidence", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = store.captureHook(
+      makeEnvelope({ payload: { decision: "Use synthetic malformed-subject procedure." } }),
+    );
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    expect(
+      store.adjudicateFromEventId(captured.event.event_id, {
+        policyVersion: "adj_new",
+        signalText: "thanks",
+      }).status,
+    ).toBe("rejected");
+    appendMalformedSubjectPolicyObservation(
+      store,
+      extractedObservation(oldResult),
+      captured,
+      "adj_new",
+    );
+    const beforePreview = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 10,
+    });
+    expect(plan.entries[0]).toMatchObject({
+      source_event_id: captured.event.event_id,
+      bucket: "unsafe_unchanged",
+      action: "none",
+      reason_code: "lineage_unsafe",
+    });
+    expect(plan.global_taint_reason_codes).toEqual(["unproved_conformance_global_taint"]);
+    expect(plan.global_taint_component_ids).toEqual([plan.entries[0]?.component_id]);
+    expect(plan.global_taint_entry_ids).toEqual([captured.event.event_id]);
+    expect(plan.plan_admissible).toBe(false);
     expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
   });
   it("fails closed for malformed candidate source JSON without throwing or writing", () => {
@@ -2372,13 +2804,17 @@ describe("policy reconciliation preview", () => {
         makeEnvelope({
           session_id: `session_prefix_${suffix}`,
           source_event_id: `source_prefix_${suffix}`,
-          payload: { decision: `Use synthetic prefix ${suffix}.` },
+          payload: { decision: `Use the synthetic deterministic installer ${suffix}.` },
         }),
       ),
     );
     for (const item of captured) {
-      store.adjudicateFromEventId(item.event.event_id, { policyVersion: "adj_old" });
+      const oldResult = store.adjudicateFromEventId(item.event.event_id, {
+        policyVersion: "adj_old",
+      });
+      expect(oldResult.status).toBe("promoted");
     }
+    const beforePreview = reconciliationWriteCounts(store);
     const plan = store.previewPolicyReconciliation({
       from_policy: "adj_old",
       to_policy: "adj_new",
@@ -2393,6 +2829,83 @@ describe("policy reconciliation preview", () => {
     expect(plan.entries[0]?.source_event_id).toBe(
       [...captured.map((item) => item.event.event_id)].sort()[0],
     );
+    const repeat = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    expect(JSON.stringify(repeat)).toBe(JSON.stringify(plan));
+    expect(reconciliationWriteCounts(store)).toEqual(beforePreview);
+  });
+  it("keeps a missing lexical first old materialization in the bounded prefix", () => {
+    const { store } = makeStore("tz_synthetic");
+    const captured = ["a", "z"].map((suffix) =>
+      store.captureHook(
+        makeEnvelope({
+          session_id: `session_missing_prefix_${suffix}`,
+          source_event_id: `source_missing_prefix_${suffix}`,
+          payload: { decision: `Use the synthetic deterministic installer ${suffix}.` },
+        }),
+        { extract: false },
+      ),
+    );
+    const first = [...captured].sort((left, right) =>
+      left.event.event_id < right.event.event_id ? -1 : 1,
+    )[0];
+    const second = [...captured].sort((left, right) =>
+      left.event.event_id < right.event.event_id ? -1 : 1,
+    )[1];
+    if (first === undefined || second === undefined) throw new Error("expected synthetic sources");
+    const db = new DatabaseSync(store.dbPath);
+    try {
+      db.prepare(
+        `INSERT INTO knowledge_dispositions (
+          source_event_id, artifact_id, trust_zone_id, disposition, reason_codes_json,
+          scores_json, policy_version, statement, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        first.event.event_id,
+        first.event.payload.artifact_id,
+        "tz_synthetic",
+        "promote",
+        "[]",
+        "{}",
+        "adj_old",
+        "synthetic",
+        "2026-01-01T00:00:00Z",
+      );
+    } finally {
+      db.close();
+    }
+    const secondResult = store.adjudicateFromEventId(second.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    expect(secondResult.status).toBe("promoted");
+    const before = reconciliationWriteCounts(store);
+    const plan = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    const repeat = store.previewPolicyReconciliation({
+      from_policy: "adj_old",
+      to_policy: "adj_new",
+      trust_zone_id: "tz_synthetic",
+      limit: 1,
+    });
+    expect(plan.total_candidate_count).toBe(2);
+    expect(plan.entries[0]).toMatchObject({
+      source_event_id: first.event.event_id,
+      reason_code: "missing_unsafe",
+      action: "none",
+    });
+    expect(plan.truncated).toBe(true);
+    expect(plan.plan_admissible).toBe(false);
+    expect(repeat.plan_digest).toBe(plan.plan_digest);
+    expect(JSON.stringify(repeat)).toBe(JSON.stringify(plan));
+    expect(reconciliationWriteCounts(store)).toEqual(before);
   });
 });
 
@@ -2524,6 +3037,242 @@ function insertRowIdMismatchedObservation(
   } finally {
     db.close();
   }
+}
+function policyObservationKey(sourceEventId: string, policyVersion: string): string {
+  return `idem_${hashHex(
+    stableJson({
+      kind: "adjudicated_observation",
+      source_event_id: sourceEventId,
+      policy_version: policyVersion,
+    }),
+  ).slice(0, 32)}`;
+}
+
+function heldObservationKey(sourceEventId: string, policyVersion: string): string {
+  return `idem_${hashHex(
+    stableJson({
+      kind: "held_review_promote",
+      source_event_id: sourceEventId,
+      trust_zone_id: "tz_synthetic",
+      policy_version: policyVersion,
+    }),
+  ).slice(0, 32)}`;
+}
+
+function appendDisposition(
+  store: LocalCaptureStore,
+  source: { event: CanonicalEvent<"EvidenceArtifact"> },
+  policyVersion: string,
+  disposition: "hold" | "reject",
+): void {
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO knowledge_dispositions (
+        source_event_id, artifact_id, trust_zone_id, disposition, reason_codes_json,
+        scores_json, policy_version, statement, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      source.event.event_id,
+      source.event.payload.artifact_id,
+      "tz_synthetic",
+      disposition,
+      "[]",
+      "{}",
+      policyVersion,
+      "synthetic",
+      now.toISOString(),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function appendHeldDisposition(
+  store: LocalCaptureStore,
+  source: { event: CanonicalEvent<"EvidenceArtifact"> },
+  policyVersion: string,
+): void {
+  appendDisposition(store, source, policyVersion, "hold");
+}
+
+function appendHeldReview(
+  store: LocalCaptureStore,
+  sourceEventId: string,
+  policyVersion: string,
+  decision: "promote" | "reject",
+): void {
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO knowledge_disposition_reviews (
+        review_id, source_event_id, trust_zone_id, policy_version, review_decision, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      `kdr_${hashHex(`${sourceEventId}:${policyVersion}:${decision}`).slice(0, 32)}`,
+      sourceEventId,
+      "tz_synthetic",
+      policyVersion,
+      decision,
+      now.toISOString(),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function appendSyntheticPolicyObservation(
+  store: LocalCaptureStore,
+  base: CanonicalEvent<"Observation">,
+  source: { event: CanonicalEvent<"EvidenceArtifact">; protected_value_id: string },
+  policyVersion: string,
+  authority: "held" | "policy",
+  subjectRef = source.event.subject_ref,
+): void {
+  const eventId = `evt_${hashHex(
+    `${source.event.event_id}:${policyVersion}:${authority}:${subjectRef}`,
+  ).slice(0, 24)}`;
+  const event: CanonicalEvent<"Observation"> = {
+    ...base,
+    event_id: eventId,
+    subject_ref: subjectRef,
+    lifecycle_status: "active",
+    idempotency_key:
+      authority === "held"
+        ? heldObservationKey(source.event.event_id, policyVersion)
+        : policyObservationKey(source.event.event_id, policyVersion),
+    provenance: [
+      { ref_type: "event", ref_id: source.event.event_id, relationship: "derived_from" },
+    ],
+    payload: {
+      ...base.payload,
+      evidence_artifact_refs: [source.event.payload.artifact_id],
+    },
+  };
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO canonical_events (
+        event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+        protected_value_id, event_json, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      event.event_id,
+      event.event_type,
+      event.trust_zone.trust_zone_id,
+      event.idempotency_key,
+      event.request_fingerprint,
+      source.protected_value_id,
+      JSON.stringify(event),
+      event.recorded_time.start,
+    );
+  } finally {
+    db.close();
+  }
+}
+function appendMalformedSubjectPolicyObservation(
+  store: LocalCaptureStore,
+  base: CanonicalEvent<"Observation">,
+  source: { event: CanonicalEvent<"EvidenceArtifact">; protected_value_id: string },
+  policyVersion: string,
+): void {
+  const event: CanonicalEvent<"Observation"> = {
+    ...base,
+    event_id: "evt_malformed_subject_body",
+    subject_ref: "subject_other_synthetic",
+    lifecycle_status: "active",
+    idempotency_key: policyObservationKey(source.event.event_id, policyVersion),
+    provenance: [
+      { ref_type: "event", ref_id: source.event.event_id, relationship: "derived_from" },
+    ],
+    payload: {
+      ...base.payload,
+      evidence_artifact_refs: [source.event.payload.artifact_id],
+    },
+  };
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO canonical_events (
+        event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+        protected_value_id, event_json, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "evt_malformed_subject_row",
+      event.event_type,
+      event.trust_zone.trust_zone_id,
+      event.idempotency_key,
+      event.request_fingerprint,
+      source.protected_value_id,
+      JSON.stringify(event),
+      event.recorded_time.start,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function appendInboxCopy(
+  store: LocalCaptureStore,
+  event: CanonicalEvent,
+  protectedValueId: string,
+): void {
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO sync_inbox_events (
+        event_id, trust_zone_id, zone_sequence, protected_value_id, event_json, imported_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      event.event_id,
+      event.trust_zone.trust_zone_id,
+      0,
+      protectedValueId,
+      JSON.stringify(event),
+      now.toISOString(),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function expectHeldPreviewUnsafe(
+  store: LocalCaptureStore,
+  sourceEventId: string,
+  reasonCode: "missing_unsafe" | "ambiguous_unsafe",
+): void {
+  const beforePreview = {
+    protected_values: store.countRows("protected_values"),
+    canonical_events: store.countRows("canonical_events"),
+    outbox: store.countRows("outbox"),
+    knowledge_dispositions: store.countRows("knowledge_dispositions"),
+    knowledge_disposition_reviews: store.countRows("knowledge_disposition_reviews"),
+  };
+  const plan = store.previewPolicyReconciliation({
+    from_policy: "adj_old",
+    to_policy: "adj_new",
+    trust_zone_id: "tz_synthetic",
+    limit: 10,
+  });
+  expect(plan.entries).toEqual([
+    expect.objectContaining({
+      source_event_id: sourceEventId,
+      bucket: "unsafe_unchanged",
+      action: "none",
+      reason_code: reasonCode,
+    }),
+  ]);
+  expect(plan.global_taint_reason_codes).toEqual([]);
+  expect(plan.global_taint_component_ids).toEqual([]);
+  expect(plan.global_taint_entry_ids).toEqual([]);
+  expect(plan.plan_admissible).toBe(true);
+  expect({
+    protected_values: store.countRows("protected_values"),
+    canonical_events: store.countRows("canonical_events"),
+    outbox: store.countRows("outbox"),
+    knowledge_dispositions: store.countRows("knowledge_dispositions"),
+    knowledge_disposition_reviews: store.countRows("knowledge_disposition_reviews"),
+  }).toEqual(beforePreview);
 }
 function makeStore(trustZoneId?: string): { store: LocalCaptureStore; runtimeDir: string } {
   const runtimeDir = tempDir();

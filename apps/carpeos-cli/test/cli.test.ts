@@ -118,6 +118,8 @@ describe("carpeos CLI", () => {
     expect(adjudicateTopic.stdout).toContain("--policy-version");
     expect(adjudicateTopic.stdout).toContain("Neither path creates an AcceptanceDecision");
     expect(adjudicateTopic.stdout).toContain("adj_v3");
+    expect(adjudicateTopic.stdout.match(/^ {2}--limit <n>/gm) ?? []).toHaveLength(1);
+    expect(adjudicateTopic.stdout.match(/^ {2}--trust-zone <id>/gm) ?? []).toHaveLength(1);
   });
 
   it("initializes, identifies a project, captures without plaintext output, and replays", () => {
@@ -1402,17 +1404,40 @@ describe("carpeos CLI", () => {
     expect(collision.status).not.toBe(0);
     expect(readFileSync(join(collisionRoot, "index.md"), "utf8")).toBe("unmanaged\n");
   });
+  it("hashes durable SQLite writes while normalizing transient sidecars", () => {
+    const root = tempDir("carpeos-cli-runtime-digests-");
+    writeFileSync(join(root, "carpeos.sqlite"), "synthetic-main-db", "utf8");
+    writeFileSync(join(root, "carpeos.sqlite-shm"), "synthetic-transient-lock", "utf8");
+    writeFileSync(join(root, "carpeos.sqlite-wal"), "", "utf8");
+    const normalized = runtimeDurableFileDigests(root);
+    expect(normalized).toEqual({
+      "carpeos.sqlite": createHash("sha256").update("synthetic-main-db").digest("hex"),
+    });
+
+    writeFileSync(join(root, "carpeos.sqlite-shm"), "synthetic-other-lock", "utf8");
+    expect(runtimeDurableFileDigests(root)).toEqual(normalized);
+
+    writeFileSync(join(root, "carpeos.sqlite-wal"), "synthetic-durable-wal", "utf8");
+    expect(runtimeDurableFileDigests(root)).toEqual({
+      ...normalized,
+      "carpeos.sqlite-wal": createHash("sha256").update("synthetic-durable-wal").digest("hex"),
+    });
+  });
 });
 
-function runtimeFileDigests(root: string): Record<string, string> {
+function runtimeDurableFileDigests(root: string): Record<string, string> {
   const files: Record<string, string> = {};
   const visit = (directory: string, relative: string) => {
     for (const name of readdirSync(directory)) {
+      // SHM is a transient SQLite lock sidecar. An empty WAL may be materialized
+      // by a read-only open; any non-empty WAL is durable write evidence.
+      if (name === "carpeos.sqlite-shm") continue;
       const path = join(directory, name);
       const next = relative.length === 0 ? name : join(relative, name);
       const stat = statSync(path);
       if (stat.isDirectory()) visit(path, next);
       else if (stat.isFile()) {
+        if (name === "carpeos.sqlite-wal" && stat.size === 0) continue;
         files[next] = createHash("sha256").update(readFileSync(path)).digest("hex");
       }
     }
@@ -1555,8 +1580,14 @@ describe("reconcile-policy success", () => {
       subject_ref: "subject_synthetic",
       payload: { decision: "CLI BODY SENTINEL MUST NOT LEAK" },
     });
-    store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_old" });
-    store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_new" });
+    const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_old",
+    });
+    const newResult = store.adjudicateFromEventId(captured.event.event_id, {
+      policyVersion: "adj_new",
+    });
+    expect(oldResult.status).toBe("promoted");
+    expect(newResult.status).toBe("promoted");
     store.close();
 
     const direct = LocalCaptureStore.openExistingPreview({
@@ -1570,8 +1601,9 @@ describe("reconcile-policy success", () => {
       trust_zone_id: "tz_synthetic",
       limit: 10,
     });
+    expect(plan.entries).toHaveLength(1);
     direct.close();
-    const before = runtimeFileDigests(context.home);
+    const before = runtimeDurableFileDigests(context.home);
     const result = await runCliJson(
       [
         "adjudicate",
@@ -1591,10 +1623,10 @@ describe("reconcile-policy success", () => {
     expect(result.rawStdout).toBe(JSON.stringify(plan));
     expect(result.stdout).toEqual(plan);
     expect(result.rawStdout).not.toContain("CLI BODY SENTINEL");
-    expect(runtimeFileDigests(context.home)).toEqual(before);
+    expect(runtimeDurableFileDigests(context.home)).toEqual(before);
   });
 
-  it("reports bounded and same-policy empty previews", async () => {
+  it("reports bounded previews without durable runtime writes", async () => {
     const context = makeContext();
     const store = new LocalCaptureStore({
       runtimeDir: context.home,
@@ -1602,6 +1634,7 @@ describe("reconcile-policy success", () => {
       trustZoneId: "tz_synthetic",
       keyProvider: new StaticKeyProvider(new Uint8Array(32).fill(5)),
     });
+    const sourceEventIds: string[] = [];
     for (const suffix of ["z", "a"]) {
       const captured = store.captureHook({
         provider: "codex",
@@ -1610,27 +1643,34 @@ describe("reconcile-policy success", () => {
         session_id: `session_reconcile_${suffix}`,
         media_type: "application/json",
         subject_ref: "subject_synthetic",
-        payload: { decision: `Synthetic ${suffix}` },
+        payload: { decision: `Use the synthetic deterministic installer ${suffix}.` },
       });
-      store.adjudicateFromEventId(captured.event.event_id, { policyVersion: "adj_old" });
+      sourceEventIds.push(captured.event.event_id);
+      const oldResult = store.adjudicateFromEventId(captured.event.event_id, {
+        policyVersion: "adj_old",
+      });
+      expect(oldResult.status).toBe("promoted");
     }
     store.close();
-    const bounded = await runCliJson(
-      [
-        "adjudicate",
-        "reconcile-policy",
-        "--from-policy",
-        "adj_old",
-        "--to-policy",
-        "adj_new",
-        "--trust-zone",
-        "tz_synthetic",
-        "--limit",
-        "1",
-      ],
-      context,
-    );
+    const before = runtimeDurableFileDigests(context.home);
+    const boundedArgs = [
+      "adjudicate",
+      "reconcile-policy",
+      "--from-policy",
+      "adj_old",
+      "--to-policy",
+      "adj_new",
+      "--trust-zone",
+      "tz_synthetic",
+      "--limit",
+      "1",
+    ];
+    const bounded = await runCliJson(boundedArgs, context);
+    const repeat = await runCliJson(boundedArgs, context);
     expect(bounded.status).toBe(0);
+    expect(repeat.status).toBe(0);
+    expect(repeat.rawStdout).toBe(bounded.rawStdout);
+    expect(repeat.stdout).toEqual(bounded.stdout);
     expect(bounded.stdout).toMatchObject({
       total_candidate_count: 2,
       classified_count: 1,
@@ -1640,6 +1680,11 @@ describe("reconcile-policy success", () => {
     expect(bounded.stdout.global_taint_reason_codes as string[]).toContain(
       "incomplete_enumeration_global_taint",
     );
+    expect((bounded.stdout.entries as Array<{ source_event_id: string }>)[0]?.source_event_id).toBe(
+      [...sourceEventIds].sort()[0],
+    );
+    expect(repeat.stdout.plan_digest).toBe(bounded.stdout.plan_digest);
+    expect(runtimeDurableFileDigests(context.home)).toEqual(before);
     const same = await runCliJson(
       [
         "adjudicate",

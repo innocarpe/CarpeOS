@@ -36,9 +36,8 @@ import type {
 import { validateConformance } from "@carpeos/schema";
 import {
   buildPolicyReconciliationPlanV2,
-  classifyPolicyReconciliationEntry,
+  type GlobalTaintReasonCode,
   type PolicyReconciliationPlanV2,
-  partitionReconciliationComponents,
   type ReconciliationCandidate,
 } from "./policy-reconciliation.js";
 import type { WorktreeIdentity } from "./project-identity.js";
@@ -1617,23 +1616,22 @@ export class LocalCaptureStore {
     }
     this.db.exec("BEGIN");
     try {
-      const total = this.db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM knowledge_dispositions
-           WHERE trust_zone_id = ? AND policy_version = ?`,
-        )
-        .get(input.trust_zone_id, input.from_policy) as { n: number };
-      const candidates = this.db
+      const dispositionCandidates = this.db
         .prepare(
           `SELECT source_event_id, artifact_id, policy_version FROM knowledge_dispositions
            WHERE trust_zone_id = ? AND policy_version = ?
-           ORDER BY source_event_id COLLATE BINARY ASC, policy_version COLLATE BINARY ASC LIMIT ?`,
+           ORDER BY source_event_id COLLATE BINARY ASC, policy_version COLLATE BINARY ASC`,
         )
-        .all(input.trust_zone_id, input.from_policy, input.limit) as Array<{
+        .all(input.trust_zone_id, input.from_policy) as Array<{
         source_event_id: string;
         artifact_id: string;
         policy_version: string;
       }>;
+      // Every exact from-policy disposition is a bounded preview candidate. Missing
+      // or unproved materializations are classified unsafe below; they never vanish.
+      const candidates = dispositionCandidates;
+      const totalCandidateCount = candidates.length;
+      const candidatePrefix = candidates.slice(0, input.limit);
       const canonicalSupersessions = this.db
         .prepare(
           `SELECT event_id, trust_zone_id, event_json FROM canonical_events
@@ -1678,9 +1676,8 @@ export class LocalCaptureStore {
       };
       loadSupersessions(canonicalSupersessions, localSupersessions, true);
       loadSupersessions(inboxSupersessions, importedSupersessions, false);
-      for (const eventId of localSupersessions.keys()) {
-        importedSupersessions.delete(eventId);
-      }
+      // An inbox copy remains imported evidence even when a canonical row shares
+      // its event id; local overlap must not upgrade origin authority.
       const knownSupersessionRelations = [
         ...new Map(
           [...localSupersessions.values(), ...importedSupersessions.values()]
@@ -1697,10 +1694,10 @@ export class LocalCaptureStore {
                     ] as const,
                   ],
             )
-            .sort(([left], [right]) => left.localeCompare(right)),
+            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
         ).values(),
       ];
-      let reconciliationCandidates: ReconciliationCandidate[] = candidates.map((candidate) => {
+      let reconciliationCandidates: ReconciliationCandidate[] = candidatePrefix.map((candidate) => {
         const importedSource = this.db
           .prepare("SELECT 1 AS found FROM sync_inbox_events WHERE event_id = ?")
           .get(candidate.source_event_id) as { found: number } | undefined;
@@ -1717,6 +1714,9 @@ export class LocalCaptureStore {
             unsafe_reason_code: importedSource === undefined ? "missing_unsafe" : "imported_unsafe",
           };
         }
+        if (importedSource !== undefined) {
+          return { ...candidate, unsafe_reason_code: "imported_unsafe" };
+        }
         let source: CanonicalEvent;
         try {
           source = JSON.parse(sourceRow.event_json) as CanonicalEvent;
@@ -1724,7 +1724,7 @@ export class LocalCaptureStore {
           return {
             ...candidate,
             unsafe_reason_code: "lineage_unsafe",
-            taint_reason_codes: ["unproved_conformance_global_taint"],
+            conformance_proved: false,
           };
         }
         if (
@@ -1738,22 +1738,115 @@ export class LocalCaptureStore {
           return {
             ...candidate,
             unsafe_reason_code: "lineage_unsafe",
-            taint_reason_codes: ["unproved_conformance_global_taint"],
+            conformance_proved: false,
           };
+        }
+        let observationConformanceUnproved = false;
+        const inboxObservationIds = new Set<string>();
+        const relevantObservationKeys = new Set([
+          observationIdempotencyForPolicy(candidate.source_event_id, input.from_policy),
+          observationIdempotencyForPolicy(candidate.source_event_id, input.to_policy),
+          heldReviewObservationIdempotencyKey(
+            candidate.source_event_id,
+            input.trust_zone_id,
+            input.from_policy,
+          ),
+          heldReviewObservationIdempotencyKey(
+            candidate.source_event_id,
+            input.trust_zone_id,
+            input.to_policy,
+          ),
+        ]);
+        const inboxObservations = this.db
+          .prepare(
+            `SELECT event_id, event_json FROM sync_inbox_events
+             WHERE trust_zone_id = ?`,
+          )
+          .all(input.trust_zone_id) as Array<{ event_id: string; event_json: string }>;
+        for (const row of inboxObservations) {
+          try {
+            const event = JSON.parse(row.event_json) as CanonicalEvent;
+            if (
+              event.event_type !== "Observation" ||
+              !relevantObservationKeys.has(event.idempotency_key)
+            )
+              continue;
+            if (
+              !validateConformance("canonicalEvent", event).valid ||
+              event.event_id !== row.event_id ||
+              event.trust_zone.trust_zone_id !== input.trust_zone_id
+            ) {
+              observationConformanceUnproved = true;
+              continue;
+            }
+            inboxObservationIds.add(event.event_id);
+          } catch {
+            // A malformed inbox body cannot be associated with this candidate
+            // without a validated policy key, so it is not a relevant fact.
+          }
         }
         const observations = this.db
           .prepare(
             `SELECT event_id, event_json FROM canonical_events
              WHERE trust_zone_id = ? AND event_type = 'Observation'
-               AND idempotency_key IN (?, ?)`,
+               AND idempotency_key IN (?, ?, ?, ?)`,
           )
           .all(
             input.trust_zone_id,
             observationIdempotencyForPolicy(candidate.source_event_id, input.from_policy),
             observationIdempotencyForPolicy(candidate.source_event_id, input.to_policy),
+            heldReviewObservationIdempotencyKey(
+              candidate.source_event_id,
+              input.trust_zone_id,
+              input.from_policy,
+            ),
+            heldReviewObservationIdempotencyKey(
+              candidate.source_event_id,
+              input.trust_zone_id,
+              input.to_policy,
+            ),
           ) as Array<{ event_id: string; event_json: string }>;
-        let observationConformanceUnproved = false;
-        const matchingObservation = (policyVersion: string): CanonicalEvent<"Observation">[] =>
+        const policyDispositions = this.db
+          .prepare(
+            `SELECT policy_version, disposition FROM knowledge_dispositions
+             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)`,
+          )
+          .all(
+            candidate.source_event_id,
+            input.trust_zone_id,
+            input.from_policy,
+            input.to_policy,
+          ) as Array<{ policy_version: string; disposition: KnowledgeDisposition }>;
+        const heldReviews = this.db
+          .prepare(
+            `SELECT policy_version, review_decision FROM knowledge_disposition_reviews
+             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version IN (?, ?)`,
+          )
+          .all(
+            candidate.source_event_id,
+            input.trust_zone_id,
+            input.from_policy,
+            input.to_policy,
+          ) as Array<{ policy_version: string; review_decision: HeldReviewDecision }>;
+        const materializationAuthority = (
+          policyVersion: string,
+        ): "ordinary" | "held" | undefined => {
+          const dispositions = policyDispositions.filter(
+            (row) => row.policy_version === policyVersion,
+          );
+          const reviews = heldReviews.filter((row) => row.policy_version === policyVersion);
+          if (dispositions.length !== 1) return undefined;
+          if (dispositions[0]?.disposition === "promote")
+            return reviews.length === 0 ? "ordinary" : undefined;
+          if (dispositions[0]?.disposition === "hold")
+            return reviews.length === 1 && reviews[0]?.review_decision === "promote"
+              ? "held"
+              : undefined;
+          return undefined;
+        };
+        const relevantObservations = (
+          policyVersion: string,
+        ): Array<{ event: CanonicalEvent<"Observation">; key: "ordinary" | "held" }> =>
           observations.flatMap((row) => {
             try {
               const event = JSON.parse(row.event_json) as CanonicalEvent;
@@ -1766,11 +1859,24 @@ export class LocalCaptureStore {
                 observationConformanceUnproved = true;
                 return [];
               }
-              const matches =
+              const ordinaryKey = observationIdempotencyForPolicy(
+                candidate.source_event_id,
+                policyVersion,
+              );
+              const heldKey = heldReviewObservationIdempotencyKey(
+                candidate.source_event_id,
+                input.trust_zone_id,
+                policyVersion,
+              );
+              const key =
+                event.idempotency_key === ordinaryKey
+                  ? "ordinary"
+                  : event.idempotency_key === heldKey
+                    ? "held"
+                    : undefined;
+              const relevant =
+                key !== undefined &&
                 event.lifecycle_status === "active" &&
-                event.idempotency_key ===
-                  observationIdempotencyForPolicy(candidate.source_event_id, policyVersion) &&
-                event.subject_ref === source.subject_ref &&
                 event.payload.evidence_artifact_refs.includes(candidate.artifact_id) &&
                 event.provenance.some(
                   (ref) =>
@@ -1778,18 +1884,39 @@ export class LocalCaptureStore {
                     ref.ref_id === candidate.source_event_id &&
                     ref.relationship === "derived_from",
                 );
-              return matches ? [event] : [];
+              return relevant ? [{ event, key }] : [];
             } catch {
               observationConformanceUnproved = true;
               return [];
             }
           });
-        const oldTargets = matchingObservation(input.from_policy);
-        const replacements = matchingObservation(input.to_policy);
+        const observedOld = relevantObservations(input.from_policy);
+        const observedReplacements = relevantObservations(input.to_policy);
+        const selectAuthorized = (
+          policyVersion: string,
+          observed: Array<{ event: CanonicalEvent<"Observation">; key: "ordinary" | "held" }>,
+        ): CanonicalEvent<"Observation">[] => {
+          const authority = materializationAuthority(policyVersion);
+          return authority === undefined
+            ? []
+            : observed
+                .filter((observation) => observation.key === authority)
+                .map(({ event }) => event);
+        };
+        const oldTargets = selectAuthorized(input.from_policy, observedOld);
+        const replacements = selectAuthorized(input.to_policy, observedReplacements);
+        const observedMaterializations = [...observedOld, ...observedReplacements];
+        const targetSubjectRef = observedOld[0]?.event.subject_ref;
+        const replacementSubjectRef = observedReplacements[0]?.event.subject_ref;
         const candidateGraphFacts = {
+          subject_ref: source.subject_ref,
+          ...(targetSubjectRef === undefined ? {} : { target_subject_ref: targetSubjectRef }),
+          ...(replacementSubjectRef === undefined
+            ? {}
+            : { replacement_subject_ref: replacementSubjectRef }),
           lineage_event_ids: [
             ...new Set(
-              [...oldTargets, ...replacements].flatMap((event) => [
+              observedMaterializations.flatMap(({ event }) => [
                 event.event_id,
                 ...event.provenance
                   .filter((ref) => ref.ref_type === "event")
@@ -1799,27 +1926,84 @@ export class LocalCaptureStore {
           ].sort(),
           supersession_relations: knownSupersessionRelations,
         };
-        const toDisposition = this.db
-          .prepare(
-            `SELECT disposition FROM knowledge_dispositions
-             WHERE source_event_id = ? AND trust_zone_id = ? AND policy_version = ?`,
-          )
-          .all(candidate.source_event_id, input.trust_zone_id, input.to_policy) as Array<{
-          disposition: KnowledgeDisposition;
-        }>;
         if (observationConformanceUnproved) {
           return {
             ...candidate,
             ...candidateGraphFacts,
             unsafe_reason_code: "lineage_unsafe",
-            taint_reason_codes: ["unproved_conformance_global_taint"],
+            conformance_proved: false,
           };
         }
+        const subjectMismatch = observedMaterializations.some(
+          ({ event }) => event.subject_ref !== source.subject_ref,
+        );
+        if (subjectMismatch) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: "lineage_unsafe",
+          };
+        }
+        const wrongKeyMaterialization = (
+          policyVersion: string,
+          observed: Array<{ event: CanonicalEvent<"Observation">; key: "ordinary" | "held" }>,
+        ) =>
+          observed.some(
+            (observation) => observation.key !== materializationAuthority(policyVersion),
+          );
+        if (
+          wrongKeyMaterialization(input.from_policy, observedOld) ||
+          wrongKeyMaterialization(input.to_policy, observedReplacements)
+        ) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: "ambiguous_unsafe",
+          };
+        }
+        const importedOldTarget = oldTargets.find((event) =>
+          inboxObservationIds.has(event.event_id),
+        );
+        const importedReplacement = replacements.find((event) =>
+          inboxObservationIds.has(event.event_id),
+        );
+        if (importedOldTarget !== undefined || importedReplacement !== undefined) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            ...(importedOldTarget === undefined
+              ? {}
+              : { target_event_id: importedOldTarget.event_id }),
+            ...(importedReplacement === undefined
+              ? {}
+              : { replacement_event_id: importedReplacement.event_id }),
+            unsafe_reason_code: "imported_unsafe",
+          };
+        }
+        const toDisposition = policyDispositions
+          .filter((row) => row.policy_version === input.to_policy)
+          .map((row) => ({ disposition: row.disposition }));
         if (toDisposition.length !== 1) {
           return {
             ...candidate,
             ...candidateGraphFacts,
             unsafe_reason_code: toDisposition.length === 0 ? "missing_unsafe" : "ambiguous_unsafe",
+          };
+        }
+        const toReviews = heldReviews.filter((row) => row.policy_version === input.to_policy);
+        const effectiveToDisposition =
+          toDisposition[0]?.disposition === "promote" && toReviews.length === 0
+            ? "promote"
+            : toDisposition[0]?.disposition === "reject" && toReviews.length === 0
+              ? "reject"
+              : materializationAuthority(input.to_policy) === "held"
+                ? "promote"
+                : undefined;
+        if (effectiveToDisposition === undefined) {
+          return {
+            ...candidate,
+            ...candidateGraphFacts,
+            unsafe_reason_code: toReviews.length === 0 ? "missing_unsafe" : "ambiguous_unsafe",
           };
         }
         if (oldTargets.length !== 1) {
@@ -1837,7 +2021,7 @@ export class LocalCaptureStore {
             unsafe_reason_code: "missing_unsafe",
           };
         }
-        if (toDisposition[0]?.disposition === "reject") {
+        if (effectiveToDisposition === "reject") {
           const targetEventId = oldTarget.event_id;
           if (targetEventId === undefined) {
             return {
@@ -1906,7 +2090,7 @@ export class LocalCaptureStore {
             classification: "invalidate",
           };
         }
-        if (toDisposition[0]?.disposition !== "promote") {
+        if (effectiveToDisposition !== "promote") {
           return {
             ...candidate,
             ...candidateGraphFacts,
@@ -2034,38 +2218,9 @@ export class LocalCaptureStore {
       if (unprovedSupersessionConformance) {
         reconciliationCandidates = reconciliationCandidates.map((candidate) => ({
           ...candidate,
-          taint_reason_codes: [
-            ...new Set([
-              ...(candidate.taint_reason_codes ?? []),
-              "unproved_conformance_global_taint" as const,
-            ]),
-          ],
+          conformance_proved: false,
         }));
       }
-      const provisionalEntries = reconciliationCandidates.map(classifyPolicyReconciliationEntry);
-      const provisionalComponents = partitionReconciliationComponents(
-        provisionalEntries,
-        reconciliationCandidates,
-      );
-      const eligibleComponents = new Set(
-        provisionalEntries.flatMap((entry, index) =>
-          entry.bucket === "unsafe_unchanged" ? [] : [provisionalComponents[index] as string],
-        ),
-      );
-      reconciliationCandidates = reconciliationCandidates.map((candidate, index) =>
-        provisionalEntries[index]?.bucket === "unsafe_unchanged" &&
-        eligibleComponents.has(provisionalComponents[index] as string)
-          ? {
-              ...candidate,
-              taint_reason_codes: [
-                ...new Set([
-                  ...(candidate.taint_reason_codes ?? []),
-                  "unsafe_influences_eligible_global_taint" as const,
-                ]),
-              ],
-            }
-          : candidate,
-      );
       const highWater = {
         canonical_local_sequence_max: safeSqliteInteger(
           (
@@ -2104,12 +2259,12 @@ export class LocalCaptureStore {
           "supersession_event_count",
         ),
       };
-      const globalTaints = new Set<"unproved_conformance_global_taint">(
+      const globalTaints = new Set<GlobalTaintReasonCode>(
         unprovedSupersessionConformance ? ["unproved_conformance_global_taint"] : [],
       );
       const plan = buildPolicyReconciliationPlanV2({
         ...input,
-        total_candidate_count: safeSqliteInteger(total.n, "total_candidate_count"),
+        total_candidate_count: totalCandidateCount,
         high_water: highWater,
         // Only explicit local canonical provenance and policy-specific
         // materializations are eligible; every absent or ambiguous fact is unsafe.
@@ -3865,12 +4020,11 @@ function normalizePolicyVersion(policyVersion: string): string {
 }
 
 /**
- * Observation idempotency for adjudicated meaning units.
- * adj_v1 keeps the historical extract key so existing Observations replay.
- * Later policy versions use a distinct key so re-adjudication can append.
+ * adj_v2 shipped with the historical extract key. Every later policy keeps its
+ * own materialization identity so its lineage cannot collide with adj_v2.
  */
 function observationIdempotencyForPolicy(sourceEventId: string, policyVersion: string): string {
-  if (policyVersion === ADJUDICATION_POLICY_VERSION) {
+  if (policyVersion === "adj_v2") {
     return extractionObservationIdempotencyKey(sourceEventId);
   }
   return `idem_${hashHex(
