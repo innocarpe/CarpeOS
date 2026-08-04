@@ -1,8 +1,8 @@
 # Retrieval Guide
 
-Status: local implementation and synthetic tests. Not deployed. Product 3.2.0 is
-in development / pre-release; the current public release is 3.1.0. Product 3.2
-is neither installed nor published.
+Status: local implementation and synthetic tests. Not deployed. Product 3.2.0
+is the current public release, published on npm and verified through global
+activation.
 
 This guide describes the local retrieval path for a private CarpeOS runtime. It
 uses synthetic placeholders only. Do not copy real transcripts, protected
