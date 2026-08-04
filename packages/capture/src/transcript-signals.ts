@@ -7,7 +7,7 @@
  *
  * Precision-first: tool dumps, structured noise, and secret-like material are skipped.
  */
-import { openSync, readSync, closeSync, fstatSync, realpathSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { containsSecretLikeMaterial } from "./meaningful-unit-policy.js";
@@ -107,6 +107,9 @@ export function signalsFromTranscriptText(text: string): TranscriptSignals {
     if (prose === undefined) continue;
     if (!isDurableProse(prose)) continue;
     const duplicateKey = normalizeDuplicateKey(prose);
+    // A correction begins a new statement epoch: an exact reassertion after it
+    // is meaningful and must not be suppressed by an earlier assertion.
+    if (isCorrectionOrReplacement(prose)) seen.clear();
     if (seen.has(duplicateKey)) continue;
     seen.add(duplicateKey);
     proseStream.push(prose);
@@ -275,9 +278,10 @@ function removeCorrectedProse(parts: readonly string[]): string[] {
 
 function isCorrectionOrReplacement(value: string): boolean {
   return (
-    /\b(?:correction|corrected|retract(?:ed|ion)?|replace(?:d|ment)?|instead of|no longer)\b/i.test(
+    /\b(?:correction|corrected|retract(?:ed|ion)?|replace(?:d|ment)?|instead of|no longer|(?:(?:do|does|did) not|don't|must not|should not|never)\s+(?:use|prefer|allow|support))\b/i.test(
       value,
-    ) || /(정정|철회|대신|더 이상)/.test(value)
+    ) ||
+    /(?:정정|철회|대신|더 이상)|(?:사용|선호|허용|지원)하지\s*않(?:습니다|는다|다)?/.test(value)
   );
 }
 
@@ -288,7 +292,8 @@ function correctedTerms(value: string): string[] {
     /\binstead of ([a-z0-9][a-z0-9 _-]{1,80})/i,
     /\breplace ([a-z0-9][a-z0-9 _-]{1,80}) with\b/i,
     /\bno longer (?:use|prefer|allow|support) ([a-z0-9][a-z0-9 _-]{1,80})/i,
-    /\bdo not (?:use|prefer|allow|support) ([a-z0-9][a-z0-9 _-]{1,80})/i,
+    /\b(?:(?:do|does|did) not|don't|must not|should not|never) (?:use|prefer|allow|support) ([a-z0-9][a-z0-9 _-]{1,80})/i,
+    /(?:^|[:.]\s*|\s)([가-힣a-z0-9][가-힣a-z0-9 _-]{0,80}?)(?:을|를)\s*(?:사용|선호|허용|지원)하지\s*않/i,
   ] as const) {
     const match = pattern.exec(normalized);
     const term = match?.[1]?.trim();
