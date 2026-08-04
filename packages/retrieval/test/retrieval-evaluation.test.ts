@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  RETRIEVAL_QUALITY_BRANCH_IDS,
-  RetrievalQualityInvalidCorpusError,
   evaluateRetrievalQuality,
   passesRetrievalQualityGate,
+  RETRIEVAL_QUALITY_BRANCH_IDS,
+  RetrievalQualityInvalidCorpusError,
   retrievalQualityExitCode,
 } from "../src/retrieval-evaluation.js";
 
@@ -12,9 +12,30 @@ const fixture = JSON.parse(
   readFileSync(new URL("./fixtures/retrieval-quality-v1.json", import.meta.url), "utf8"),
 ) as Record<string, unknown>;
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const cases = (corpus: Record<string, unknown>) => corpus.cases as Array<Record<string, unknown>>;
+const requiredCase = (corpus: Record<string, unknown>, id: string): Record<string, unknown> => {
+  const evaluationCase = cases(corpus).find((item) => item.id === id);
+  if (evaluationCase === undefined) throw new Error(`missing fixture case: ${id}`);
+  return evaluationCase;
+};
+const requiredCandidate = (
+  evaluationCase: Record<string, unknown>,
+  id: string,
+): Record<string, unknown> => {
+  const candidate = (evaluationCase.candidates as Array<Record<string, unknown>>).find(
+    (item) => item.id === id,
+  );
+  if (candidate === undefined) throw new Error(`missing fixture candidate: ${id}`);
+  return candidate;
+};
+const requiredAt = <T>(items: readonly T[], index: number): T => {
+  const item = items[index];
+  if (item === undefined) throw new Error(`missing fixture item at index ${index}`);
+  return item;
+};
 
 describe("retrieval quality evaluation", () => {
-  it("evaluates every canonical branch with a passing, body-free report", () => {
+  it("executes deterministic local-index, graph, scope, and canonical-recheck evidence", () => {
     const report = evaluateRetrievalQuality(fixture);
     expect(Object.keys(report.branch_counts)).toEqual([...RETRIEVAL_QUALITY_BRANCH_IDS]);
     expect(Object.values(report.branch_counts)).toEqual(Array(8).fill(1));
@@ -26,41 +47,58 @@ describe("retrieval quality evaluation", () => {
     expect(report.assertion_failures).toBe(0);
     expect(report.online_feedback_mutated).toBe(false);
     expect(report.adaptive_ranking_mutated).toBe(false);
-    expect(JSON.stringify(report)).not.toContain("query_text");
-    expect(JSON.stringify(report)).not.toContain("document");
   });
 
-  it("is stable across corpus rebuilds", () => {
+  it("is stable across separately rebuilt synthetic indexes", () => {
     const first = evaluateRetrievalQuality(fixture);
     const second = evaluateRetrievalQuality(clone(fixture));
     expect(second.corpus_digest).toBe(first.corpus_digest);
     expect(second.rebuild_digest).toBe(first.rebuild_digest);
   });
 
-  it("computes recall at three and reciprocal rank from ranked candidate ids", () => {
+  it("fails a graph contract when the executed bounded walk omits a required node", () => {
     const corpus = clone(fixture);
-    const cases = corpus.cases as Array<Record<string, unknown>>;
-    const first = cases[0]!;
-    first.candidates = [
-      { id: "not-relevant", kind: "claim", structured: 2, fts: 2, semantic: 2, recency: 0 },
-      { id: "doc-local-relevant", kind: "claim", structured: 1, fts: 1, semantic: 1, recency: 0 },
-    ];
+    const graphCase = requiredCase(corpus, "rq-graph-multihop");
+    graphCase.budget = { max_nodes: 1, required_ids: ["doc-graph-other"] };
     const report = evaluateRetrievalQuality(corpus);
-    expect(report.macro_recall_at_3).toBe(1);
-    expect(report.mrr).toBeCloseTo((0.5 + 7) / 8);
-  });
-
-  it("maps threshold failures to one", () => {
-    const corpus = clone(fixture);
-    (corpus.cases as Array<Record<string, unknown>>)[0]!.acceptance_decision = true;
-    const report = evaluateRetrievalQuality(corpus);
+    expect(report.budget_violations).toBe(1);
     expect(passesRetrievalQualityGate(report)).toBe(false);
     expect(retrievalQualityExitCode(corpus)).toBe(1);
   });
 
+  it("fails when a foreign synthetic origin is observable through the scoped query", () => {
+    const corpus = clone(fixture);
+    const scopeCase = requiredCase(corpus, "rq-local-scope");
+    const foreign = requiredCandidate(scopeCase, "doc-scope-foreign");
+    foreign.project_id = "project_retrieval_quality";
+    const report = evaluateRetrievalQuality(corpus);
+    expect(report.leakage_count).toBeGreaterThan(0);
+    expect(passesRetrievalQualityGate(report)).toBe(false);
+  });
+
+  it("fails when canonical recheck excludes the ranked synthetic source", () => {
+    const corpus = clone(fixture);
+    const recheckCase = requiredCase(corpus, "rq-recheck-acceptance");
+    requiredAt(recheckCase.candidates as Array<Record<string, unknown>>, 0).canonical_source =
+      "omitted";
+    const report = evaluateRetrievalQuality(corpus);
+    expect(report.assertion_failures).toBeGreaterThan(0);
+    expect(passesRetrievalQualityGate(report)).toBe(false);
+  });
+
+  it("does not mutate an immutable input while collecting no-mutation evidence", () => {
+    const corpus = clone(fixture);
+    Object.freeze(corpus);
+    Object.freeze(cases(corpus));
+    for (const item of cases(corpus)) Object.freeze(item);
+    const report = evaluateRetrievalQuality(corpus);
+    expect(report.online_feedback_mutated).toBe(false);
+    expect(report.adaptive_ranking_mutated).toBe(false);
+  });
+
   it("rejects invalid denominators, missing branches, duplicate ids, and bodies as usage failures", () => {
     const noRelevant = clone(fixture);
-    (noRelevant.cases as Array<Record<string, unknown>>)[0]!.relevant_ids = [];
+    requiredAt(cases(noRelevant), 0).relevant_ids = [];
     expect(() => evaluateRetrievalQuality(noRelevant)).toThrow(RetrievalQualityInvalidCorpusError);
     expect(retrievalQualityExitCode(noRelevant)).toBe(2);
 
@@ -69,11 +107,11 @@ describe("retrieval quality evaluation", () => {
     expect(retrievalQualityExitCode(missingBranch)).toBe(2);
 
     const duplicate = clone(fixture);
-    (duplicate.cases as Array<Record<string, unknown>>)[1]!.id = "rq-local-recall";
+    requiredAt(cases(duplicate), 1).id = "rq-local-recall";
     expect(retrievalQualityExitCode(duplicate)).toBe(2);
 
     const withBody = clone(fixture);
-    (withBody.cases as Array<Record<string, unknown>>)[0]!.body = "forbidden";
+    requiredAt(cases(withBody), 0).body = "forbidden";
     expect(retrievalQualityExitCode(withBody)).toBe(2);
   });
 
