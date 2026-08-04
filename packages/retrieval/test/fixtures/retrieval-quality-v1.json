@@ -36,10 +36,15 @@
       "branch": "graph-provenance-multihop",
       "candidates": [
         { "id": "observation-graph-root", "kind": "summary" },
-        { "id": "claim-graph-nonroot", "kind": "claim" }
+        { "id": "claim-graph-intermediate", "kind": "claim" },
+        { "id": "evidence-graph-distal", "kind": "evidence_excerpt" }
       ],
       "relevant_ids": ["observation-graph-root"],
-      "budget": { "max_nodes": 10, "required_ids": ["claim-graph-nonroot"] }
+      "budget": {
+        "max_nodes": 10,
+        "required_ids": ["evidence-graph-distal"],
+        "minimum_provenance_edges": 2
+      }
     },
     {
       "id": "rq-graph-budget",
