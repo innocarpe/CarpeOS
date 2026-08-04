@@ -56,7 +56,17 @@ The pre-tag **Approve** decision is historical evidence bound to approved implem
 
 The original release workflow published and installed/smoked the exact tarball, then remained red because its immutable tag-SHA code required missing npm `gitHead`. It did not become green. Recovery PR [#180](https://github.com/innocarpe/CarpeOS/pull/180), merged as `89fb488b7d06a2f1b86c6cbf631e305c94254a63`, added fail-closed exact SLSA provenance verification on main; live verification passed, and the missing GitHub Release was created without moving the tag or republishing.
 
-**K12 — public-safe Mac activation.** The exact global install resolved `3.2.0`, and `carpeos setup doctor` passed. The installed global CLI completed disposable synthetic capture, adjudication, held-review, B0-preview, and retrieval dogfood. Its OKF export and rebuild each wrote a conformant four-file projection with zero warnings. A synthetic secret sentinel was absent, and temporary homes and bundles were cleaned. B1 was not exercised because B0 was selected. This activation evidence uses only synthetic, disposable inputs and contains no production data.
+**K12 — public-safe Mac activation.** The following disposable, synthetic-only receipt records global activation; `<temporary-home>` denotes a disposable location and no local path, username, production data, or runtime record is retained.
+
+| Command | Result |
+| --- | --- |
+| `npm install -g @innocarpe/carpeos@3.2.0` | installed `@innocarpe/carpeos@3.2.0` |
+| `carpeos --version` | `3.2.0` |
+| `npm list -g @innocarpe/carpeos --depth=0 --json` | `@innocarpe/carpeos` `3.2.0` |
+| `carpeos setup run --apply --home <temporary-home>` then `carpeos setup doctor --home <temporary-home>` | `PASS` |
+| `node scripts/smoke-dogfood.mjs --cli "$(command -v carpeos)"` | `PASS` for synthetic capture, adjudication, held review, B0 preview, retrieval, sentinel, and cleanup |
+| disposable installed-CLI `okf export` and `okf rebuild` | four files, two concepts, zero warnings; sentinel absent and temporary paths removed |
+This activation evidence uses only synthetic, disposable inputs. B0 was preview-only; B1 was not exercised because it remains deferred and absent. Automatic Claim creation remains off and no `AcceptanceDecision` is created.
 
 ## B0 canonical preview evidence
 
