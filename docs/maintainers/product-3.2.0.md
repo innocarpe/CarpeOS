@@ -45,6 +45,7 @@ Earlier implementation-gate evidence remains bound to `42b974947b3e713acd0ca394d
 | Pack/release | Seven pack/release tests exited `0`, including pack-once and release-artifact workflow proofs |
 | Public boundary | Passed for 305 public files |
 | Implementation-gate source | `sourceHash` `sha256:3d5c79211c4619f85858a9ce8344ea44f6c73c8d634e1514ed752b92a5135b63` |
+
 ## Pre-tag approval receipt
 
 The pre-tag **Approve** decision is bound to approved implementation freeze `ed700072858c1b0062aabe136c807fd379e5698a`, tree `347163bc4093d697c3b7d8bbf7f9e10fab1a54ad`, and `sourceHash` `sha256:1a5172860215e99ad110fb18fcc9585b5c2c481588d6ccd12c6feb36fb67ef79`. Cleaner: **PASS**. Architect: **CLEAR / CLEAR / CLEAR — APPROVE**. Executor QA: **passed**. Critic: **OKAY**. Current-source leader gates were `pnpm check`; the three Product 3.2 evaluators; four smokes; sync E2E; seven pack/release tests; public boundary 305; and clean status. Push CI for this SHA: [Checks run](https://github.com/innocarpe/CarpeOS/actions/runs/30880949088) and [Gitleaks](https://github.com/innocarpe/CarpeOS/actions/runs/30880949113). This docs-only receipt authorizes the release cutter; it does not itself publish, tag, install, deploy, or activate Product 3.2.
@@ -94,7 +95,7 @@ The observed B0 preview is deterministic and metadata-only: bounded emitted pref
 | #170 | `1caa4a61d56e0e93d67a2093240ea6fa963f20eb` | `fix/3.2-gen4-policy-proof` | fix(local-store): prove production preview digest |
 | #171 | `42b974947b3e713acd0ca394d473583a05d50017` | `fix/3.2-gen5-digest-proof` | test(policy): close digest proof masking |
 | #172 | `7dc180547afac27fafdf290eae138692021b6813` | `docs/3.2-freeze-audit` | docs: freeze Product 3.2 audit |
-| #173 | `75ab281024624ec1b487e59ad9df0d34820a1369` | `fix/3.2-held-cli-compat` | fix: preserve held CLI compatibility |
+| #173 | `75ab281024624ec1b487e59ad9df0d34820a1369` | `fix/3.2-held-cli-compat` | fix(cli): preserve held review defaults |
 | #174 | `b77f29b7ddfb0a0ed7956cfe518770af3ff3e741` | `docs/3.2-freeze-evidence-fix` | docs: correct Product 3.2 freeze evidence |
 | #175 | `ed700072858c1b0062aabe136c807fd379e5698a` | `docs/3.2-freeze-sha-fix` | docs: correct Product 3.2 PR159 SHA |
 
