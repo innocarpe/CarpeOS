@@ -12,7 +12,10 @@ describe("release artifact workflow", () => {
     assert.match(workflow, /node scripts\/pack-once\.mjs pack/);
     assert.equal((workflow.match(/scripts\/pack-once\.mjs pack/g) || []).length, 1);
     assert.match(workflow, /tarball=\$GITHUB_WORKSPACE\/\.release-artifact\/\$\(node -p/);
-    assert.match(workflow, /npm install --prefix \.release-smoke "\$TARBALL"/);
+    assert.match(workflow, /npm install --prefix "\$SMOKE_ROOT\/install" "\$TARBALL"/);
+    assert.match(workflow, /CLI="\$SMOKE_ROOT\/install\/node_modules\/\.bin\/carpeos"/);
+    assert.match(workflow, /"\$CLI" setup doctor/);
+    assert.match(workflow, /node scripts\/smoke-dogfood\.mjs --cli "\$CLI"/);
     assert.match(workflow, /npm publish "\$TARBALL" --access public --provenance/);
     assert.doesNotMatch(workflow, /working-directory: packages\/carpeos\n[\s\S]*npm publish/);
   });

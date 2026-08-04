@@ -29,10 +29,11 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
@@ -75,8 +76,9 @@ function parseJsonLine(text) {
   return JSON.parse(line);
 }
 
-function ensureCliBuilt() {
-  if (!existsSync(cliEntry)) {
+function ensureCliBuilt(cli) {
+  if (cli.kind === "installed") return true;
+  if (!existsSync(cli.entry)) {
     log("Building monorepo (CLI dist missing)…");
     const built = run("pnpm", ["build"], { stdio: "inherit" });
     if (built.status !== 0) {
@@ -84,15 +86,42 @@ function ensureCliBuilt() {
       return false;
     }
   }
-  if (!existsSync(cliEntry)) {
-    fail(`CLI entry missing after build: ${cliEntry}`);
+  if (!existsSync(cli.entry)) {
+    fail(`CLI entry missing after build: ${cli.entry}`);
     return false;
   }
   return true;
 }
 
-function runCli(home, argv) {
-  return run(process.execPath, [cliEntry, ...argv], {
+export function resolveCliInvocation(argv, sourceEntry = cliEntry) {
+  if (argv.length === 0) {
+    return { command: process.execPath, args: [sourceEntry], entry: sourceEntry, kind: "source" };
+  }
+  if (argv.length !== 2 || argv[0] !== "--cli" || !argv[1]) {
+    throw new Error("usage: node scripts/smoke-dogfood.mjs [--cli /absolute/path/to/carpeos]");
+  }
+  if (!isAbsolute(argv[1])) {
+    throw new Error("--cli must be an absolute path to the installed carpeos binary");
+  }
+
+  let installedEntry;
+  try {
+    installedEntry = realpathSync(argv[1]);
+  } catch {
+    throw new Error(`--cli binary does not exist: ${argv[1]}`);
+  }
+  const installedStats = statSync(installedEntry);
+  if (!installedStats.isFile() || (installedStats.mode & 0o111) === 0) {
+    throw new Error(`--cli binary is not executable: ${argv[1]}`);
+  }
+  if (installedEntry === realpathSync(sourceEntry)) {
+    throw new Error("--cli must not reference the repository CLI entry");
+  }
+  return { command: installedEntry, args: [], entry: installedEntry, kind: "installed" };
+}
+
+function runCli(cli, home, argv) {
+  return run(cli.command, [...cli.args, ...argv], {
     env: {
       CARPEOS_HOME: home,
       HOME: home,
@@ -156,8 +185,8 @@ function assertUnchanged(before, home, label) {
   }
 }
 
-function capture(home, base, fixture) {
-  const result = runCli(home, [
+function capture(cli, home, base, fixture) {
+  const result = runCli(cli, home, [
     "capture-hook",
     "--provider",
     "codex",
@@ -174,8 +203,8 @@ function capture(home, base, fixture) {
   return parseJsonLine(result.stdout);
 }
 
-function searchBody(home, base, query) {
-  const result = runCli(home, [
+function searchBody(cli, home, base, query) {
+  const result = runCli(cli, home, [
     "memory",
     "search",
     ...base,
@@ -200,14 +229,11 @@ function visibleTextBlob(body) {
     .join("\n");
 }
 
-async function runDogfoodSmoke() {
+async function runDogfoodSmoke(cli) {
   log("— Knowledge dogfood scenarios (temp home, synthetic only) —");
-  if (!ensureCliBuilt()) {
+  if (!ensureCliBuilt(cli)) {
     return false;
   }
-  const { signalsFromTranscriptPath } = await import(
-    new URL("../packages/capture/dist/transcript-signals.js", import.meta.url).href
-  );
 
   const home = realpathSync(mkdtempSync(join(tmpdir(), "carpeos-dogfood-smoke-")));
   const base = ["--home", home, "--trust-zone", trustZone];
@@ -215,7 +241,7 @@ async function runDogfoodSmoke() {
   try {
     log("  · init");
     {
-      const result = runCli(home, ["init", ...base]);
+      const result = runCli(cli, home, ["init", ...base]);
       if (result.status !== 0) {
         fail(`init exited ${result.status}\n${result.stderr || result.stdout}`);
         return false;
@@ -223,7 +249,7 @@ async function runDogfoodSmoke() {
     }
 
     log("  · durable decision SessionEnd → promote");
-    const decision = capture(home, base, {
+    const decision = capture(cli, home, base, {
       hook_event_name: "SessionEnd",
       session_id: "session_dogfood_decision",
       timestamp: "2026-01-01T00:00:00Z",
@@ -241,7 +267,7 @@ async function runDogfoodSmoke() {
     }
 
     log("  · durable second decision SessionEnd → promote");
-    const preference = capture(home, base, {
+    const preference = capture(cli, home, base, {
       hook_event_name: "SessionEnd",
       session_id: "session_dogfood_preference",
       timestamp: "2026-01-01T00:00:01Z",
@@ -270,29 +296,9 @@ async function runDogfoodSmoke() {
           }),
         ].join("\n"),
       );
-      const priorHome = process.env.HOME;
-      let signals;
-      try {
-        process.env.HOME = home;
-        signals = signalsFromTranscriptPath(transcriptPath);
-      } finally {
-        if (priorHome === undefined) {
-          delete process.env.HOME;
-        } else {
-          process.env.HOME = priorHome;
-        }
-      }
       const obsoleteDecision = "Decision: use SQLite for local metadata.";
-      const correction = "Correction: replace SQLite with PostgreSQL.";
-      if (
-        signals.scoring?.includes(obsoleteDecision) ||
-        (!signals.scoring?.includes(correction) && !signals.candidate?.includes(correction))
-      ) {
-        fail(`transcript correction signals unexpected ${JSON.stringify(signals)}`);
-        return false;
-      }
 
-      const transcriptCapture = capture(home, base, {
+      const transcriptCapture = capture(cli, home, base, {
         hook_event_name: "SessionEnd",
         session_id: "session_dogfood_transcript_correction",
         timestamp: "2026-01-01T00:00:02Z",
@@ -320,7 +326,7 @@ async function runDogfoodSmoke() {
     }
     log("  · PostToolUse noise flood → reject/skip");
     for (let i = 0; i < 3; i += 1) {
-      const noise = capture(home, base, {
+      const noise = capture(cli, home, base, {
         hook_event_name: "PostToolUse",
         session_id: `session_dogfood_tool_noise_${i}`,
         timestamp: `2026-01-01T00:00:0${2 + i}Z`,
@@ -337,7 +343,7 @@ async function runDogfoodSmoke() {
     log("  · thanks/ok chatter SessionEnd → not promote");
     const chatterBodies = [];
     for (const [i, message] of ["thanks", "ok", "lgtm"].entries()) {
-      const chatter = capture(home, base, {
+      const chatter = capture(cli, home, base, {
         hook_event_name: "SessionEnd",
         session_id: `session_dogfood_chatter_${i}`,
         timestamp: `2026-01-01T00:01:0${i}Z`,
@@ -363,7 +369,7 @@ async function runDogfoodSmoke() {
 
     log("  · UserPromptSubmit flood → not promote into default meaning");
     for (let i = 0; i < 4; i += 1) {
-      const prompt = capture(home, base, {
+      const prompt = capture(cli, home, base, {
         hook_event_name: "UserPromptSubmit",
         session_id: `session_dogfood_prompt_${i}`,
         timestamp: `2026-01-01T00:02:0${i}Z`,
@@ -382,7 +388,7 @@ async function runDogfoodSmoke() {
     }
 
     log("  · secret-like decision → reject/fail-closed");
-    const secretLike = capture(home, base, {
+    const secretLike = capture(cli, home, base, {
       hook_event_name: "SessionEnd",
       session_id: "session_dogfood_secret",
       timestamp: "2026-01-01T00:03:00Z",
@@ -406,7 +412,7 @@ async function runDogfoodSmoke() {
 
     log("  · adjudicate --stats");
     {
-      const result = runCli(home, ["adjudicate", "--stats", ...base]);
+      const result = runCli(cli, home, ["adjudicate", "--stats", ...base]);
       if (result.status !== 0) {
         fail(`adjudicate --stats exited ${result.status}\n${result.stderr || result.stdout}`);
         return false;
@@ -424,7 +430,7 @@ async function runDogfoodSmoke() {
 
     log("  · policy-aware held review, secondary-policy re-adjudication, and terminal protection");
     {
-      const heldFixture = capture(home, base, {
+      const heldFixture = capture(cli, home, base, {
         hook_event_name: "SessionEnd",
         session_id: "session_dogfood_held_review",
         timestamp: "2026-01-01T00:04:00Z",
@@ -436,7 +442,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const listDefault = runCli(home, [
+      const listDefault = runCli(cli, home, [
         "adjudicate",
         "list-held",
         "--policy-version",
@@ -453,7 +459,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const secondaryPolicy = runCli(home, [
+      const secondaryPolicy = runCli(cli, home, [
         "adjudicate",
         "--event-id",
         heldEventId,
@@ -469,7 +475,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const secondaryPolicyList = runCli(home, [
+      const secondaryPolicyList = runCli(cli, home, [
         "adjudicate",
         "list-held",
         "--policy-version",
@@ -488,7 +494,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const promote = runCli(home, [
+      const promote = runCli(cli, home, [
         "adjudicate",
         "promote-held",
         "--event-id",
@@ -508,7 +514,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const replay = runCli(home, [
+      const replay = runCli(cli, home, [
         "adjudicate",
         "promote-held",
         "--event-id",
@@ -527,7 +533,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const opposite = runCli(home, [
+      const opposite = runCli(cli, home, [
         "adjudicate",
         "reject-held",
         "--event-id",
@@ -542,7 +548,7 @@ async function runDogfoodSmoke() {
         return false;
       }
 
-      const secondaryPolicyReview = runCli(home, [
+      const secondaryPolicyReview = runCli(cli, home, [
         "adjudicate",
         "reject-held",
         "--event-id",
@@ -584,8 +590,8 @@ async function runDogfoodSmoke() {
         "--limit",
         "200",
       ];
-      const first = runCli(home, previewArgs);
-      const second = runCli(home, previewArgs);
+      const first = runCli(cli, home, previewArgs);
+      const second = runCli(cli, home, previewArgs);
       const firstBody = parseJsonLine(first.stdout);
       const secondBody = parseJsonLine(second.stdout);
       if (
@@ -629,7 +635,7 @@ async function runDogfoodSmoke() {
         ["--format", "json"],
       ]) {
         const beforeUnsupported = runtimeDigest(home);
-        const result = runCli(home, [
+        const result = runCli(cli, home, [
           ...previewArgs,
           flag,
           ...(value === undefined ? [] : [value]),
@@ -647,7 +653,7 @@ async function runDogfoodSmoke() {
     }
     log("  · retrieval rebuild");
     {
-      const result = runCli(home, ["retrieval", "rebuild", ...base]);
+      const result = runCli(cli, home, ["retrieval", "rebuild", ...base]);
       if (result.status !== 0) {
         fail(`rebuild exited ${result.status}\n${result.stderr || result.stdout}`);
         return false;
@@ -656,13 +662,13 @@ async function runDogfoodSmoke() {
 
     log("  · default search finds durable decisions/preferences");
     {
-      const decisionSearch = searchBody(home, base, "SessionEnd decided pnpm");
+      const decisionSearch = searchBody(cli, home, base, "SessionEnd decided pnpm");
       const blob = visibleTextBlob(decisionSearch);
       if (!/pnpm|decided|credentials/i.test(blob)) {
         fail(`decision search missing promoted meaning: ${blob.slice(0, 500)}`);
         return false;
       }
-      const preferenceSearch = searchBody(home, base, "offline deterministic package tests");
+      const preferenceSearch = searchBody(cli, home, base, "offline deterministic package tests");
       const prefBlob = visibleTextBlob(preferenceSearch);
       if (!/offline|deterministic|tests/i.test(prefBlob)) {
         fail(`preference search missing promoted meaning: ${prefBlob.slice(0, 500)}`);
@@ -681,7 +687,7 @@ async function runDogfoodSmoke() {
         ["thanks only chatter", /"thanks"|lgtm/i],
       ];
       for (const [query, pattern] of pollutionQueries) {
-        const body = searchBody(home, base, query);
+        const body = searchBody(cli, home, base, query);
         const blob = visibleTextBlob(body);
         if (pattern.test(blob)) {
           fail(`default search polluted for query=${query}: ${blob.slice(0, 500)}`);
@@ -689,7 +695,7 @@ async function runDogfoodSmoke() {
         }
       }
       // filters must remain active-only
-      const body = searchBody(home, base, "SessionEnd");
+      const body = searchBody(cli, home, base, "SessionEnd");
       const lifecycle = body.result?.filters_applied?.lifecycle_status;
       if (!Array.isArray(lifecycle) || lifecycle.join(",") !== "active") {
         fail(`expected active-only filters, got ${JSON.stringify(lifecycle)}`);
@@ -711,10 +717,19 @@ async function runDogfoodSmoke() {
   }
 }
 
-if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  log("Usage: node scripts/smoke-dogfood.mjs");
-  process.exit(0);
-}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    log("Usage: node scripts/smoke-dogfood.mjs [--cli /absolute/path/to/carpeos]");
+    process.exit(0);
+  }
 
-const ok = await runDogfoodSmoke();
-process.exit(ok ? 0 : 1);
+  let cli;
+  try {
+    cli = resolveCliInvocation(process.argv.slice(2));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  const ok = await runDogfoodSmoke(cli);
+  process.exit(ok ? 0 : 1);
+}

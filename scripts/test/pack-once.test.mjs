@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { assertArtifact, createManifest, verifyRegistry } from "../pack-once.mjs";
+import { resolveCliInvocation } from "../smoke-dogfood.mjs";
 
 const sha = "a".repeat(40);
 const originalPath = process.env.PATH;
@@ -58,8 +59,42 @@ afterEach(() => {
   process.env.PATH = originalPath;
   while (temporary.length) rmSync(temporary.pop(), { recursive: true, force: true });
 });
-
 describe("pack-once", () => {
+  it("selects only an explicit installed dogfood binary and fails closed", () => {
+    const directory = mkdtempSync(join(tmpdir(), "smoke-dogfood-cli-"));
+    temporary.push(directory);
+    const sourceEntry = join(directory, "repository-cli.js");
+    const installedBinary = join(directory, "carpeos");
+    writeFileSync(sourceEntry, "#!/usr/bin/env node\n");
+    writeFileSync(installedBinary, "#!/usr/bin/env node\n");
+    chmodSync(sourceEntry, 0o755);
+    chmodSync(installedBinary, 0o755);
+
+    const installedCanonicalPath = realpathSync(installedBinary);
+    assert.deepEqual(resolveCliInvocation(["--cli", installedBinary], sourceEntry), {
+      command: installedCanonicalPath,
+      args: [],
+      entry: installedCanonicalPath,
+      kind: "installed",
+    });
+    assert.throws(
+      () => resolveCliInvocation(["--cli", sourceEntry], sourceEntry),
+      /must not reference the repository CLI entry/,
+    );
+    assert.throws(
+      () => resolveCliInvocation(["--cli", join(directory, "missing")], sourceEntry),
+      /does not exist/,
+    );
+    assert.throws(
+      () => resolveCliInvocation(["--cli", "relative-carpeos"], sourceEntry),
+      /must be an absolute path/,
+    );
+    assert.throws(
+      () => resolveCliInvocation(["--cli", installedBinary, "--unexpected"], sourceEntry),
+      /usage/,
+    );
+  });
+
   it("packs once and writes a stable, bound metadata-only manifest", () => {
     fakeTools();
     const first = createManifest({
