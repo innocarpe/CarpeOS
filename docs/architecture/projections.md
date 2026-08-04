@@ -3,7 +3,8 @@
 Status: current-main audit. Local retrieval, deterministic local vector and
 graph projections, local sync transfer/import, MCP context packs, Obsidian
 projection, and OKF export are implemented and tested repository read models;
-none implies hosted or production deployment. Product 3.2 B0 is pre-release.
+none implies hosted or production deployment. Product 3.2 B0 shipped in
+`@innocarpe/carpeos@3.2.0` and is verified on current main and global activation.
 
 Projections are derived from visible canonical events, erasure records,
 configuration, and authorization policy. They are never canonical knowledge and
@@ -48,13 +49,15 @@ production deployment. Graph traversal and vector ranking remain candidate
 mechanisms; they cannot promote a Claim or bypass canonical recheck. No projection
 automatically creates a Claim or AcceptanceDecision.
 
-Product 3.2 B0 is implemented and tested on main, bounded, metadata-only, and
-zero-write. It remains pre-release, unpublished, uninstalled, and undeployed; it
-does not add a retrieval authority path or alter schema v1, trust zones,
-append-only history, or promoted/active-only defaults. B1 apply, writer and
-receipt construction, Supersession construction, and sync convergence are
-deferred. This document does not evidence K0--K12, release, installation, or
-publication completion. See [ADR 0015](../adr/0015-policy-version-reconciliation.md).
+Product 3.2 B0 shipped in `@innocarpe/carpeos@3.2.0`, is verified on current main
+and global activation, and remains bounded, metadata-only, and zero-write. The
+[Product 3.2 release and activation receipt](../maintainers/product-3.2.0.md)
+records release, publication, global installation, activation, and K0--K12
+completion; none adds a retrieval authority path or establishes hosted deployment.
+Schema v1, trust zones, append-only history, and promoted/active-only defaults
+remain unchanged. B1 apply, writer and receipt construction, Supersession
+construction, and sync convergence are deferred. See
+[ADR 0015](../adr/0015-policy-version-reconciliation.md).
 
 ## Failure behavior
 

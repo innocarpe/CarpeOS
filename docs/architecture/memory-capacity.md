@@ -1,8 +1,9 @@
 # Memory Capacity Architecture
 
 Status: architecture model audited against current main. Shipped local
-projections implement bounded active capacity; Product 3.2 B0 is implemented and
-tested on main but remains pre-release, unpublished, uninstalled, and undeployed.
+projections implement bounded active capacity; Product 3.2 B0 shipped in
+`@innocarpe/carpeos@3.2.0` and is verified on current main and global activation.
+No hosted deployment is claimed.
 
 This note applies [ADR 0009](../adr/0009-memory-capacity-model.md): total
 private knowledge, active working memory, procedural evidence, and product
@@ -52,10 +53,11 @@ implementation does not establish hosted or production deployment. Product 3.2
 does not make reconciliation, automatic Claim drafting, or automatic
 AcceptanceDecision creation part of memory admission.
 
-Under [ADR 0015](../adr/0015-policy-version-reconciliation.md), B0 is an
-implemented and tested local, bounded, metadata-only, zero-write preview on main.
-It remains pre-release and does not evidence release, publication, installation,
-deployment, or K0--K12 completion. B1 apply, writer and receipt construction,
-Supersession construction, and sync convergence are deferred. Schema v1,
-trust-zone isolation, append-only history, fail-open hooks, and
-promoted-active-only defaults remain unchanged.
+Under [ADR 0015](../adr/0015-policy-version-reconciliation.md), B0 shipped in
+`@innocarpe/carpeos@3.2.0` as a local, bounded, metadata-only, zero-write preview
+and is verified on current main and global activation. The [Product 3.2 release and
+activation receipt](../maintainers/product-3.2.0.md) records release, publication,
+global installation, activation, and K0--K12 completion; none implies hosted
+deployment. B1 apply, writer and receipt construction, Supersession construction,
+and sync convergence are deferred. Schema v1, trust-zone isolation, append-only
+history, fail-open hooks, and promoted-active-only defaults remain unchanged.

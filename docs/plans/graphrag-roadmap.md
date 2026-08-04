@@ -46,9 +46,9 @@ implemented; no hosted graph/vector deployment is claimed here.
 
 ## Product 3.2 boundary
 
-Product 3.2 has no GraphRAG runtime extension. Its selected B0 work is implemented and tested on current main for pre-release validation: a bounded, deterministic, metadata-only reconciliation preview with zero writes. It remains unpublished, uninstalled, and undeployed. It preserves schema v1, append-only canonical/review history, trust-zone boundaries, fail-open hooks, and promoted-active-only retrieval. B1 apply, Supersession construction, and sync convergence remain absent and deferred.
+Product 3.2 has no GraphRAG runtime extension. Its selected B0 work shipped in `@innocarpe/carpeos@3.2.0` and is verified on current main and global activation: a bounded, deterministic, metadata-only reconciliation preview with zero writes. No hosted deployment is claimed. It preserves schema v1, append-only canonical/review history, trust-zone boundaries, fail-open hooks, and promoted-active-only retrieval. B1 apply, Supersession construction, and sync convergence remain absent and deferred.
 
-Automatic Claim or AcceptanceDecision creation, online learning, adaptive ranking, fuzzy cleanup, and hosted graph/vector operation remain outside this pre-release scope. K10 remains **Approve pending**; K11--K12, publication, global installation, deployment, activation, and release are incomplete unless evidenced by [Product 3.2.0](../maintainers/product-3.2.0.md). The normative B0 contract is [ADR 0015](../adr/0015-policy-version-reconciliation.md).
+Automatic Claim or AcceptanceDecision creation, online learning, adaptive ranking, fuzzy cleanup, and hosted graph/vector operation remain outside the released B0 scope. K10 approval and K11--K12 release, publication, global installation, and activation are historical/current completion evidence in the [Product 3.2 release and activation receipt](../maintainers/product-3.2.0.md); that receipt does not establish hosted deployment or a GraphRAG extension. The normative B0 contract is [ADR 0015](../adr/0015-policy-version-reconciliation.md).
 
 ## Non-negotiable constraints
 
