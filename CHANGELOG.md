@@ -12,7 +12,25 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Product 3.2 pre-tag work: deterministic `adj_v3` adjudication and knowledge-form
+  evaluators, policy-aware held review, retrieval-quality evaluation, and synthetic
+  dogfood coverage.
+- B0 bounded, metadata-only, zero-write policy-reconciliation preview with
+  deterministic digest evidence and fail-closed over-limit availability advisory.
+
+### Changed
+
+- Preserve chronology and corrected reassertions; use exact-normalized deduplication
+  and observed retrieval evaluation branches.
+- Pack-once release proofs bind one manifest-backed tarball to its approved release
+  SHA without publishing it.
+
+### Safety
+
+- B0 is preview-only. B1 apply/writer/receipt remains absent and deferred; unsafe
+  entries remain unchanged.
+- Automatic Claim and AcceptanceDecision writes remain disabled; unsupported apply
+  flags fail before reconciliation writes.
 
 ## [3.1.0] - 2026-08-01
 
