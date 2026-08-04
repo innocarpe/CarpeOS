@@ -87,7 +87,8 @@ Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture �
 
 ### 기억하기 전에 판정
 
-캡처 뒤 precision-first 규칙 판정기(`adj_v2`)가 disposition을 정합니다.
+캡처 뒤 precision-first `adj_v3` 규칙 판정기가 세션 노이즈를 줄이며 disposition을
+정합니다.
 
 | Disposition | 의미 단위 | 기본 검색 |
 | --- | --- | --- |
@@ -95,9 +96,25 @@ Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture �
 | **hold** | draft Observation (리뷰 큐) | 제외 (`--include-held` / `include_held` 시에만) |
 | **reject** | disposition만 (증거는 남을 수 있음) | 제외 |
 
-hold 리뷰(`carpeos adjudicate list-held|promote-held|reject-held`), policy
-history, 새 policy version 재판정이 가능합니다. 판정은 **`AcceptanceDecision`을
-자동 생성하지 않습니다**.
+held 리뷰는 policy-aware, terminal, append-only입니다.
+`carpeos adjudicate list-held|promote-held|reject-held`에는 해당 policy version이
+필요합니다. 재판정은 기존 이력을 덮어쓰지 않고 추가합니다. 판정과 held 리뷰는
+Claim이나 `AcceptanceDecision`을 자동 생성하지 않습니다.
+
+Product 3.2.0은 개발 중인 pre-release이며 설치되거나 게시되지 않았습니다.
+main에 올라간 작업에는 synthetic evidence-only adjudication/knowledge-form evaluator,
+synthetic retrieval evaluator, B0 policy reconciliation preview가 있습니다.
+
+```sh
+carpeos adjudicate reconcile-policy \
+  --from-policy adj_v1 --to-policy adj_v3 \
+  --trust-zone tz_synthetic --limit 100
+```
+
+B0는 metadata-only입니다. 필요한 정확한 flag는 `--from-policy`, `--to-policy`,
+`--trust-zone`, `--limit`입니다. `--apply`, `--apply-safe-subset`, acknowledgement,
+receipt, Supersession construction은 지원하지 않습니다. B1 write/apply/receipt는
+deferred입니다. dogfood 입력과 출력은 synthetic·disposable입니다.
 
 ### 상태를 뭉개지 않는 모델
 
@@ -107,7 +124,7 @@ Evidence는 claim이 아닙니다. claim이 있다고 해서 바로 “맞다”
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> J[Adjudicate adj_v2]
+  E[EvidenceArtifact] --> J[Adjudicate adj_v3]
   J -->|promote| O[Observation active]
   J -->|hold| H[Observation draft]
   J -->|reject| R[Evidence only]
@@ -120,9 +137,9 @@ flowchart LR
 
 ### 사람용 / 에이전트용 인터페이스
 
-- **CLI** — `capture-hook`, `extract`, **`adjudicate`**, `retrieval rebuild`,
-  `memory search|get|context-pack` (기본 promoted only; `--include-held` 선택),
-  `sync status|push|pull|once|cycle`
+- **CLI** — `capture-hook`, `extract`, **`adjudicate`** (B0 `reconcile-policy`
+  preview 포함), `retrieval rebuild`, `memory search|get|context-pack`
+  (기본 promoted only; `--include-held` 선택), `sync status|push|pull|once|cycle`
 - **MCP (stdio)** — 로컬 도구 8개 (`memory_search`, `memory_get`,
   `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
   `memory_capture`, `memory_propose_claim`)
@@ -355,7 +372,7 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 
 ---
 
-## 제품 라인 (1.0 → 2.0 → 3.0 → 3.1)
+## 제품 라인 (1.0 → 2.0 → 3.0 → 3.1 → 3.2)
 
 | 패키지 / 제품 | 의미 | 상태 |
 | --- | --- | --- |
@@ -363,14 +380,19 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | **2.0.0** | **판정된 의미**가 기본 제품 계약 (`adj_v1`, promoted-only 검색, held 리뷰, doctor, smoke) | **출시** (npm / `v2.0.0`) — 운영 가능한 MVP. 인간 수준 판단 아님 |
 | **3.0.0** | 교차 저장소 partition과 worktree facet을 갖춘 retrieval-first 그래프/하이브리드 회상 | **출시** (npm / `v3.0.0`) |
 | **3.1.0** | 추가된 **OKF v0.2 export projection** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0`; export만 지원하고 import 경로는 아님 |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held 리뷰, evidence-only quality evaluator, retrieval evaluator, B0 reconciliation preview | **개발 중 / pre-release** — 설치·게시되지 않았고 B1 apply/writer/receipt는 deferred |
 
-남은 경계도 있습니다. golden/dogfood fixture는 synthetic이고, 세션 de-noise에는
-한계가 있으며, 판정 경로의 **Claim** draft는 보류되어 있고, 구 policy active 단위는
-optional cleanup이 필요할 수 있습니다. hosted graph adapter와 그 밖의 로드맵 작업은
-아직 출시되지 않았습니다. 상세:
+3.2 작업은 pre-release입니다. `adj_v3` precision/session de-noising과 policy-aware
+held 리뷰는 main에 있지만 automatic Claim creation은 꺼져 있고 어떤 경로도
+`AcceptanceDecision`을 만들지 않습니다. adjudication/knowledge-form evaluator는
+evidence-only이고 retrieval evaluator는 synthetic입니다. B0 reconcile-policy는
+preview-only이며 B1 apply/writer/receipt는 deferred입니다. dogfood는
+synthetic·disposable입니다. hosted graph adapter와 그 밖의 로드맵 작업은 아직
+출시되지 않았습니다. 상세:
 [product 2.0 residual](docs/maintainers/product-2.0.0.md) ·
 [product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md).
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
+[product 3.2 DoD](docs/maintainers/product-3.2.0.md).
 
 용량·팩 경제·장기 구조는
 [memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md) 아래로
@@ -398,7 +420,7 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | --- | --- |
 | Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md) 포함) |
 | Local capture + outbox | 출시 |
-| Knowledge adjudication (`adj_v2`) | 출시 — disposition, held 리뷰, policy history |
+| Knowledge adjudication (`adj_v3`) | main에 출시 — precision/session de-noising, disposition, policy-aware held 리뷰, policy history; automatic Claim과 `AcceptanceDecision` 없음 |
 | 기본 retrieval | **promoted/active only**; held는 opt-in |
 | Doctor 판정 health | 출시 |
 | Sync Worker/client + bounded `sync cycle` | 코드 + 로컬 테스트. production edge 주장 없음 |
@@ -407,6 +429,7 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | Retrieval-first 그래프/하이브리드 회상 | **출시** — indexed graph traversal, 교차 저장소 partition, worktree facet |
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
 | OKF v0.2 export projection | **3.1에 출시** — 로컬 export만, import 경로 없음 |
+| **3.2.0 pre-release 작업** | main의 `adj_v3`와 evaluator, B0 reconcile-policy preview만. 설치·게시되지 않았고 B1 apply/writer/receipt deferred |
 | `carpeos setup` / one-stop install | npm `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |

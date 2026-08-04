@@ -1,6 +1,8 @@
 # Retrieval Guide
 
-Status: G006 local implementation and synthetic tests. Not deployed.
+Status: local implementation and synthetic tests. Not deployed. Product 3.2.0 is
+in development / pre-release; the current public release is 3.1.0. Product 3.2
+is neither installed nor published.
 
 This guide describes the local retrieval path for a private CarpeOS runtime. It
 uses synthetic placeholders only. Do not copy real transcripts, protected
@@ -83,6 +85,31 @@ carpeos retrieval embed --provider workers-ai
 Hosted embedding requires later operator configuration, quotas, credentials,
 deployment evidence, and tests. Do not treat the deterministic provider as a
 semantic search benchmark.
+## Product 3.2 evaluation and policy reconciliation
+
+The shipped-on-main Product 3.2 retrieval evaluator is offline, synthetic, and
+evidence-only. It evaluates public-safe fixtures; it does not create Claims or
+`AcceptanceDecision` records, and it is not a live retrieval service or a
+production-quality claim.
+
+`adj_v3` uses precision-first session de-noising before promoted Observations
+reach the default retrieval surface. Held review is policy-aware, terminal, and
+append-only. Automatic Claim creation remains off, and neither adjudication nor
+held review creates an `AcceptanceDecision`.
+
+Policy reconciliation is B0 preview-only:
+
+```sh
+carpeos adjudicate reconcile-policy \
+  --from-policy adj_v1 --to-policy adj_v3 \
+  --trust-zone tz_synthetic --limit 100
+```
+
+The supported reconciliation flags are exactly `--from-policy`, `--to-policy`,
+`--trust-zone`, and `--limit`. This metadata-only preview has no `--apply` or
+`--apply-safe-subset` mode, acknowledgements, receipts, or Supersession
+construction. B1 write/apply/receipt work is deferred. Dogfood is synthetic and
+disposable.
 
 ## Search
 

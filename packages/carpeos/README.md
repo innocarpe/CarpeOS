@@ -6,9 +6,8 @@ knowledge, and retrieve it for humans and agents.
 ## Install
 
 ```sh
-# npm (recommended) — pin a version in production
-npm install -g @innocarpe/carpeos
-npm install -g @innocarpe/carpeos@0.1.0
+# npm — current public release
+npm install -g @innocarpe/carpeos@3.1.0
 
 # one-liner (curl)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
@@ -16,9 +15,11 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-Versions follow [SemVer](https://semver.org/). Tags look like `v0.1.0`. See the
-repo [CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md)
-and [versioning policy](https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/versioning-and-releases.md).
+The current public release is `3.1.0`. Product `3.2.0` is in development /
+pre-release and is neither installed nor published. Versions follow
+[SemVer](https://semver.org/). See the repo
+[CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md) and
+[versioning policy](https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/versioning-and-releases.md).
 
 ## First-time machine setup
 
@@ -52,10 +53,20 @@ carpeos memory context-pack \
   --task "Summarize my current work" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
-carpeos okf export \
-  --out ./okf-bundle \
-  --visible-trust-zone tz_local_default
+carpeos adjudicate reconcile-policy \
+  --from-policy adj_v1 --to-policy adj_v3 \
+  --trust-zone tz_synthetic --limit 100
 ```
+
+The B0 `reconcile-policy` command is a metadata-only preview. Its supported
+flags are exactly `--from-policy`, `--to-policy`, `--trust-zone`, and `--limit`.
+`--apply`, `--apply-safe-subset`, acknowledgements, receipts, and Supersession
+construction are unavailable; B1 write/apply/receipt work is deferred.
+`adj_v3` is precision-first and session-de-noising; held review remains
+policy-aware and append-only. Neither adjudication path automatically creates a
+Claim or an `AcceptanceDecision`. The adjudication and knowledge-form
+evaluators are evidence-only, the retrieval evaluator is synthetic, and dogfood
+uses only synthetic, disposable evidence.
 
 ## Docs
 
