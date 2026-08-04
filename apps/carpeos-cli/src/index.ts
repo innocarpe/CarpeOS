@@ -5,7 +5,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { isIdempotencyKey } from "@carpeos/capture";
+import { ADJUDICATION_POLICY_VERSION, isIdempotencyKey } from "@carpeos/capture";
 import {
   IdempotencyConflictError,
   isTrustZoneId,
@@ -704,7 +704,7 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
   );
   try {
     if (mode === "list-held") {
-      const policyVersion = parseHeldPolicyVersion(parsed.values["policy-version"], mode);
+      const policyVersion = parseHeldPolicyVersion(parsed.values["policy-version"]);
       const limit = parseInteger(parsed.values.limit, "--limit", 1);
       if (limit > 200) {
         throw new CliUsageError("--limit must be less than or equal to 200");
@@ -741,7 +741,7 @@ function runAdjudicate(argv: readonly string[], env: NodeJS.ProcessEnv): number 
       if (eventId === undefined || eventId.length === 0) {
         throw new CliUsageError(`${mode} requires --event-id <evt_…>`);
       }
-      const policyVersion = parseHeldPolicyVersion(parsed.values["policy-version"], mode);
+      const policyVersion = parseHeldPolicyVersion(parsed.values["policy-version"]);
       const result = store.reviewHeldDisposition(
         eventId,
         mode === "promote-held" ? "promote" : "reject",
@@ -1506,7 +1506,7 @@ USAGE
 OPTIONS
   --event-id <id>           EvidenceArtifact event_id to adjudicate, review, or history
   --signal-text <text>      Optional free-text signal for scoring only
-  --policy-version <id>     Disposition policy identity; required for held review
+  --policy-version <id>     Disposition policy identity; held review defaults to current (${ADJUDICATION_POLICY_VERSION})
   --stats                   Print promote/hold/reject counts for current policy
   --from-policy <id>         Reconciliation source policy (reconcile-policy only)
   --to-policy <id>           Reconciliation target policy (reconcile-policy only)
@@ -2161,11 +2161,8 @@ function parseInteger(value: string | undefined, name: string, minimum: number):
   }
   return parsed;
 }
-function parseHeldPolicyVersion(value: string | undefined, mode: string): string {
-  if (value === undefined || value.trim().length === 0) {
-    throw new CliUsageError(`${mode} requires --policy-version <id>`);
-  }
-  const policyVersion = value.trim();
+function parseHeldPolicyVersion(value: string | undefined): string {
+  const policyVersion = value === undefined ? ADJUDICATION_POLICY_VERSION : value.trim();
   if (policyVersion.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(policyVersion)) {
     throw new CliUsageError("--policy-version must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}");
   }
