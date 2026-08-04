@@ -1,17 +1,16 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  isAllowedTranscriptPath,
-  signalsFromTranscriptText,
-  readTranscriptTail,
-} from "../src/transcript-signals.js";
 import {
   adjudicateKnowledgeCandidate,
   extractKnowledgeCandidateSpans,
 } from "../src/adjudication.js";
-import { homedir } from "node:os";
+import {
+  isAllowedTranscriptPath,
+  readTranscriptTail,
+  signalsFromTranscriptText,
+} from "../src/transcript-signals.js";
 
 describe("transcript signals", () => {
   it("extracts durable user/assistant prose from Claude-style JSONL", () => {
@@ -129,36 +128,53 @@ describe("transcript signals", () => {
     expect(signals.candidate).toContain("releases must have a synthetic proof");
   });
 
-  it("blocks corrected, negated, and replaced durable prose without dropping unrelated facts", () => {
+  it("keeps the first duplicate before a correction but retains a reassertion after it", () => {
     const text = [
-      JSON.stringify({
-        type: "user",
-        message: { role: "user", content: "Decision: use SQLite for local metadata." },
-      }),
-      JSON.stringify({
-        type: "assistant",
-        message: { role: "assistant", content: "Preference: keep offline checks deterministic." },
-      }),
-      JSON.stringify({
-        type: "user",
-        message: { role: "user", content: "Correction: replace SQLite with PostgreSQL." },
-      }),
-      JSON.stringify({
-        type: "assistant",
-        message: { role: "assistant", content: "Constraint: use an ephemeral cache." },
-      }),
-      JSON.stringify({
-        type: "user",
-        message: { role: "user", content: "Correction: no longer use an ephemeral cache." },
-      }),
-    ].join("\n");
+      "Decision: use SQLite for local metadata.",
+      "Decision: use SQLite for local metadata.",
+      "Correction: replace SQLite with PostgreSQL.",
+      "Decision: use SQLite for local metadata.",
+    ]
+      .map((content) =>
+        JSON.stringify({ type: "assistant", message: { role: "assistant", content } }),
+      )
+      .join("\n");
+
+    const signals = signalsFromTranscriptText(text);
+    const scoring = signals.scoring ?? "";
+
+    expect(scoring.match(/Decision: use SQLite for local metadata/gi)).toHaveLength(1);
+    expect(scoring).toContain("Correction: replace SQLite with PostgreSQL");
+    expect(scoring.indexOf("Correction: replace SQLite")).toBeLessThan(
+      scoring.indexOf("Decision: use SQLite"),
+    );
+    expect(signals.candidate).toContain("Decision: use SQLite for local metadata");
+  });
+
+  it("recognizes direct English and Korean negations without promoting ordinary chatter", () => {
+    const text = [
+      "Decision: use a file cache for local metadata.",
+      "Decision: do not use a file cache for local metadata.",
+      "결정: 임시 캐시를 사용합니다.",
+      "결정: 임시 캐시를 사용하지 않습니다.",
+      "오늘 회의는 평범한 대화와 인사로 시작했습니다.",
+    ]
+      .map((content) =>
+        JSON.stringify({
+          type: "user",
+          message: { role: "user", content },
+        }),
+      )
+      .join("\n");
 
     const signals = signalsFromTranscriptText(text);
 
-    expect(signals.scoring).not.toContain("Decision: use SQLite");
-    expect(signals.scoring).not.toContain("Constraint: use an ephemeral cache");
-    expect(signals.scoring).toContain("keep offline checks deterministic");
-    expect(signals.candidate).toContain("no longer use an ephemeral cache");
+    expect(signals.scoring).not.toContain("Decision: use a file cache");
+    expect(signals.scoring).toContain("Decision: do not use a file cache");
+    expect(signals.scoring).not.toContain("결정: 임시 캐시를 사용합니다.");
+    expect(signals.scoring).toContain("결정: 임시 캐시를 사용하지 않습니다.");
+    expect(signals.scoring).not.toContain("평범한 대화");
+    expect(signals.candidate).toContain("결정: 임시 캐시를 사용하지 않습니다.");
   });
 
   it("suppresses exact normalized duplicates but preserves near-duplicate prose", () => {
