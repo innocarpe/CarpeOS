@@ -150,6 +150,20 @@ describe("transcript signals", () => {
     );
     expect(signals.candidate).toContain("Decision: use SQLite for local metadata");
   });
+  it("suppresses consecutive duplicate corrections", () => {
+    const correction = "Correction: replace the file cache with SQLite.";
+    const text = ["Decision: use the file cache.", correction, correction]
+      .map((content) =>
+        JSON.stringify({ type: "assistant", message: { role: "assistant", content } }),
+      )
+      .join("\n");
+
+    const signals = signalsFromTranscriptText(text);
+    const scoring = signals.scoring ?? "";
+
+    expect(scoring.match(/Correction: replace the file cache with SQLite/gi)).toHaveLength(1);
+    expect(signals.candidate).toContain(correction);
+  });
 
   it("recognizes direct English and Korean negations without promoting ordinary chatter", () => {
     const text = [

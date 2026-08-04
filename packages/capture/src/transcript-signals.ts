@@ -109,8 +109,8 @@ export function signalsFromTranscriptText(text: string): TranscriptSignals {
     const duplicateKey = normalizeDuplicateKey(prose);
     // A correction begins a new statement epoch: an exact reassertion after it
     // is meaningful and must not be suppressed by an earlier assertion.
-    if (isCorrectionOrReplacement(prose)) seen.clear();
     if (seen.has(duplicateKey)) continue;
+    if (isCorrectionOrReplacement(prose)) seen.clear();
     seen.add(duplicateKey);
     proseStream.push(prose);
   }
