@@ -46,17 +46,9 @@ implemented; no hosted graph/vector deployment is claimed here.
 
 ## Product 3.2 boundary
 
-Product 3.2 does not ship a GraphRAG runtime extension. Its selected B0 work is
-a planned bounded, deterministic, metadata-only reconciliation preview with zero
-writes. It preserves schema v1, append-only canonical/review history,
-trust-zone boundaries, fail-open hooks, and promoted-active-only retrieval.
-B1 apply, Supersession construction, and sync convergence are deferred.
+Product 3.2 has no GraphRAG runtime extension. Its selected B0 work is implemented and tested on current main for pre-release validation: a bounded, deterministic, metadata-only reconciliation preview with zero writes. It remains unpublished, uninstalled, and undeployed. It preserves schema v1, append-only canonical/review history, trust-zone boundaries, fail-open hooks, and promoted-active-only retrieval. B1 apply, Supersession construction, and sync convergence remain absent and deferred.
 
-Automatic Claim or AcceptanceDecision creation, online learning, adaptive
-ranking, fuzzy cleanup, and hosted graph/vector operation remain outside this
-release. K2--K12, installation, publication, and release are not complete
-unless evidenced by [Product 3.2.0](../maintainers/product-3.2.0.md). The
-normative B0 contract is [ADR 0015](../adr/0015-policy-version-reconciliation.md).
+Automatic Claim or AcceptanceDecision creation, online learning, adaptive ranking, fuzzy cleanup, and hosted graph/vector operation remain outside this pre-release scope. K10 remains **Approve pending**; K11--K12, publication, global installation, deployment, activation, and release are incomplete unless evidenced by [Product 3.2.0](../maintainers/product-3.2.0.md). The normative B0 contract is [ADR 0015](../adr/0015-policy-version-reconciliation.md).
 
 ## Non-negotiable constraints
 
