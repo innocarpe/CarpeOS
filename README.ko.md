@@ -101,9 +101,9 @@ held 리뷰는 policy-aware, terminal, append-only입니다.
 필요합니다. 재판정은 기존 이력을 덮어쓰지 않고 추가합니다. 판정과 held 리뷰는
 Claim이나 `AcceptanceDecision`을 자동 생성하지 않습니다.
 
-Product 3.2.0은 개발 중인 pre-release이며 설치되거나 게시되지 않았습니다.
-main에 올라간 작업에는 synthetic evidence-only adjudication/knowledge-form evaluator,
-synthetic retrieval evaluator, B0 policy reconciliation preview가 있습니다.
+현재 main의 Product 3.2.0 구현은 pre-release입니다. 여기에는 synthetic evidence-only
+adjudication/knowledge-form evaluator, synthetic retrieval evaluator, preview-only B0
+policy reconciliation이 포함됩니다.
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -114,7 +114,8 @@ carpeos adjudicate reconcile-policy \
 B0는 metadata-only입니다. 필요한 정확한 flag는 `--from-policy`, `--to-policy`,
 `--trust-zone`, `--limit`입니다. `--apply`, `--apply-safe-subset`, acknowledgement,
 receipt, Supersession construction은 지원하지 않습니다. B1 write/apply/receipt는
-deferred입니다. dogfood 입력과 출력은 synthetic·disposable입니다.
+deferred입니다. 게시, 전역 설치, 활성화는 릴리스 주기에 기록될 때까지 완료되지
+않습니다. dogfood 입력과 출력은 synthetic·disposable입니다.
 
 ### 상태를 뭉개지 않는 모델
 

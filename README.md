@@ -107,10 +107,9 @@ policy version. Re-adjudication appends history rather than rewriting it.
 Neither adjudication nor held review automatically creates a Claim or an
 `AcceptanceDecision`.
 
-Product 3.2.0 is in development and is not installed or published. Its
-shipped-on-main work includes synthetic, evidence-only adjudication and
-knowledge-form evaluators, a synthetic retrieval evaluator, and B0 policy
-reconciliation preview:
+Product 3.2.0 implementation on current main is pre-release. It includes synthetic,
+evidence-only adjudication and knowledge-form evaluators, a synthetic retrieval
+evaluator, and the preview-only B0 policy reconciliation:
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -121,8 +120,9 @@ carpeos adjudicate reconcile-policy \
 B0 is metadata-only: its exact required flags are `--from-policy`,
 `--to-policy`, `--trust-zone`, and `--limit`. `--apply`,
 `--apply-safe-subset`, acknowledgements, receipts, and Supersession construction
-are unsupported. B1 write/apply/receipt work is deferred. Dogfood inputs and
-outputs are synthetic and disposable.
+are unsupported. B1 write/apply/receipt work is deferred. Publication, global
+installation, and activation are not complete until the release cycle records them.
+Dogfood inputs and outputs are synthetic and disposable.
 
 ### A model that does not flatten status
 
