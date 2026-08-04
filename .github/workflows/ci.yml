@@ -33,6 +33,17 @@ jobs:
 
       - name: Run checks
         run: pnpm check
+      - name: Evaluate capture adjudication
+        run: pnpm --filter @carpeos/capture eval:adjudication
+
+      - name: Evaluate capture knowledge form
+        run: pnpm --filter @carpeos/capture eval:knowledge-form
+
+      - name: Build and evaluate retrieval
+        run: pnpm --filter @carpeos/retrieval build && pnpm --filter @carpeos/retrieval eval:retrieval
+
+      - name: Run synthetic knowledge dogfood smoke
+        run: pnpm smoke:dogfood
 
       - name: Run MCP smoke (G5)
         run: pnpm smoke:mcp
