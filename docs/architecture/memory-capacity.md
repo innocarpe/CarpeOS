@@ -1,8 +1,8 @@
 # Memory Capacity Architecture
 
 Status: architecture model audited against current main. Shipped local
-projections implement bounded active capacity; future capacity programs remain
-planned.
+projections implement bounded active capacity; Product 3.2 B0 is implemented and
+tested on main but remains pre-release, unpublished, uninstalled, and undeployed.
 
 This note applies [ADR 0009](../adr/0009-memory-capacity-model.md): total
 private knowledge, active working memory, procedural evidence, and product
@@ -13,10 +13,10 @@ canonical store or redefine authority.
 
 | Layer | Boundary | Current-main status |
 | --- | --- | --- |
-| L1 store capacity | Local append-only canonical events and protected values | Shipped source of truth |
-| L2 working memory | Local retrieval hits and bounded MCP context packs | Shipped projection |
+| L1 store capacity | Local append-only canonical events and protected values | Implemented and tested local source of truth |
+| L2 working memory | Local retrieval hits and bounded MCP context packs | Implemented and tested local projection |
 | L3 procedural memory | Protected procedure-trace evidence and policy-gated summaries | Architecture boundary; no automatic authority |
-| L4 product memory | Local retrieval, vector, graph, Obsidian, and OKF read models | Shipped where source-backed; always rebuildable |
+| L4 product memory | Local retrieval, vector, graph, Obsidian, and OKF read models | Implemented and tested where source-backed; always rebuildable |
 
 L1 is trust-zone isolated; protected plaintext remains outside canonical rows.
 Erasure is ledgered and projections rebuild to apply it. L2 admits only
@@ -47,14 +47,15 @@ history.
 
 Hosted graph/vector services, online learning, adaptive ranking, and future
 capacity-program features are planned or deferred; they are not implied by the
-shipped local projections. Product 3.2 also does not make reconciliation,
-automatic Claim drafting, or automatic AcceptanceDecision creation part of
-memory admission.
+implemented and tested local projections or local sync transfer/import. Repository
+implementation does not establish hosted or production deployment. Product 3.2
+does not make reconciliation, automatic Claim drafting, or automatic
+AcceptanceDecision creation part of memory admission.
 
-Under [ADR 0015](../adr/0015-policy-version-reconciliation.md), B0 is a
-planned local, bounded, metadata-only, zero-write preview. B1 apply,
+Under [ADR 0015](../adr/0015-policy-version-reconciliation.md), B0 is an
+implemented and tested local, bounded, metadata-only, zero-write preview on main.
+It remains pre-release and does not evidence release, publication, installation,
+deployment, or K0--K12 completion. B1 apply, writer and receipt construction,
 Supersession construction, and sync convergence are deferred. Schema v1,
 trust-zone isolation, append-only history, fail-open hooks, and
-promoted-active-only defaults remain unchanged. Gate and release status belongs
-to [Product 3.2.0](../maintainers/product-3.2.0.md), not this architecture
-note.
+promoted-active-only defaults remain unchanged.

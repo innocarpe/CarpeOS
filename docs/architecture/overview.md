@@ -1,7 +1,8 @@
 # CarpeOS Architecture Overview
 
-Status: current-main architecture audit. Product 3.2 runtime work is planned unless
-its Product 3.2 gate is marked done.
+Status: current-main architecture audit. Product 3.2 B0 reconciliation preview is
+implemented and tested on main, but remains pre-release: it is not released,
+published, installed, or deployed until release gates close.
 
 CarpeOS keeps private knowledge in a local canonical store and derives
 rebuildable, non-authoritative read models from it. The canonical boundary is not
@@ -11,14 +12,14 @@ a graph, vector index, MCP response, export, or provider payload.
 
 | Surface | Current-main status | Authority |
 | --- | --- | --- |
-| Local canonical event store | Shipped | Source of truth |
-| Disposition and review history | Shipped; append-only local history | Source evidence, not a claim mutation |
-| Retrieval and context-pack projections | Shipped locally; promoted/active-only defaults apply | Rebuildable projection |
-| Deterministic local vector and graph projections | Shipped locally | Candidate and lineage projection |
-| Provider-neutral local hook capture and fail-open hook behavior | Shipped for the documented adapters | Captured evidence only |
-| Hosted graph/vector, remote sync, online learning, adaptive ranking, and unimplemented provider or MCP surfaces | Planned or deferred | Not shipped |
-| Product 3.2 B0 reconciliation preview | Planned | Metadata-only, zero-write preview |
-| Product 3.2 B1 apply and sync convergence | Deferred | Not part of 3.2 |
+| Local canonical event store | Implemented and tested locally | Source of truth |
+| Disposition and review history | Implemented and tested local append-only history | Source evidence, not a claim mutation |
+| Retrieval and context-pack projections | Implemented and tested locally; promoted/active-only defaults apply | Rebuildable projection |
+| Deterministic local vector and graph projections | Implemented and tested locally | Candidate and lineage projection |
+| Provider-neutral local hook capture and fail-open hook behavior | Implemented and tested for the documented adapters | Captured evidence only |
+| Hosted graph/vector, hosted or production sync, online learning, adaptive ranking, and unimplemented provider or MCP surfaces | Planned or deferred | Not deployed |
+| Product 3.2 B0 reconciliation preview | Implemented and tested on main; pre-release | Metadata-only, zero-write preview |
+| Product 3.2 B1 apply, writer, receipt, Supersession construction, and sync convergence | Deferred | Not part of 3.2 |
 
 Source evidence: [local store](../../packages/local-store/src/store.ts),
 [retrieval](../../packages/retrieval/src/query.ts),
@@ -38,10 +39,10 @@ provider hook
   -> rebuildable local retrieval, graph, vector, MCP, and export projections
 ```
 
-The shipped path is local. A provider adapter normalizes input but does not make
-provider output authoritative. Hooks may fail open so capture cannot interrupt
-host work. Remote synchronization, hosted services, and adapter surfaces not
-implemented and tested in current main remain planned.
+The implemented and tested paths in this repository are local. A provider adapter
+normalizes input but does not make provider output authoritative. Hooks may fail
+open so capture cannot interrupt host work. Local sync transfer/import and local
+projections are implementation evidence, not hosted or production deployment.
 
 ## Canonical and derived layers
 
@@ -65,11 +66,12 @@ nothing. It retains schema v1, trust zones, append-only history, fail-open
 hooks, and promoted-active-only defaults. Automatic Claim or
 AcceptanceDecision creation remains off.
 
-B0 is not implemented merely because this architecture is documented. B1
-safe-subset apply, Supersession construction, protected-value transfer, and sync
-convergence are deferred. The authoritative gate status is
-[Product 3.2.0](../maintainers/product-3.2.0.md); do not infer K2--K12,
-release, installation, or publication completion from this document.
+B0 is implemented and tested on main as a deterministic, bounded, metadata-only
+preview with zero writes; that repository state does not establish release,
+publication, installation, or deployment. B1 safe-subset apply, writer and
+receipt construction, Supersession construction, protected-value transfer, and
+sync convergence are deferred. This document does not evidence K0--K12, release,
+installation, or publication completion.
 
 ## Synthetic example
 

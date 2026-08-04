@@ -1,14 +1,15 @@
 # Projections and Retrieval
 
 Status: current-main audit. Local retrieval, deterministic local vector and
-graph projections, MCP context packs, Obsidian projection, and OKF export are
-shipped read models; hosted and Product 3.2 extensions are not.
+graph projections, local sync transfer/import, MCP context packs, Obsidian
+projection, and OKF export are implemented and tested repository read models;
+none implies hosted or production deployment. Product 3.2 B0 is pre-release.
 
 Projections are derived from visible canonical events, erasure records,
 configuration, and authorization policy. They are never canonical knowledge and
 may be rebuilt or deleted without mutating the event store.
 
-## Shipped local projections
+## Implemented and tested local projections
 
 | Projection | Current-main behavior |
 | --- | --- |
@@ -39,17 +40,21 @@ edges remain traceable to canonical records or deterministic derivation rules.
 
 ## Not shipped by these projections
 
-Hosted Workers AI, Vectorize, hosted graph services, online learning, adaptive
-ranking, and any provider adapter not implemented in current main are not
-shipped. Graph traversal and vector ranking remain candidate mechanisms; they
-cannot promote a Claim or bypass canonical recheck. No projection automatically
-creates a Claim or AcceptanceDecision.
+Hosted Workers AI, Vectorize, hosted graph services, hosted or production sync,
+online learning, adaptive ranking, and any provider adapter not implemented in
+current main are not deployed. Local sync transfer/import and projections are
+implemented and tested in the repository, but are not evidence of a hosted or
+production deployment. Graph traversal and vector ranking remain candidate
+mechanisms; they cannot promote a Claim or bypass canonical recheck. No projection
+automatically creates a Claim or AcceptanceDecision.
 
-Product 3.2 B0 is planned, bounded, metadata-only, and zero-write. It does not
-add a retrieval authority path or alter schema v1, trust zones, append-only
-history, or promoted/active-only defaults. B1 apply and sync convergence are
-deferred. See [ADR 0015](../adr/0015-policy-version-reconciliation.md) and
-[Product 3.2.0](../maintainers/product-3.2.0.md).
+Product 3.2 B0 is implemented and tested on main, bounded, metadata-only, and
+zero-write. It remains pre-release, unpublished, uninstalled, and undeployed; it
+does not add a retrieval authority path or alter schema v1, trust zones,
+append-only history, or promoted/active-only defaults. B1 apply, writer and
+receipt construction, Supersession construction, and sync convergence are
+deferred. This document does not evidence K0--K12, release, installation, or
+publication completion. See [ADR 0015](../adr/0015-policy-version-reconciliation.md).
 
 ## Failure behavior
 
