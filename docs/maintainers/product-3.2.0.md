@@ -63,9 +63,12 @@ The original release workflow published and installed/smoked the exact tarball, 
 | `npm install -g @innocarpe/carpeos@3.2.0` | installed `@innocarpe/carpeos@3.2.0` |
 | `carpeos --version` | `3.2.0` |
 | `npm list -g @innocarpe/carpeos --depth=0 --json` | `@innocarpe/carpeos` `3.2.0` |
+| `npm view @innocarpe/carpeos@3.2.0 version dist.integrity --json` | returned version `3.2.0` and integrity `sha512-oYDa+cEOp6LrStkoWOK5KHZDJU90QT2Sry+umNxIMi2gfSrfMSLPq5g4AdIBBe8askaSlt7VCcPaY1THAeHAww==`, equal to the installed package identity |
+| `command -v carpeos` | resolved the global package executable; the installed CLI was used, with no repository `dist` or source fallback |
 | `carpeos setup run --apply --home <temporary-home>` then `carpeos setup doctor --home <temporary-home>` | `PASS` |
 | `node scripts/smoke-dogfood.mjs --cli "$(command -v carpeos)"` | `PASS` for synthetic capture, adjudication, held review, B0 preview, retrieval, sentinel, and cleanup |
-| disposable installed-CLI `okf export` and `okf rebuild` | four files, two concepts, zero warnings; sentinel absent and temporary paths removed |
+| `carpeos okf export --out <temporary-bundle> --visible-trust-zone tz_synthetic_activation` | exited `0` with four files, two concepts, and zero conformance warnings |
+| `carpeos okf rebuild --out <temporary-bundle> --visible-trust-zone tz_synthetic_activation` | exited `0` with four files, two concepts, and zero conformance warnings; sentinel absent and temporary home/bundle removed |
 This activation evidence uses only synthetic, disposable inputs. B0 was preview-only; B1 was not exercised because it remains deferred and absent. Automatic Claim creation remains off and no `AcceptanceDecision` is created.
 
 ## B0 canonical preview evidence
