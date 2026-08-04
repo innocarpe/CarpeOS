@@ -4,6 +4,12 @@ Status: maintainer policy for the public npm package and Git tags.
 
 This document is the source of truth for how CarpeOS versions are chosen, tagged,
 and published. Follow it before the first and every subsequent npm release.
+Current public release: `@innocarpe/carpeos@3.1.0`. Product 3.2.0 is in
+development / pre-release and is neither installed nor published. Its shipped
+`adj_v3` work keeps automatic Claim creation off and creates no
+`AcceptanceDecision`; evaluators and dogfood are evidence-only, synthetic, and
+disposable. B0 policy reconciliation is preview-only; B1 apply/writer/receipt
+work is deferred.
 
 ## What is versioned
 
@@ -134,11 +140,37 @@ git push origin vX.Y.Z
 ```
 
 Pushing the tag triggers [`.github/workflows/release.yml`](../../.github/workflows/release.yml):
-
 1. `pnpm check` (quality gate)
-2. Build `@innocarpe/carpeos`
-3. `npm publish` from `packages/carpeos`
-4. Create GitHub Release for `vX.Y.Z` with changelog notes
+2. Build `@innocarpe/carpeos`.
+3. Pack one manifest-bound release tarball with `scripts/pack-once.mjs`.
+4. Install that exact tarball into an isolated smoke prefix and exercise it.
+5. Publish that same asserted tarball, then verify registry identity against its manifest.
+6. Create GitHub Release for `vX.Y.Z` with changelog notes.
+
+### Artifact-first development cycle
+
+Every new-version development cycle is artifact-first and is incomplete until all
+of these steps have evidence:
+
+1. Build and pack the exact version **once** into a manifest-bound tarball.
+2. Install that exact tarball in an isolated local prefix; no command may resolve
+   from the repository checkout or another source fallback.
+3. Run the release smoke, synthetic/disposable dogfood, and `carpeos setup doctor`
+   against that installed tarball. Exercise each newly public CLI command through
+   the installed executable.
+4. Publish the same manifest-asserted tarball, not a repack or a package
+   directory fallback; verify the published registry integrity and git identity.
+5. Globally install the exact published `@innocarpe/carpeos@X.Y.Z` version and
+   repeat `carpeos --version`, `carpeos setup doctor`, and the synthetic/
+   disposable activation smoke.
+6. Record a public-safe disposable synthetic activation receipt, including the
+   artifact identity, installed version, commands, and results. Do not include
+   local paths, usernames, credentials, private data, or production output.
+
+Pack once; do not rebuild, repack, `npm publish` a source directory, use
+`latest`, or fall back to a checkout-resolved executable at any point. A failed
+installed-artifact smoke, dogfood, doctor, registry verification, global
+activation, or receipt blocks release completion.
 
 ### Verify publication, activate locally, and smoke
 
@@ -150,8 +182,9 @@ npm view @innocarpe/carpeos version
 gh release view vX.Y.Z
 ```
 
-Then, in the maintainer's real local environment, install the just-published exact
-version. Never use `latest`, a floating tag, or an unversioned install.
+Then globally install the exact published version—never `latest`, a floating
+tag, or an unversioned install—and prove that the resolved executable reports
+`X.Y.Z`:
 
 ```sh
 npm install --global "@innocarpe/carpeos@X.Y.Z"
@@ -160,41 +193,27 @@ carpeos --version
 carpeos setup doctor
 ```
 
-Confirm the resolved `carpeos` executable and `carpeos --version` report `X.Y.Z`.
-Run `carpeos help <new-public-command>` for every newly added public command, then
-exercise the release's principal behavior with only synthetic or disposable inputs.
-For a 3.1-style release, perform this ordered synthetic OKF smoke without falling
-back to the maintainer's real home:
+Run `carpeos help <new-public-command>` for every newly added public command
+and repeat the release’s principal synthetic/disposable dogfood through this
+global installation. The receipt must bind the installed version to the
+previously packed and published artifact; it must not substitute a source
+checkout or a newly packed tarball.
 
-1. Create disposable home and output directories.
-2. Initialize the disposable home with a synthetic trust zone, then ingest and
-   adjudicate a synthetic fixture in that zone.
-3. Run OKF export and then rebuild with `--home` set to the disposable home and
-   `--visible-trust-zone` set to the initialized zone.
-4. Verify expected bundle roots and manifest, preservation of an unmanaged file,
-   and absence of a synthetic sentinel in exported output.
-5. Delete both disposable directories after recording the results.
-
-Record the actual commands and results in the release receipt. Any failure blocks a
-`complete` claim. npm and GitHub publication alone are not release completion: if the
-active global CLI remains older, report **published; local activation incomplete**.
-
-Keep the receipt public-safe: do not record local paths, usernames, credentials,
-private data, or production runtime output.
+Record the actual commands and results in the public-safe disposable synthetic
+activation receipt. Any failure blocks a `complete` claim. npm and GitHub
+publication alone are not release completion: if the active global CLI remains
+older, report **published; local activation incomplete**. Do not record local
+paths, usernames, credentials, private data, or production runtime output.
 
 ### Manual publish fallback
 
-If Actions cannot publish:
-
-```sh
-pnpm --filter @innocarpe/carpeos build
-cd packages/carpeos && npm publish --access public
-gh release create "v$(node -p "require('./package.json').version")" \
-  --title "v$(node -p "require('./package.json').version")" \
-  --notes-file ../../CHANGELOG.md
-```
-
-Prefer the tag + workflow path so npm and GitHub stay aligned.
+If Actions cannot publish, preserve the artifact-first cycle: use the single
+manifest-asserted tarball already built for the tagged commit, install and
+dogfood that tarball before publishing, publish that tarball by exact path, and
+verify its registry identity against the manifest. Do not publish
+`packages/carpeos`, rebuild, or pack a replacement artifact. Create the GitHub
+Release only after that exact artifact is verified. Prefer the tag + workflow
+path so npm and GitHub stay aligned.
 
 ## What not to do
 

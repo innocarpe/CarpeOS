@@ -92,7 +92,8 @@ keeps metadata and references. Host hooks stay **fail-open and fast**.
 
 ### Adjudicate before “memory”
 
-After capture, a precision-first rule adjudicator (`adj_v2`) decides disposition:
+After capture, the precision-first `adj_v3` rule adjudicator removes session noise
+by choosing a disposition:
 
 | Disposition | Meaning unit | Default search |
 | --- | --- | --- |
@@ -100,9 +101,28 @@ After capture, a precision-first rule adjudicator (`adj_v2`) decides disposition
 | **hold** | Draft Observation (review queue) | Excluded unless `--include-held` / `include_held` |
 | **reject** | Disposition only (evidence may remain) | Excluded |
 
-Operators can review holds (`carpeos adjudicate list-held|promote-held|reject-held`),
-inspect policy history, and re-run under a new policy version. Adjudication
-**never** auto-creates an `AcceptanceDecision`.
+Held review is policy-aware, terminal, and append-only:
+`carpeos adjudicate list-held|promote-held|reject-held` requires the relevant
+policy version. Re-adjudication appends history rather than rewriting it.
+Neither adjudication nor held review automatically creates a Claim or an
+`AcceptanceDecision`.
+
+Product 3.2.0 is in development and is not installed or published. Its
+shipped-on-main work includes synthetic, evidence-only adjudication and
+knowledge-form evaluators, a synthetic retrieval evaluator, and B0 policy
+reconciliation preview:
+
+```sh
+carpeos adjudicate reconcile-policy \
+  --from-policy adj_v1 --to-policy adj_v3 \
+  --trust-zone tz_synthetic --limit 100
+```
+
+B0 is metadata-only: its exact required flags are `--from-policy`,
+`--to-policy`, `--trust-zone`, and `--limit`. `--apply`,
+`--apply-safe-subset`, acknowledgements, receipts, and Supersession construction
+are unsupported. B1 write/apply/receipt work is deferred. Dogfood inputs and
+outputs are synthetic and disposable.
 
 ### A model that does not flatten status
 
@@ -113,7 +133,7 @@ into one paragraph of vector text.
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> J[Adjudicate adj_v2]
+  E[EvidenceArtifact] --> J[Adjudicate adj_v3]
   J -->|promote| O[Observation active]
   J -->|hold| H[Observation draft]
   J -->|reject| R[Evidence only]
@@ -126,9 +146,9 @@ flowchart LR
 
 ### Interfaces for people and agents
 
-- **CLI** — `capture-hook`, `extract`, **`adjudicate`**, `retrieval rebuild`,
-  `memory search|get|context-pack` (default promoted-only; `--include-held` opt-in),
-  `sync status|push|pull|once|cycle`
+- **CLI** — `capture-hook`, `extract`, **`adjudicate`** (including the B0
+  `reconcile-policy` preview), `retrieval rebuild`, `memory search|get|context-pack`
+  (default promoted-only; `--include-held` opt-in), `sync status|push|pull|once|cycle`
 - **MCP (stdio)** — eight local tools (`memory_search`, `memory_get`,
   `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
   `memory_capture`, `memory_propose_claim`)
@@ -366,7 +386,7 @@ Keep install **idempotent** and **out of the git tree** for private data.
 
 ---
 
-## Product line (1.0 → 2.0 → 3.0 → 3.1)
+## Product line (1.0 → 2.0 → 3.0 → 3.1 → 3.2)
 
 | Package / product | Meaning | Status |
 | --- | --- | --- |
@@ -374,14 +394,18 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
 | **3.0.0** | Retrieval-first graph/hybrid recall with cross-repository partitions and worktree facets | **Shipped** on npm / `v3.0.0` |
 | **3.1.0** | Additive **OKF v0.2 export projection** | **Shipped** as `@innocarpe/carpeos@3.1.0` / `v3.1.0` — export only, not an import path |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **In development / pre-release** — not installed or published; B1 apply/writer/receipt is deferred |
 
-Residual boundaries remain: golden/dogfood fixtures are synthetic; session de-noising
-is limited; adjudicated **Claim** drafts remain deferred; and older-policy active
-units may need optional cleanup. Hosted graph adapters and other roadmap work remain
-unshipped. Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
+3.2 work is pre-release: `adj_v3` precision/session de-noising and policy-aware
+held review are shipped on main, while automatic Claim creation remains off and
+no path creates an `AcceptanceDecision`. Its adjudication and knowledge-form
+evaluators are evidence-only, and its retrieval evaluator is synthetic. B0
+reconcile-policy is preview-only; B1 apply/writer/receipt remains deferred.
+Dogfood is synthetic and disposable. Hosted graph adapters and other roadmap work
+remain unshipped. Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
 [product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md).
-
+[product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
+[product 3.2 DoD](docs/maintainers/product-3.2.0.md).
 Capacity / pack economics and long-horizon structure work continue under the
 [memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md); this
 does not change the shipped 3.0 retrieval product.
@@ -408,7 +432,7 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | --- | --- |
 | Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md)) |
 | Local capture + outbox | Shipped |
-| Knowledge adjudication (`adj_v2`) | Shipped — dispositions, held review, policy history |
+| Knowledge adjudication (`adj_v3`) | Shipped on main — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
 | Default retrieval | **Promoted/active only**; held opt-in |
 | Doctor adjudication health | Shipped (`setup doctor`, `adjudicate --stats`) |
 | Sync Worker/client + bounded `sync cycle` | Code + local tests; no production edge claimed |
@@ -417,6 +441,7 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
+| **3.2.0 pre-release work** | Shipped-on-main `adj_v3` and evaluators; B0 reconcile-policy preview only. Not installed or published; B1 apply/writer/receipt deferred |
 | `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |
