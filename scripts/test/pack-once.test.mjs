@@ -22,6 +22,7 @@ function fakeTools({
   head = sha,
   noTarball = false,
   packageVersion = version,
+  packOutput,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "pack-once-"));
   temporary.push(directory);
@@ -44,7 +45,12 @@ const header = Buffer.alloc(512); header.write("package/package.json"); header.w
 const tar = Buffer.concat([header, body, Buffer.alloc((512 - (body.length % 512)) % 512), Buffer.alloc(1024)]);
 if (!${noTarball}) writeFileSync(out + "/${tarballFilename}", gzipSync(tar, { mtime: 0 }));
 if (${extraTarball}) writeFileSync(out + "/second.tgz", gzipSync(tar, { mtime: 0 }));
-process.stdout.write(JSON.stringify([{ filename: "${tarballFilename}" }]));
+process.stdout.write(${JSON.stringify(
+    packOutput ??
+      `> @innocarpe/carpeos@${packageVersion} prepack
+> node scripts/prepack.mjs
+[${JSON.stringify({ filename: tarballFilename })}]`,
+  )});
 `;
   for (const [name, contents] of Object.entries({ git, npm })) {
     const path = join(directory, name);
@@ -209,6 +215,21 @@ describe("pack-once", () => {
           outDir: outputDirectory("identity-pack-"),
         }),
       /identity/,
+    );
+  });
+  it("rejects lifecycle output without a final JSON array", () => {
+    fakeTools({
+      packOutput: `> @innocarpe/carpeos@${version} prepack\ncomplete`,
+    });
+    assert.throws(
+      () =>
+        createManifest({
+          sha,
+          tag,
+          version,
+          outDir: outputDirectory("malformed-pack-"),
+        }),
+      /npm pack did not return JSON/,
     );
   });
 

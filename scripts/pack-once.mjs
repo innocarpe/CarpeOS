@@ -43,6 +43,19 @@ function parseOptions(argv) {
 function stableJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
+function parsePackOutput(output) {
+  try {
+    return JSON.parse(output);
+  } catch {
+    const arrayStart = output.lastIndexOf("\n[");
+    if (arrayStart === -1) fail("npm pack did not return JSON");
+    try {
+      return JSON.parse(output.slice(arrayStart + 1));
+    } catch {
+      fail("npm pack did not return JSON");
+    }
+  }
+}
 
 function packageIdentity(tarball) {
   const contents = command("tar", ["-xOf", tarball, "package/package.json"]);
@@ -90,12 +103,7 @@ export function createManifest({ sha, tag, version, outDir }) {
   const packed = command("npm", ["pack", "--json", "--pack-destination", output], {
     cwd: packageDir,
   });
-  let result;
-  try {
-    result = JSON.parse(packed);
-  } catch {
-    fail("npm pack did not return JSON");
-  }
+  const result = parsePackOutput(packed);
   const tarballs = readdirSync(output).filter((entry) => entry.endsWith(".tgz"));
   if (
     tarballs.length !== 1 ||
