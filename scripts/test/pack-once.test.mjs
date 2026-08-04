@@ -77,6 +77,15 @@ describe("pack-once", () => {
       entry: installedCanonicalPath,
       kind: "installed",
     });
+    assert.deepEqual(
+      resolveCliInvocation(["--cli", installedBinary], join(directory, "missing-source-cli.js")),
+      {
+        command: installedCanonicalPath,
+        args: [],
+        entry: installedCanonicalPath,
+        kind: "installed",
+      },
+    );
     assert.throws(
       () => resolveCliInvocation(["--cli", sourceEntry], sourceEntry),
       /must not reference the repository CLI entry/,

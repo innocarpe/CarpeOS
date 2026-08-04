@@ -74,20 +74,23 @@ jobs:
           node scripts/pack-once.mjs assert-artifact --manifest "$MANIFEST" --tarball "$TARBALL"
           SMOKE_ROOT="$(mktemp -d "$RUNNER_TEMP/carpeos-release-smoke.XXXXXX")"
           cleanup() {
-            rm -rf "$SMOKE_ROOT"
+            rm -rf -- "$SMOKE_ROOT"
           }
-          trap cleanup EXIT HUP INT TERM
+          trap cleanup EXIT
+          trap 'exit 1' HUP INT TERM
           export HOME="$SMOKE_ROOT/home"
           export CARPEOS_HOME="$HOME"
           export npm_config_cache="$SMOKE_ROOT/npm-cache"
           mkdir -p "$HOME" "$npm_config_cache"
+          unset NODE_AUTH_TOKEN NPM_TOKEN
           npm install --prefix "$SMOKE_ROOT/install" "$TARBALL"
           CLI="$SMOKE_ROOT/install/node_modules/.bin/carpeos"
           test -x "$CLI"
           VERSION_JSON="$("$CLI" --version)"
           INSTALLED_VERSION="$(VERSION_JSON="$VERSION_JSON" node -e 'const value = JSON.parse(process.env.VERSION_JSON); if (value.ok !== true || value.name !== "@innocarpe/carpeos" || typeof value.version !== "string") process.exit(1); process.stdout.write(value.version)')"
           test "$INSTALLED_VERSION" = "$PACKAGE_VERSION"
-          "$CLI" setup doctor
+          "$CLI" setup run --apply --home "$CARPEOS_HOME"
+          "$CLI" setup doctor --home "$CARPEOS_HOME"
           node scripts/smoke-dogfood.mjs --cli "$CLI"
 
       - name: Publish packed artifact to npm
