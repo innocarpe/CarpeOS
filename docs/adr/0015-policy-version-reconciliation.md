@@ -1,6 +1,6 @@
 # ADR 0015: Policy-version reconciliation requires bounded, digest-pinned preview plans
 
-Status: **Accepted for Product 3.2 B0; implemented and tested on current main for pre-release validation; unpublished, uninstalled, and undeployed; B1 deferred and absent**
+Status: **Released in `@innocarpe/carpeos@3.2.0`; B0 is verified on current main and global activation; no hosted deployment is claimed; B1 deferred and absent**
 
 Date: 2026-08-03
 
@@ -8,7 +8,7 @@ Date: 2026-08-03
 
 Historical extraction, policy-scoped materialization, and held-review promotion can leave older-policy local canonical Observations active. Reconciliation must make that debt reviewable without granting authority, mutating ambiguity, or hiding uncertainty.
 
-Canonical/review/disposition history remains append-only and bitemporal. Schema v1, event types, trust zones, fail-open hooks, and promoted-active-only defaults remain unchanged. Reconciliation is an implemented, explicit local trust-zone CLI operation on current main for pre-release validation; it is never automatic through hooks, MCP, open, migration, or sync, and is not published, installed, or deployed.
+Canonical/review/disposition history remains append-only and bitemporal. Schema v1, event types, trust zones, fail-open hooks, and promoted-active-only defaults remain unchanged. Reconciliation ships as an explicit local trust-zone B0 CLI operation in `@innocarpe/carpeos@3.2.0` and is verified on current main and global activation; it is never automatic through hooks, MCP, open, migration, or sync, and no hosted deployment is claimed.
 
 ## Decision
 
@@ -122,7 +122,7 @@ No acknowledgement, apply result, receipt timestamp, display/error text, or body
 
 ## Exact B0 CLI contract
 
-The implemented B0 CLI path is preview-only on current main for pre-release validation; it is not published, installed, or deployed:
+The shipped B0 CLI path in `@innocarpe/carpeos@3.2.0` is preview-only and verified on current main and global activation; no hosted deployment is claimed:
 
 ```sh
 carpeos adjudicate reconcile-policy \

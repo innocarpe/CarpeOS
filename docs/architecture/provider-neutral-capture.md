@@ -2,7 +2,8 @@
 
 Status: current-main audit. The documented local capture adapters and local MCP
 server are implemented and tested repository surfaces; they are not hosted or
-production deployment. Product 3.2 B0 is pre-release.
+production deployment. Product 3.2 B0 shipped in `@innocarpe/carpeos@3.2.0` and is
+verified on current main and global activation.
 
 Provider-specific lifecycle payloads are normalized at the boundary and captured
 as local evidence. The adapter boundary prevents a provider's field names,
@@ -54,14 +55,15 @@ integration or MCP tool.
 Remote sync, hosted capture or retrieval, unimplemented provider adapters, and
 unimplemented MCP tools remain planned. Local sync transfer/import is implemented
 and tested in the repository, but does not establish hosted or production
-deployment. Product 3.2 does not change this boundary: B0 is an implemented and
-tested explicit local reconciliation preview
-on main, never a hook or MCP side effect. It is metadata-only and zero-write, and
-remains pre-release, unpublished, uninstalled, and undeployed. B1 apply, writer
-and receipt construction, Supersession construction, automatic
-Claim/AcceptanceDecision creation, and sync convergence are deferred. This
-document does not evidence K0--K12, release, installation, or publication
-completion. See [ADR 0015](../adr/0015-policy-version-reconciliation.md).
+deployment. Product 3.2 does not change this boundary: B0 shipped in
+`@innocarpe/carpeos@3.2.0` as an explicit local reconciliation preview and is
+verified on current main and global activation, never a hook or MCP side effect. It
+is metadata-only and zero-write. The [Product 3.2 release and activation
+receipt](../maintainers/product-3.2.0.md) records release, publication, global
+installation, activation, and K0--K12 completion; none establishes hosted
+deployment. B1 apply, writer and receipt construction, Supersession construction,
+automatic Claim/AcceptanceDecision creation, and sync convergence are deferred.
+See [ADR 0015](../adr/0015-policy-version-reconciliation.md).
 
 All examples and fixtures must remain synthetic and body-free at public
 boundaries.
