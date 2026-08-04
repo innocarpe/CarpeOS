@@ -1510,12 +1510,10 @@ OPTIONS
   --stats                   Print promote/hold/reject counts for current policy
   --from-policy <id>         Reconciliation source policy (reconcile-policy only)
   --to-policy <id>           Reconciliation target policy (reconcile-policy only)
-  --trust-zone <id>          Required reconciliation trust zone
-  --limit <n>                Reconciliation preview bound (1..200)
-  --limit <n>               Held queue rows, 1–200 (default: 50)
+  --trust-zone <id>          Required for reconciliation; otherwise opened-store zone
+  --limit <n>                Reconciliation 1–200; held queue default 50
   --home <path>
   --project-id <id>
-  --trust-zone <id>
 
 NOTES
   Precision-first rule adjudicator (adj_v3). Promote → active Observation;
