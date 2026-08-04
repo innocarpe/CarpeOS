@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -10,13 +10,18 @@ const sha = "a".repeat(40);
 const originalPath = process.env.PATH;
 const temporary = [];
 const integrity = `sha512-${"A".repeat(86)}==`;
+const { version } = JSON.parse(
+  readFileSync(new URL("../../packages/carpeos/package.json", import.meta.url), "utf8"),
+);
+const tag = `v${version}`;
+const tarballFilename = `carpeos-${version}.tgz`;
 
 function fakeTools({
   dirty = false,
   extraTarball = false,
   head = sha,
   noTarball = false,
-  packageVersion = "3.1.0",
+  packageVersion = version,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "pack-once-"));
   temporary.push(directory);
@@ -24,8 +29,8 @@ function fakeTools({
 const args = process.argv.slice(2).join(" ");
 if (args === "status --porcelain") process.stdout.write(${JSON.stringify(dirty ? " M changed" : "")});
 else if (args === "rev-parse HEAD") process.stdout.write("${head}");
-else if (args === "rev-list -n 1 v3.1.0") process.stdout.write("${sha}");
-else if (args === "cat-file -t v3.1.0") process.stdout.write("tag");
+else if (args === ${JSON.stringify(`rev-list -n 1 ${tag}`)}) process.stdout.write("${sha}");
+else if (args === ${JSON.stringify(`cat-file -t ${tag}`)}) process.stdout.write("tag");
 else process.exit(1);
 `;
   const npm = `#!/usr/bin/env node
@@ -37,9 +42,9 @@ const out = args[args.indexOf("--pack-destination") + 1];
 const body = Buffer.from(JSON.stringify({ name: "@innocarpe/carpeos", version: "${packageVersion}" }) + "\\n");
 const header = Buffer.alloc(512); header.write("package/package.json"); header.write("0000644", 100); header.write(body.length.toString(8).padStart(11, "0") + "\\0", 124); header.write("ustar", 257); header.write("00", 263); for (let i = 148; i < 156; i += 1) header[i] = 32; const sum = header.reduce((n, byte) => n + byte, 0); header.write(sum.toString(8).padStart(6, "0") + "\\0 ", 148);
 const tar = Buffer.concat([header, body, Buffer.alloc((512 - (body.length % 512)) % 512), Buffer.alloc(1024)]);
-if (!${noTarball}) writeFileSync(out + "/carpeos-3.1.0.tgz", gzipSync(tar, { mtime: 0 }));
+if (!${noTarball}) writeFileSync(out + "/${tarballFilename}", gzipSync(tar, { mtime: 0 }));
 if (${extraTarball}) writeFileSync(out + "/second.tgz", gzipSync(tar, { mtime: 0 }));
-process.stdout.write(JSON.stringify([{ filename: "carpeos-3.1.0.tgz" }]));
+process.stdout.write(JSON.stringify([{ filename: "${tarballFilename}" }]));
 `;
   for (const [name, contents] of Object.entries({ git, npm })) {
     const path = join(directory, name);
@@ -108,14 +113,14 @@ describe("pack-once", () => {
     fakeTools();
     const first = createManifest({
       sha,
-      tag: "v3.1.0",
-      version: "3.1.0",
+      tag,
+      version,
       outDir: outputDirectory("pack-out-"),
     });
     const second = createManifest({
       sha,
-      tag: "v3.1.0",
-      version: "3.1.0",
+      tag,
+      version,
       outDir: outputDirectory("pack-out-"),
     });
     assert.deepEqual(first.manifest, second.manifest);
@@ -134,15 +139,15 @@ describe("pack-once", () => {
       "creation_tool_version",
     ]);
     assert.equal(first.manifest.git_sha, sha);
-    assert.equal(first.manifest.annotated_tag, "v3.1.0");
+    assert.equal(first.manifest.annotated_tag, tag);
     assert.equal(first.manifest.npm_integrity, first.manifest.sha512);
     assertArtifact(first.manifestPath, first.tarball);
     assert.throws(
       () =>
         createManifest({
           sha,
-          tag: "v3.1.0",
-          version: "3.1.0",
+          tag,
+          version,
           outDir: first.manifestPath.replace("/release-artifact.json", ""),
         }),
       /refusing to repack/,
@@ -155,8 +160,8 @@ describe("pack-once", () => {
       () =>
         createManifest({
           sha,
-          tag: "v3.1.0",
-          version: "3.1.0",
+          tag,
+          version,
           outDir: outputDirectory("dirty-pack-"),
         }),
       /repository is dirty/,
@@ -166,8 +171,8 @@ describe("pack-once", () => {
       () =>
         createManifest({
           sha,
-          tag: "v3.1.0",
-          version: "3.1.0",
+          tag,
+          version,
           outDir: outputDirectory("mismatch-pack-"),
         }),
       /HEAD does not match/,
@@ -177,8 +182,8 @@ describe("pack-once", () => {
       () =>
         createManifest({
           sha,
-          tag: "v3.1.0",
-          version: "3.1.0",
+          tag,
+          version,
           outDir: outputDirectory("empty-pack-"),
         }),
       /exactly one tarball/,
@@ -188,8 +193,8 @@ describe("pack-once", () => {
       () =>
         createManifest({
           sha,
-          tag: "v3.1.0",
-          version: "3.1.0",
+          tag,
+          version,
           outDir: outputDirectory("multiple-pack-"),
         }),
       /exactly one tarball/,
@@ -199,8 +204,8 @@ describe("pack-once", () => {
       () =>
         createManifest({
           sha,
-          tag: "v3.1.0",
-          version: "3.1.0",
+          tag,
+          version,
           outDir: outputDirectory("identity-pack-"),
         }),
       /identity/,
