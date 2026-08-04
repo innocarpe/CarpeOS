@@ -394,15 +394,17 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
 | **3.0.0** | Retrieval-first graph/hybrid recall with cross-repository partitions and worktree facets | **Shipped** on npm / `v3.0.0` |
 | **3.1.0** | Additive **OKF v0.2 export projection** | **Shipped** as `@innocarpe/carpeos@3.1.0` / `v3.1.0` — export only, not an import path |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **In development / pre-release** — not installed or published; B1 apply/writer/receipt is deferred |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **Pre-release validation on current main** — 3.1.0 remains the latest published/global release; 3.2.0 publication, global installation, and activation are incomplete until the release cycle records them; B0 is preview-only and B1 apply/writer/receipt is deferred |
 
-3.2 work is pre-release: `adj_v3` precision/session de-noising and policy-aware
-held review are shipped on main, while automatic Claim creation remains off and
-no path creates an `AcceptanceDecision`. Its adjudication and knowledge-form
-evaluators are evidence-only, and its retrieval evaluator is synthetic. B0
-reconcile-policy is preview-only; B1 apply/writer/receipt remains deferred.
-Dogfood is synthetic and disposable. Hosted graph adapters and other roadmap work
-remain unshipped. Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
+3.2 implementation is present on current main for pre-release validation:
+`adj_v3` precision/session de-noising and policy-aware held review leave automatic
+Claim creation off, and no path creates an `AcceptanceDecision`. Its adjudication and
+knowledge-form evaluators are evidence-only, and its retrieval evaluator is synthetic.
+B0 reconcile-policy is preview-only; B1 apply/writer/receipt remains deferred. 3.1.0
+remains the latest published/global release; 3.2.0 publication, global installation,
+and activation are incomplete until the release cycle records them. Dogfood is synthetic
+and disposable. Hosted graph adapters and other roadmap work remain unshipped.
+Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
 [product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
 [product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
 [product 3.2 DoD](docs/maintainers/product-3.2.0.md).
@@ -432,7 +434,7 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | --- | --- |
 | Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md)) |
 | Local capture + outbox | Shipped |
-| Knowledge adjudication (`adj_v3`) | Shipped on main — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
+| Knowledge adjudication (`adj_v3`) | Present on current main for 3.2 pre-release validation — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
 | Default retrieval | **Promoted/active only**; held opt-in |
 | Doctor adjudication health | Shipped (`setup doctor`, `adjudicate --stats`) |
 | Sync Worker/client + bounded `sync cycle` | Code + local tests; no production edge claimed |
@@ -441,7 +443,7 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
-| **3.2.0 pre-release work** | Shipped-on-main `adj_v3` and evaluators; B0 reconcile-policy preview only. Not installed or published; B1 apply/writer/receipt deferred |
+| **3.2.0 pre-release work** | Present on current main for pre-release validation: `adj_v3` and evaluators; B0 reconcile-policy preview-only; B1 apply/writer/receipt deferred. 3.1.0 remains the latest published/global release; 3.2.0 publication, global installation, and activation are incomplete until the release cycle records them |
 | `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |

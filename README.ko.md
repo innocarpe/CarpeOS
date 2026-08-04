@@ -381,15 +381,16 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | **2.0.0** | **판정된 의미**가 기본 제품 계약 (`adj_v1`, promoted-only 검색, held 리뷰, doctor, smoke) | **출시** (npm / `v2.0.0`) — 운영 가능한 MVP. 인간 수준 판단 아님 |
 | **3.0.0** | 교차 저장소 partition과 worktree facet을 갖춘 retrieval-first 그래프/하이브리드 회상 | **출시** (npm / `v3.0.0`) |
 | **3.1.0** | 추가된 **OKF v0.2 export projection** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0`; export만 지원하고 import 경로는 아님 |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held 리뷰, evidence-only quality evaluator, retrieval evaluator, B0 reconciliation preview | **개발 중 / pre-release** — 설치·게시되지 않았고 B1 apply/writer/receipt는 deferred |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held 리뷰, evidence-only quality evaluator, retrieval evaluator, B0 reconciliation preview | **현재 main에서 pre-release 검증 중** — 3.1.0은 최신 게시/전역 릴리스이며, 3.2.0의 게시·전역 설치·활성화는 릴리스 주기에 기록될 때까지 완료되지 않습니다. B0는 preview-only이고 B1 apply/writer/receipt는 deferred입니다 |
 
-3.2 작업은 pre-release입니다. `adj_v3` precision/session de-noising과 policy-aware
-held 리뷰는 main에 있지만 automatic Claim creation은 꺼져 있고 어떤 경로도
-`AcceptanceDecision`을 만들지 않습니다. adjudication/knowledge-form evaluator는
-evidence-only이고 retrieval evaluator는 synthetic입니다. B0 reconcile-policy는
-preview-only이며 B1 apply/writer/receipt는 deferred입니다. dogfood는
-synthetic·disposable입니다. hosted graph adapter와 그 밖의 로드맵 작업은 아직
-출시되지 않았습니다. 상세:
+3.2 구현은 현재 main에서 pre-release 검증을 위해 존재합니다. `adj_v3`
+precision/session de-noising과 policy-aware held 리뷰는 automatic Claim creation을
+꺼진 상태로 두며 어떤 경로도 `AcceptanceDecision`을 만들지 않습니다.
+adjudication/knowledge-form evaluator는 evidence-only이고 retrieval evaluator는
+synthetic입니다. B0 reconcile-policy는 preview-only이며 B1 apply/writer/receipt는
+deferred입니다. 3.1.0은 최신 게시/전역 릴리스이며, 3.2.0의 게시·전역 설치·활성화는
+릴리스 주기에 기록될 때까지 완료되지 않습니다. dogfood는 synthetic·disposable입니다.
+hosted graph adapter와 그 밖의 로드맵 작업은 아직 출시되지 않았습니다. 상세:
 [product 2.0 residual](docs/maintainers/product-2.0.0.md) ·
 [product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
 [product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
@@ -421,7 +422,7 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | --- | --- |
 | Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md) 포함) |
 | Local capture + outbox | 출시 |
-| Knowledge adjudication (`adj_v3`) | main에 출시 — precision/session de-noising, disposition, policy-aware held 리뷰, policy history; automatic Claim과 `AcceptanceDecision` 없음 |
+| Knowledge adjudication (`adj_v3`) | 현재 main에서 3.2 pre-release 검증용으로 존재 — precision/session de-noising, disposition, policy-aware held 리뷰, policy history; automatic Claim과 `AcceptanceDecision` 없음 |
 | 기본 retrieval | **promoted/active only**; held는 opt-in |
 | Doctor 판정 health | 출시 |
 | Sync Worker/client + bounded `sync cycle` | 코드 + 로컬 테스트. production edge 주장 없음 |
@@ -430,7 +431,7 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | Retrieval-first 그래프/하이브리드 회상 | **출시** — indexed graph traversal, 교차 저장소 partition, worktree facet |
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
 | OKF v0.2 export projection | **3.1에 출시** — 로컬 export만, import 경로 없음 |
-| **3.2.0 pre-release 작업** | main의 `adj_v3`와 evaluator, B0 reconcile-policy preview만. 설치·게시되지 않았고 B1 apply/writer/receipt deferred |
+| **3.2.0 pre-release 작업** | 현재 main에서 pre-release 검증용으로 존재: `adj_v3`와 evaluator, B0 reconcile-policy preview-only, B1 apply/writer/receipt deferred. 3.1.0은 최신 게시/전역 릴리스이며, 3.2.0의 게시·전역 설치·활성화는 릴리스 주기에 기록될 때까지 완료되지 않음 |
 | `carpeos setup` / one-stop install | npm `@innocarpe/carpeos` |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
