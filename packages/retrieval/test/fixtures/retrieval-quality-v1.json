@@ -5,69 +5,78 @@
       "id": "rq-local-recall",
       "branch": "local-index-recall",
       "candidates": [
-        { "id": "doc-local-relevant", "kind": "claim" },
-        { "id": "doc-local-other", "kind": "summary" }
+        { "id": "claim-local-relevant", "kind": "claim" },
+        { "id": "summary-local-other", "kind": "summary" }
       ],
-      "relevant_ids": ["doc-local-relevant"]
+      "relevant_ids": ["claim-local-relevant"]
     },
     {
       "id": "rq-local-scope",
       "branch": "local-index-scope-isolation",
       "candidates": [
-        { "id": "doc-scope-relevant", "kind": "claim" },
-        { "id": "doc-scope-neutral-a", "kind": "summary" },
-        { "id": "doc-scope-neutral-b", "kind": "open_loop" },
-        { "id": "doc-scope-foreign", "kind": "summary" }
+        { "id": "claim-scope-relevant", "kind": "claim" },
+        { "id": "summary-scope-neutral-a", "kind": "summary" },
+        { "id": "open-loop-scope-neutral-b", "kind": "open_loop" },
+        { "id": "summary-scope-foreign", "kind": "summary" }
       ],
-      "relevant_ids": ["doc-scope-relevant"],
-      "forbidden_ids": ["doc-scope-foreign"]
+      "relevant_ids": ["claim-scope-relevant"],
+      "forbidden_ids": ["summary-scope-foreign"]
     },
     {
       "id": "rq-local-kind",
       "branch": "local-index-kind-priority",
       "candidates": [
-        { "id": "doc-kind-relevant", "kind": "claim" },
-        { "id": "doc-kind-evidence", "kind": "evidence_excerpt" }
+        { "id": "claim-kind-relevant", "kind": "claim" },
+        { "id": "evidence-kind-context", "kind": "evidence_excerpt" }
       ],
-      "relevant_ids": ["doc-kind-relevant"]
+      "relevant_ids": ["claim-kind-relevant"]
     },
     {
       "id": "rq-graph-multihop",
       "branch": "graph-provenance-multihop",
       "candidates": [
-        { "id": "doc-graph-relevant", "kind": "claim" },
-        { "id": "doc-graph-other", "kind": "summary" }
+        { "id": "observation-graph-root", "kind": "summary" },
+        { "id": "claim-graph-nonroot", "kind": "claim" }
       ],
-      "relevant_ids": ["doc-graph-relevant"],
-      "budget": { "max_nodes": 4, "required_ids": ["doc-graph-relevant"] }
+      "relevant_ids": ["observation-graph-root"],
+      "budget": { "max_nodes": 10, "required_ids": ["claim-graph-nonroot"] }
     },
     {
       "id": "rq-graph-budget",
       "branch": "graph-budget-omission",
-      "candidates": [{ "id": "doc-budget-relevant", "kind": "summary" }],
-      "relevant_ids": ["doc-budget-relevant"],
-      "budget": { "max_nodes": 1, "required_ids": ["doc-budget-relevant"] }
+      "candidates": [
+        { "id": "observation-budget-root", "kind": "summary" },
+        { "id": "claim-budget-omitted", "kind": "claim" }
+      ],
+      "relevant_ids": ["observation-budget-root"],
+      "budget": { "max_nodes": 1, "omitted_ids": ["claim-budget-omitted"] }
     },
     {
       "id": "rq-graph-acceptance",
       "branch": "graph-no-acceptance-inference",
-      "candidates": [{ "id": "doc-graph-safe", "kind": "claim" }],
-      "relevant_ids": ["doc-graph-safe"]
+      "candidates": [
+        { "id": "claim-graph-safe", "kind": "claim" },
+        { "id": "decision-graph-review", "kind": "decision", "acceptance": "needs_review" }
+      ],
+      "relevant_ids": ["claim-graph-safe"]
     },
     {
       "id": "rq-recheck-determinism",
       "branch": "canonical-recheck-determinism",
       "candidates": [
-        { "id": "doc-recheck-relevant", "kind": "decision" },
-        { "id": "doc-recheck-other", "kind": "summary" }
+        { "id": "claim-recheck-relevant", "kind": "claim" },
+        { "id": "decision-recheck-review", "kind": "decision", "acceptance": "needs_review" }
       ],
-      "relevant_ids": ["doc-recheck-relevant"]
+      "relevant_ids": ["claim-recheck-relevant"]
     },
     {
       "id": "rq-recheck-acceptance",
       "branch": "canonical-recheck-no-false-acceptance",
-      "candidates": [{ "id": "doc-recheck-safe", "kind": "claim" }],
-      "relevant_ids": ["doc-recheck-safe"]
+      "candidates": [
+        { "id": "claim-recheck-safe", "kind": "claim" },
+        { "id": "decision-recheck-review", "kind": "decision", "acceptance": "needs_review" }
+      ],
+      "relevant_ids": ["claim-recheck-safe"]
     }
   ]
 }

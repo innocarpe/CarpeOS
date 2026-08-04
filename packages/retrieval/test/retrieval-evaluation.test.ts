@@ -59,7 +59,7 @@ describe("retrieval quality evaluation", () => {
   it("fails a graph contract when the executed bounded walk omits a required node", () => {
     const corpus = clone(fixture);
     const graphCase = requiredCase(corpus, "rq-graph-multihop");
-    graphCase.budget = { max_nodes: 1, required_ids: ["doc-graph-other"] };
+    graphCase.budget = { max_nodes: 1, required_ids: ["claim-graph-nonroot"] };
     const report = evaluateRetrievalQuality(corpus);
     expect(report.budget_violations).toBe(1);
     expect(passesRetrievalQualityGate(report)).toBe(false);
@@ -69,7 +69,7 @@ describe("retrieval quality evaluation", () => {
   it("fails when a foreign synthetic origin is observable through the scoped query", () => {
     const corpus = clone(fixture);
     const scopeCase = requiredCase(corpus, "rq-local-scope");
-    const foreign = requiredCandidate(scopeCase, "doc-scope-foreign");
+    const foreign = requiredCandidate(scopeCase, "summary-scope-foreign");
     foreign.project_id = "project_retrieval_quality";
     const report = evaluateRetrievalQuality(corpus);
     expect(report.leakage_count).toBeGreaterThan(0);
@@ -83,6 +83,14 @@ describe("retrieval quality evaluation", () => {
       "omitted";
     const report = evaluateRetrievalQuality(corpus);
     expect(report.assertion_failures).toBeGreaterThan(0);
+    expect(passesRetrievalQualityGate(report)).toBe(false);
+  });
+  it("fails when an observed accepted decision would falsely accept its claim", () => {
+    const corpus = clone(fixture);
+    const acceptanceCase = requiredCase(corpus, "rq-recheck-acceptance");
+    requiredCandidate(acceptanceCase, "decision-recheck-review").acceptance = "accepted";
+    const report = evaluateRetrievalQuality(corpus);
+    expect(report.false_acceptance_count).toBeGreaterThan(0);
     expect(passesRetrievalQualityGate(report)).toBe(false);
   });
 
@@ -114,6 +122,14 @@ describe("retrieval quality evaluation", () => {
     requiredAt(cases(withBody), 0).body = "forbidden";
     expect(retrievalQualityExitCode(withBody)).toBe(2);
   });
+  it.each(RETRIEVAL_QUALITY_BRANCH_IDS)(
+    "rejects a corpus when %s has no independently observed case",
+    (branch) => {
+      const corpus = clone(fixture);
+      corpus.cases = cases(corpus).filter((evaluationCase) => evaluationCase.branch !== branch);
+      expect(retrievalQualityExitCode(corpus)).toBe(2);
+    },
+  );
 
   it("maps a passing corpus to zero", () => {
     expect(retrievalQualityExitCode(fixture)).toBe(0);
