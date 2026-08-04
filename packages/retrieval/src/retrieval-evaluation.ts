@@ -30,6 +30,7 @@ type Candidate = {
   kind: "claim" | "decision" | "summary" | "open_loop" | "evidence_excerpt";
   project_id?: string;
   canonical_source?: "present" | "omitted";
+  acceptance?: "accepted" | "rejected" | "needs_review";
 };
 type EvaluationCase = {
   id: string;
@@ -37,7 +38,7 @@ type EvaluationCase = {
   candidates: Candidate[];
   relevant_ids: string[];
   forbidden_ids?: string[];
-  budget?: { max_nodes: number; required_ids?: string[] };
+  budget?: { max_nodes: number; required_ids?: string[]; omitted_ids?: string[] };
 };
 
 export type RetrievalQualityCorpus = {
@@ -139,106 +140,129 @@ type ObservedPath = {
 
 function executeEvidencePath(evaluationCase: EvaluationCase, caseIndex: number): ObservedPath {
   const db = openEvaluationDatabase();
-  const eventIds = new Map<string, string>();
-  const events = evaluationCase.candidates.map((candidate, candidateIndex) => {
-    const eventId = `evt_rq_case_${caseIndex}_candidate_${candidateIndex}_synthetic`;
-    eventIds.set(candidate.id, eventId);
-    return syntheticEvent(eventId, evaluationCase.id, candidate, candidateIndex, eventIds);
-  });
-  for (const [index, event] of events.entries()) {
-    const candidate = requiredCorpusValue(
-      evaluationCase.candidates[index],
-      "candidate is missing during evaluation",
-    );
-    db.prepare(
-      "INSERT INTO canonical_events (event_id, event_json, local_sequence) VALUES (?, ?, ?)",
-    ).run(event.event_id, JSON.stringify(event), index + 1);
-    db.prepare(
-      "INSERT INTO capture_requests (event_id, project_id, worktree_id, worktree_name, git_branch) VALUES (?, ?, ?, ?, ?)",
-    ).run(
-      event.event_id,
-      candidate.project_id ??
-        (evaluationCase.forbidden_ids?.includes(candidate.id) ? "project_foreign" : projectId),
-      `wt_${caseIndex.toString(16).padStart(12, "0")}${index.toString(16).padStart(12, "0")}`,
-      `worktree_${caseIndex}_${index}`,
-      "main",
-    );
-  }
-  rebuildLocalRetrievalIndex(db, now);
-  const canonicalSnapshot = readCanonicalSnapshot(db);
-  const relevantId = requiredCorpusValue(
-    evaluationCase.relevant_ids[0],
-    "relevant id is missing during evaluation",
-  );
-  const query = makeQuery(`${evaluationCase.id} ${relevantId}`, projectId);
-  const result = searchLocalRetrievalIndex(db, {
-    query,
-    events: canonicalEventsForRecheck(events, evaluationCase),
-  });
-  const rankedIds = candidateIdsFromResults(result.results, eventIds);
-  const scopeProbe =
-    evaluationCase.forbidden_ids === undefined
-      ? []
-      : candidateIdsFromResults(
-          searchLocalRetrievalIndex(db, {
-            query: makeQuery(evaluationCase.id, projectId),
-            events: canonicalEventsForRecheck(events, evaluationCase),
-          }).results,
-          eventIds,
-        );
-  const graphBudget = evaluationCase.budget;
-  const graphEvidence =
-    graphBudget === undefined
-      ? undefined
-      : (() => {
-          const rootId = requiredCorpusValue(
-            eventIds.get(relevantId),
-            "relevant event mapping is missing during evaluation",
+  try {
+    const eventIds = new Map<string, string>();
+    const events = evaluationCase.candidates.map((candidate, candidateIndex) => {
+      const eventId = `evt_rq_case_${caseIndex}_candidate_${candidateIndex}_synthetic`;
+      eventIds.set(candidate.id, eventId);
+      return syntheticEvent(eventId, evaluationCase.id, candidate, candidateIndex, eventIds);
+    });
+    for (const [index, event] of events.entries()) {
+      const candidate = requiredCorpusValue(
+        evaluationCase.candidates[index],
+        "candidate is missing during evaluation",
+      );
+      db.prepare(
+        "INSERT INTO canonical_events (event_id, event_json, local_sequence) VALUES (?, ?, ?)",
+      ).run(event.event_id, JSON.stringify(event), index + 1);
+      db.prepare(
+        "INSERT INTO capture_requests (event_id, project_id, worktree_id, worktree_name, git_branch) VALUES (?, ?, ?, ?, ?)",
+      ).run(
+        event.event_id,
+        candidate.project_id ??
+          (evaluationCase.forbidden_ids?.includes(candidate.id) ? "project_foreign" : projectId),
+        `wt_${caseIndex.toString(16).padStart(12, "0")}${index.toString(16).padStart(12, "0")}`,
+        `worktree_${caseIndex}_${index}`,
+        "main",
+      );
+    }
+    rebuildLocalRetrievalIndex(db, now);
+    const canonicalSnapshot = readCanonicalSnapshot(db);
+    const query = makeQuery(evaluationQueryText(evaluationCase), projectId);
+    const recheckEvents = canonicalEventsForRecheck(events, evaluationCase);
+    const result = searchLocalRetrievalIndex(db, { query, events: recheckEvents });
+    const rankedIds = candidateIdsFromResults(result.results, eventIds);
+    const scopeProbe =
+      evaluationCase.forbidden_ids === undefined
+        ? []
+        : candidateIdsFromResults(
+            searchLocalRetrievalIndex(db, { query, events: recheckEvents }).results,
+            eventIds,
           );
-          const requiredEventIds = (graphBudget.required_ids ?? []).map((id) =>
-            requiredCorpusValue(
-              eventIds.get(id),
-              "required graph event mapping is missing during evaluation",
-            ),
-          );
-          return {
-            maxNodes: graphBudget.max_nodes,
-            requiredEventIds,
-            walk: walkGraphNeighborhood(db, {
-              root_id: rootId,
-              max_depth: 2,
-              max_nodes: graphBudget.max_nodes,
-              visible_trust_zone_ids: [trustZoneId],
-            }),
-          };
-        })();
-  const graphSourceIds = new Set(
-    graphEvidence?.walk.nodes.map((node) => node.source_event_id) ?? [],
-  );
-  const canonicalRechecked = result.results.every((item) => item.canonical_rechecked === true);
-  const falseAcceptance = result.results.some(
-    (item) => item.status === "visible" && item.lineage.accepted_decision_event_ids !== undefined,
-  );
-  const canonicalAfter = readCanonicalSnapshot(db);
-  return {
-    rankedIds,
-    leakedIds: scopeProbe.filter((id) => evaluationCase.forbidden_ids?.includes(id)),
-    budgetViolated:
-      graphEvidence !== undefined &&
-      (graphEvidence.walk.budgets.nodes_used > graphEvidence.maxNodes ||
-        graphEvidence.requiredEventIds.some((eventId) => !graphSourceIds.has(eventId))),
-    falseAcceptance,
-    canonicalRechecked,
-    onlineFeedbackMutated: canonicalSnapshot !== canonicalAfter,
-    adaptiveRankingMutated: canonicalSnapshot !== canonicalAfter,
-    graph:
-      graphEvidence === undefined
+    const graphBudget = evaluationCase.budget;
+    const graphEvidence =
+      graphBudget === undefined
         ? undefined
-        : {
-            nodes_used: graphEvidence.walk.budgets.nodes_used,
-            max_nodes: graphEvidence.maxNodes,
-          },
-  };
+        : (() => {
+            const relevantId = requiredCorpusValue(
+              evaluationCase.relevant_ids[0],
+              "relevant id is missing during evaluation",
+            );
+            const rootId = requiredCorpusValue(
+              eventIds.get(relevantId),
+              "relevant event mapping is missing during evaluation",
+            );
+            return {
+              maxNodes: graphBudget.max_nodes,
+              requiredEventIds: (graphBudget.required_ids ?? []).map((id) =>
+                requiredCorpusValue(
+                  eventIds.get(id),
+                  "required graph event mapping is missing during evaluation",
+                ),
+              ),
+              omittedEventIds: (graphBudget.omitted_ids ?? []).map((id) =>
+                requiredCorpusValue(
+                  eventIds.get(id),
+                  "omitted graph event mapping is missing during evaluation",
+                ),
+              ),
+              walk: walkGraphNeighborhood(db, {
+                root_id: rootId,
+                max_depth: 2,
+                max_nodes: graphBudget.max_nodes,
+                visible_trust_zone_ids: [trustZoneId],
+              }),
+            };
+          })();
+    const graphSourceIds = new Set(
+      graphEvidence?.walk.nodes.flatMap((node) =>
+        node.source_event_id === undefined ? [] : [node.source_event_id],
+      ) ?? [],
+    );
+    const omittedGraphEventIds = new Set(
+      graphEvidence?.walk.omissions
+        .flatMap((omission) =>
+          omission.reason === "max_nodes" && typeof omission.detail === "string"
+            ? [omission.detail.replace(/^evt:/, "")]
+            : [],
+        )
+        .filter((eventId) => [...eventIds.values()].includes(eventId)) ?? [],
+    );
+    const canonicalRechecked = result.results.every((item) => item.canonical_rechecked === true);
+    const falseAcceptance = result.results.some(
+      (item) =>
+        item.status === "visible" &&
+        item.lineage.source_records.some((source) => source.event_type === "Claim") &&
+        item.lineage.accepted_decision_event_ids !== undefined,
+    );
+    const rankingSnapshot = stableJson(result.results);
+    const repeatedRankingSnapshot = stableJson(
+      searchLocalRetrievalIndex(db, { query, events: recheckEvents }).results,
+    );
+    const canonicalAfter = readCanonicalSnapshot(db);
+    return {
+      rankedIds,
+      leakedIds: scopeProbe.filter((id) => evaluationCase.forbidden_ids?.includes(id)),
+      budgetViolated:
+        graphEvidence !== undefined &&
+        (graphEvidence.walk.budgets.nodes_used > graphEvidence.maxNodes ||
+          graphEvidence.requiredEventIds.some((eventId) => !graphSourceIds.has(eventId)) ||
+          graphEvidence.omittedEventIds.some((eventId) => !omittedGraphEventIds.has(eventId))),
+      falseAcceptance,
+      canonicalRechecked,
+      onlineFeedbackMutated: canonicalSnapshot !== canonicalAfter,
+      adaptiveRankingMutated: rankingSnapshot !== repeatedRankingSnapshot,
+      graph:
+        graphEvidence === undefined
+          ? undefined
+          : {
+              nodes_used: graphEvidence.walk.budgets.nodes_used,
+              max_nodes: graphEvidence.maxNodes,
+            },
+    };
+  } finally {
+    db.close();
+  }
 }
 
 function canonicalEventsForRecheck(
@@ -288,30 +312,93 @@ function syntheticEvent(
   eventIds: ReadonlyMap<string, string>,
 ): CanonicalEvent {
   const previous = candidateIndex === 0 ? undefined : [...eventIds.values()][candidateIndex - 1];
-  return {
-    schema_version: "v1",
+  const base = {
+    schema_version: "v1" as const,
     event_id: eventId,
-    event_type: "Observation",
-    subject_ref: `subject_${caseId}`,
+    subject_ref: `subject_${caseId}_${candidateIndex}`,
     valid_time: { start: "2026-01-01T00:00:00Z", end: null },
     recorded_time: { start: "2026-01-01T00:00:00Z", end: null },
-    lifecycle_status: "active",
-    epistemic_authority: "derived",
-    trust_zone: { trust_zone_id: trustZoneId, isolation: "local_device" },
+    lifecycle_status: "active" as const,
+    epistemic_authority: "derived" as const,
+    trust_zone: { trust_zone_id: trustZoneId, isolation: "local_device" as const },
     provenance:
       previous === undefined
         ? []
-        : [{ ref_type: "event", ref_id: previous, relationship: "derived_from" }],
+        : [{ ref_type: "event" as const, ref_id: previous, relationship: "derived_from" as const }],
     idempotency_key: `idem_${eventId}`,
     request_fingerprint: `sha-256:${String(candidateIndex).padStart(64, "0")}`,
     zone_sequence: candidateIndex + 1,
+  };
+  if (candidate.kind === "claim") {
+    return {
+      ...base,
+      event_type: "Claim",
+      payload: {
+        claim_id: `claim_${eventId}`,
+        statement: `Synthetic retrieval evaluation ${candidate.kind} for ${caseId}`,
+        claim_type: "inference",
+        support:
+          previous === undefined
+            ? []
+            : [{ ref_type: "event", ref_id: previous, relationship: "supports" }],
+      },
+    };
+  }
+  if (candidate.kind === "decision") {
+    const claim = previous === undefined ? undefined : `claim_${previous}`;
+    return {
+      ...base,
+      event_type: "AcceptanceDecision",
+      epistemic_authority: "verified",
+      payload: {
+        decision_id: `decision_${eventId}`,
+        claim_refs: claim === undefined ? [] : [claim],
+        decision: candidate.acceptance ?? "needs_review",
+        decided_by: "actor_reviewer",
+        decided_at: "2026-01-01T00:00:00Z",
+      },
+    };
+  }
+  if (candidate.kind === "evidence_excerpt") {
+    return {
+      ...base,
+      event_type: "EvidenceArtifact",
+      payload: {
+        artifact_id: `artifact_${eventId}`,
+        kind: "document",
+        media_type: "text/plain",
+        content_ref: {
+          ref_type: "external_uri",
+          uri: `https://example.invalid/${eventId}`,
+          digest: { algorithm: "sha-256", value: "0".repeat(64) },
+          visibility: "private",
+          reachability: "offline_snapshot",
+        },
+      },
+    };
+  }
+  return {
+    ...base,
+    event_type: "Observation",
+    epistemic_authority: "observed",
     payload: {
       observation_id: `obs_${eventId}`,
       observed_at: "2026-01-01T00:00:00Z",
-      statement: `Synthetic ${caseId} ${candidate.id} ${candidate.kind}`,
+      statement: `Synthetic retrieval evaluation ${candidate.kind} for ${caseId}`,
       evidence_artifact_refs: [],
     },
-  } as CanonicalEvent;
+  };
+}
+
+function evaluationQueryText(evaluationCase: EvaluationCase): string {
+  switch (evaluationCase.branch) {
+    case "graph-provenance-multihop":
+      return "synthetic retrieval evaluation summary provenance multihop";
+    case "graph-budget-omission":
+      return "synthetic retrieval evaluation summary graph budget omission";
+    default:
+      return `synthetic retrieval evaluation ${evaluationCase.branch}`;
+  }
 }
 
 function makeQuery(text: string, scopedProjectId: string): RetrievalQuery {
@@ -400,7 +487,9 @@ function validateCorpus(value: unknown): RetrievalQualityCorpus {
         ) ||
         (candidate.project_id !== undefined && typeof candidate.project_id !== "string") ||
         (candidate.canonical_source !== undefined &&
-          !["present", "omitted"].includes(candidate.canonical_source as string))
+          !["present", "omitted"].includes(candidate.canonical_source as string)) ||
+        (candidate.acceptance !== undefined &&
+          !["accepted", "rejected", "needs_review"].includes(candidate.acceptance as string))
       )
         invalid("candidate is malformed");
       candidateIds.add(candidate.id);
@@ -425,7 +514,10 @@ function validateCorpus(value: unknown): RetrievalQualityCorpus {
         budget.max_nodes < 1 ||
         (budget.required_ids !== undefined &&
           (!Array.isArray(budget.required_ids) ||
-            !budget.required_ids.every((id) => typeof id === "string" && candidateIds.has(id))))
+            !budget.required_ids.every((id) => typeof id === "string" && candidateIds.has(id)))) ||
+        (budget.omitted_ids !== undefined &&
+          (!Array.isArray(budget.omitted_ids) ||
+            !budget.omitted_ids.every((id) => typeof id === "string" && candidateIds.has(id))))
       )
         invalid("budget is invalid");
     }
