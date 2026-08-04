@@ -18,8 +18,10 @@
   ],
   "scripts": {
     "build": "tsc",
-    "eval:adjudication": "pnpm build && node dist/adjudication-evaluation.js test/fixtures/adjudication-quality-v1.json",
-    "eval:knowledge-form": "pnpm build && node dist/knowledge-form-evaluation.js test/fixtures/knowledge-form-support-v1.json",
+    "eval:adjudication": "pnpm build && pnpm eval:adjudication:built",
+    "eval:adjudication:built": "node dist/adjudication-evaluation.js test/fixtures/adjudication-quality-v1.json",
+    "eval:knowledge-form": "pnpm build && pnpm eval:knowledge-form:built",
+    "eval:knowledge-form:built": "node dist/knowledge-form-evaluation.js test/fixtures/knowledge-form-support-v1.json",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run"
   },
