@@ -92,8 +92,8 @@ keeps metadata and references. Host hooks stay **fail-open and fast**.
 
 ### Adjudicate before “memory”
 
-After capture, the precision-first `adj_v3` rule adjudicator removes session noise
-by choosing a disposition:
+After capture, the precision-first `adj_v3` rule adjudicator reduces recognized
+session noise by assigning dispositions:
 
 | Disposition | Meaning unit | Default search |
 | --- | --- | --- |
