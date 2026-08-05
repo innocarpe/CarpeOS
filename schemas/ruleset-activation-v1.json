@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.carpeos.org/product4/schemas/ruleset-activation-v1.json",
+  "title": "CarpeOS Product 4 semantic ruleset activation receipt",
+  "description": "A semantic, receipt-backed fixed-context projection; it is not a byte-replayed settings write.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_type",
+    "status",
+    "repository_id",
+    "ruleset_id",
+    "context",
+    "policy_sha256",
+    "operation",
+    "preimage_digest",
+    "post_image_digest",
+    "preservation_digest",
+    "ownership_receipt_digest",
+    "approval_digest",
+    "response_loss",
+    "rollback",
+    "blockers",
+    "observed_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "ruleset-activation-v1" },
+    "receipt_type": { "const": "product4_ruleset_activation" },
+    "status": { "enum": ["dry_run", "blocked", "activated", "rolled_back"] },
+    "repository_id": { "const": 1315097793 },
+    "ruleset_id": { "const": 19955787 },
+    "context": { "const": "Product 4 Candidate Evidence" },
+    "policy_sha256": {
+      "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+    },
+    "operation": { "enum": ["semantic_add_fixed_context", "semantic_rollback"] },
+    "preimage_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "post_image_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "preservation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "ownership_receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "approval_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "response_loss": { "enum": ["none", "reconciled", "blocked_indeterminate"] },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorized", "fresh_read_required", "status"],
+      "properties": {
+        "authorized": { "type": "boolean" },
+        "fresh_read_required": { "const": true },
+        "status": { "enum": ["not_requested", "ready", "completed", "blocked"] }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "observed_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    }
+  }
+}
