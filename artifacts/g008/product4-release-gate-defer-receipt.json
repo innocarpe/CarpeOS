@@ -1,0 +1,31 @@
+{
+  "schema_version": "product4-g008-release-gate-defer-v1",
+  "receipt_type": "product4_release_gate",
+  "status": "blocked",
+  "decision": "defer",
+  "technical_release_blocking_claim": "none",
+  "source_sha": "eb537931d8ee83aa3ba0b6d5645a12ec5f2eac46",
+  "temporary_tag": "v3.2.0",
+  "tag_scope": "synthetic disposable clone only",
+  "artifact_sha256": "sha256:92705006786767fa5a6fe01c02369f02657de1eeb008294edec2f6d27aeaa136",
+  "manifest_sha256": "532a696e0dc6e8aa750fbf7e3eafe7b7903bdba722a0c4a3f6b4749414bacbac",
+  "release_gate_report_sha256": "36f51bd5b131f8742b8bcd24b1798fdebf248c189555c29aadb4ce45a967d415",
+  "blockers": [
+    "release_authority_missing",
+    "ownership_receipt_missing",
+    "ruleset_receipt_missing",
+    "evaluator_result_missing",
+    "promotion_ledger_missing",
+    "install_smoke_missing",
+    "release_ancestry_missing",
+    "release_diff_missing",
+    "tag_identity_missing",
+    "release_approval_missing",
+    "release_identity_incomplete"
+  ],
+  "live_mutation": "none",
+  "credentials": "not_requested",
+  "publish": "not_attempted",
+  "observed_at": "2026-08-05T17:30:00Z",
+  "receipt_digest": "f1da6cb3d511baa831fe21e6a2d45781056b36ca9392432ab542f951ad77a4ed"
+}
