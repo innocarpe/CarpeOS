@@ -37,10 +37,16 @@ update PR description, ship branch, stack PR, draft PR for review.
 2. **No empty sections** — if a section does not apply, write `None` or `Not applicable` with a one-line reason.
 3. **Validation must be honest** — only list commands you actually ran; put results in the table.
 4. **Public boundary** — no credentials, private paths, real project names, production logs, or runtime dumps. Use synthetic identifiers in examples.
-5. **Labels** — exactly one kind (`feat|fix|docs|spec|chore`) + optional one area (`capture|sync|retrieval|interfaces|infra`). Apply via `gh pr edit --add-label`.
+5. **Labels are mandatory (hard gate)** — every PR must have **exactly one kind** label
+   (`feat|fix|docs|spec|chore`) and **zero or one area** label
+   (`capture|sync|retrieval|interfaces|infra`). Prefer `--label` on
+   `gh pr create`. If labels were omitted, apply immediately with
+   `gh pr edit <N> --add-label …`. A PR without a kind label is **incomplete**.
 6. **One coherent change** — prefer one atomic commit per PR unless the user asks otherwise.
-7. **Title** — English Conventional Commit subject matching the change.
+7. **Title** — English Conventional Commit subject matching the change (and matching the kind label).
 8. **Length** — aim for a reviewable body: enough that a cold reviewer can understand problem, approach, risk, and how to verify without reading the whole diff. Prefer complete sentences over telegram bullets alone.
+9. **Post-create verify** — after create/edit, run the label gate below. Do not report
+   the PR as done until it passes.
 
 ## Required body structure
 
@@ -122,20 +128,55 @@ schemas, or projections.>
 ### Create
 
 ```bash
+# pick kind from title/diff; never invent labels outside the catalog
+KIND=chore   # feat|fix|docs|spec|chore
+AREA=        # optional: capture|sync|retrieval|interfaces|infra
+
 gh pr create --base main --title "<conventional title>" \
-  --label <kind> [--label <area>] \
+  --label "$KIND" ${AREA:+--label "$AREA"} \
   --body-file /tmp/carpeos-pr-body.md
 ```
 
 Prefer `--body-file` over a tiny inline `--body` so the full template is used.
+**Always pass at least `--label <kind>` on create.** Do not create unlabeled PRs
+and “remember later.”
 
 ### Edit existing (including already-merged for history)
 
 ```bash
 gh pr edit <N> --body-file /tmp/carpeos-pr-body.md
 # labels if missing:
-gh pr edit <N> --add-label <kind> --add-label <area>
+gh pr edit <N> --add-label <kind>
+# optional area:
+gh pr edit <N> --add-label <area>
 ```
+
+### Label gate (mandatory after create/edit)
+
+```bash
+PR=<N>   # or: PR=$(gh pr view --json number -q .number)
+gh pr view "$PR" --json labels,title -q '{title,labels:[.labels[].name]}'
+
+# Fail closed if no kind label is present:
+KIND_COUNT=$(gh pr view "$PR" --json labels -q '[.labels[].name] | map(select(.=="feat" or .=="fix" or .=="docs" or .=="spec" or .=="chore")) | length')
+if [ "$KIND_COUNT" -ne 1 ]; then
+  echo "LABEL_GATE_FAIL kind_count=$KIND_COUNT — apply exactly one kind label" >&2
+  exit 1
+fi
+```
+
+If the gate fails: add the missing kind (from the conventional-commit title or
+diff intent), re-run the gate, then report the PR URL.
+
+Kind selection defaults:
+
+| Signal | Kind |
+| --- | --- |
+| title/branch `feat*` / new user-visible behavior | `feat` |
+| title/branch `fix*` / bug/regression | `fix` |
+| docs-only | `docs` |
+| contracts/specs only | `spec` |
+| tooling, CI, ignore files, deps, housekeeping | `chore` |
 
 ### Draft body from git
 
@@ -155,13 +196,15 @@ Map the diff into Scope, Architecture impact, Risks, and Review guide.
 - Are **before/after** behaviors stated for the main user path?
 - Are **fail-closed** paths and non-goals called out?
 - Is every validation row either a real result or an explicit skip reason?
+- Does the PR have **exactly one kind label** (and at most one area)?
 - Would you merge this based only on the PR text + labels?
 
-If any answer is no, expand the body before `gh pr create` / `gh pr edit`.
+If any answer is no, expand the body / fix labels before reporting done.
 
 ## Anti-patterns
 
 - Three bullet Summary + one-line Why + checkbox Test plan only
+- Creating a PR then shipping/merging **without** a kind label
 - “CI green” with no local commands listed
 - “None” for architecture impact when CLI flags, schemas, or store semantics changed
 - Leaking private Worker URLs, real D1 IDs, account emails, or home paths

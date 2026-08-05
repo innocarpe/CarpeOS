@@ -74,6 +74,8 @@ CLI, and Grok Build. Install user-global skill links:
 - Do not invent size, status, or milestone labels. Review state lives in the PR
   conversation; milestones use GitHub Milestones when needed.
 - See `docs/maintainers/github-labels.md` for the full catalog guidance.
+- **Hard gate:** a PR without exactly one kind label is incomplete. Do not
+  report create/merge complete until `gh pr view --json labels` shows the kind.
 
 ## Pull Request Rules (all harnesses)
 
@@ -85,10 +87,14 @@ When opening or updating a GitHub PR (`gh pr create`, `gh pr edit`, ship branch)
    section. Minimal “Summary + Why + Test plan” bodies are **not** sufficient.
 3. Prefer `gh pr create --body-file …` / `gh pr edit --body-file …` so the body
    is not truncated by shell history.
-4. Apply labels when creating or immediately after: one kind + optional area.
-5. Validation table must list **actual** commands and results; skipped checks
+4. **Labels are required on create:** pass `--label <kind>` (and optional
+   `--label <area>`) to `gh pr create`. If already open without labels, apply
+   with `gh pr edit --add-label` immediately, then verify.
+5. After create/edit, run the **label gate** in `skills/carpeos-pr/SKILL.md`
+   (exactly one of `feat|fix|docs|spec|chore`). Fail closed if missing.
+6. Validation table must list **actual** commands and results; skipped checks
    need an explicit “Not run — reason”.
-6. Keep public/private boundary: no credentials, private paths, real project
+7. Keep public/private boundary: no credentials, private paths, real project
    names, production logs, or runtime dumps in the PR text.
 
 Install the skill into user harness dirs:
