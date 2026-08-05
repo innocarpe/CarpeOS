@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.carpeos.org/product4/schemas/product4-migration-plan-v1.json",
+  "title": "CarpeOS Product 4 additive migration plan",
+  "description": "A receipt-bound, additive-only migration description. It contains no SQL or executable payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "migration_id",
+    "source_schema_version",
+    "target_schema_version",
+    "policy_sha256",
+    "context",
+    "required_action_ids",
+    "operations",
+    "rollback"
+  ],
+  "properties": {
+    "schema_version": { "const": "product4-migration-plan-v1" },
+    "migration_id": { "type": "string", "pattern": "^m4_[a-z0-9][a-z0-9_-]{2,63}$" },
+    "source_schema_version": { "const": "v1" },
+    "target_schema_version": { "const": "product4-v1" },
+    "policy_sha256": {
+      "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+    },
+    "context": { "const": "Product 4 Candidate Evidence" },
+    "required_action_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation_id", "kind", "table", "name"],
+        "properties": {
+          "operation_id": { "type": "string", "pattern": "^op_[a-z0-9][a-z0-9_-]{2,63}$" },
+          "kind": {
+            "type": "string",
+            "enum": ["add_table", "add_column", "add_index", "add_trigger"]
+          },
+          "table": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" }
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "preserve_canonical", "requires_fresh_read"],
+      "properties": {
+        "mode": { "const": "explicit_authorized" },
+        "preserve_canonical": { "const": true },
+        "requires_fresh_read": { "const": true }
+      }
+    }
+  }
+}
