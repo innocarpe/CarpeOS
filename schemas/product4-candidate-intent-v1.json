@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.carpeos.org/product4/schemas/product4-candidate-intent-v1.json",
+  "title": "CarpeOS Product 4 candidate intent envelope",
+  "description": "Base-owned immutable intent identity. Mutable PR metadata is intentionally absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repository_id",
+    "head_sha",
+    "tree_sha256",
+    "fixture_sha256",
+    "intent_policy_sha256",
+    "context",
+    "intent",
+    "state",
+    "scope_digest",
+    "issuer_workflow_sha",
+    "classification_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "product4-candidate-intent-v1" },
+    "repository_id": { "const": 1315097793 },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "tree_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fixture_sha256": {
+      "const": "0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f"
+    },
+    "intent_policy_sha256": {
+      "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+    },
+    "context": { "const": "Product 4 Candidate Evidence" },
+    "intent": { "type": "boolean" },
+    "state": {
+      "type": "string",
+      "enum": ["classification_pending", "pending_evidence", "not_applicable"]
+    },
+    "scope_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "issuer_workflow_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "classification_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

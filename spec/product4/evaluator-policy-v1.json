@@ -1,0 +1,64 @@
+{
+  "policy_type": "carpeos.product4-evaluator-policy/v1",
+  "policy_id": "P4_0",
+  "policy_version": "4.0.0",
+  "repository_id": 1315097793,
+  "context": "Product 4 Candidate Evidence",
+  "fixture_path": "scripts/fixtures/maintenance-study-v2.json",
+  "canonicalization": "sorted-json-v1",
+  "public_data_only": true,
+  "authority": {
+    "candidate": "unprivileged",
+    "evaluator": "base_owned",
+    "publisher": "data_only",
+    "settings": "receipt_gated",
+    "release": "independent"
+  },
+  "freeze": {
+    "policy_rotation": "forbidden",
+    "old_policy_invalidation": "forbidden",
+    "context_replacement": "forbidden",
+    "stale_policy_mergeability": "deferred_to_4.1"
+  },
+  "allowed_command_ids": [
+    "migration_read_oracle",
+    "six_command_loop",
+    "p02_replay_a",
+    "p02_replay_b",
+    "negative_policy_refusal",
+    "negative_api_refusal"
+  ],
+  "required_predicate_ids": [
+    "identity_bound",
+    "fixture_bound",
+    "policy_pinned",
+    "context_pinned",
+    "migration_read_oracle",
+    "six_command_loop",
+    "p02_truthful_no_analog",
+    "zero_write",
+    "state_order",
+    "no_privileged_candidate_execution",
+    "strict_attestation",
+    "exact_c_api",
+    "duplicate_refusal",
+    "lost_response_reconciliation",
+    "provenance_bound",
+    "negative_cases"
+  ],
+  "forbidden_field_names": [
+    "token",
+    "credential",
+    "secret",
+    "private_path",
+    "protected_plaintext",
+    "command",
+    "script",
+    "module",
+    "url",
+    "executable",
+    "shell",
+    "candidate_success"
+  ],
+  "no_auto_authority": ["Claim", "AcceptanceDecision", "Supersession"]
+}

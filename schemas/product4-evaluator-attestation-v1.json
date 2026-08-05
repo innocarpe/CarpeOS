@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.carpeos.org/product4/schemas/product4-evaluator-attestation-v1.json",
+  "title": "CarpeOS Product 4 strict evaluator attestation",
+  "description": "Base-owned, non-executable evidence. Publishers consume it as data only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attestation_type",
+    "repository_id",
+    "head_sha",
+    "tree_sha256",
+    "fixture_sha256",
+    "policy_sha256",
+    "context",
+    "external_id",
+    "issuer_workflow_sha",
+    "predicate_results",
+    "observations",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "const": "product4-evaluator-attestation-v1" },
+    "attestation_type": { "const": "strict_non_executable" },
+    "repository_id": { "const": 1315097793 },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "tree_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fixture_sha256": {
+      "const": "0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f"
+    },
+    "policy_sha256": {
+      "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+    },
+    "context": { "const": "Product 4 Candidate Evidence" },
+    "external_id": {
+      "type": "string",
+      "pattern": "^carpeos-4\\.0\\.0:[0-9a-f]{40}:0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f$"
+    },
+    "issuer_workflow_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "predicate_results": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["predicate_id", "passed", "evidence_digest"],
+        "properties": {
+          "predicate_id": {
+            "type": "string",
+            "enum": [
+              "identity_bound",
+              "fixture_bound",
+              "policy_pinned",
+              "context_pinned",
+              "migration_read_oracle",
+              "six_command_loop",
+              "p02_truthful_no_analog",
+              "zero_write",
+              "state_order",
+              "no_privileged_candidate_execution",
+              "strict_attestation",
+              "exact_c_api",
+              "duplicate_refusal",
+              "lost_response_reconciliation",
+              "provenance_bound",
+              "negative_cases"
+            ]
+          },
+          "passed": { "const": true },
+          "evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["p02", "zero_write", "high_water"],
+      "properties": {
+        "p02": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["diagnosis", "outcome", "analog_available", "state_transition"],
+          "properties": {
+            "diagnosis": { "const": "no_analog" },
+            "outcome": { "const": "blocked_no_apply" },
+            "analog_available": { "const": false },
+            "state_transition": { "const": "none_supported" }
+          }
+        },
+        "zero_write": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canonical_events",
+            "review_rows",
+            "disposition_rows",
+            "outbox_rows",
+            "protected_uploads"
+          ],
+          "properties": {
+            "canonical_events": { "const": 0 },
+            "review_rows": { "const": 0 },
+            "disposition_rows": { "const": 0 },
+            "outbox_rows": { "const": 0 },
+            "protected_uploads": { "const": 0 }
+          }
+        },
+        "high_water": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canonical_events",
+            "review_rows",
+            "disposition_rows",
+            "outbox_rows",
+            "protected_uploads"
+          ],
+          "properties": {
+            "canonical_events": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+            "review_rows": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+            "disposition_rows": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+            "outbox_rows": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+            "protected_uploads": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_report_sha256", "base_sha", "evaluator_workflow_sha", "evaluated_at"],
+      "properties": {
+        "source_report_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "evaluator_workflow_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "evaluated_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+        }
+      }
+    }
+  }
+}
