@@ -12,6 +12,8 @@
       "!dist",
       "!build",
       "!**/.omx",
+      "!.gjc",
+      "!**/.gjc",
       "!**/.carpeos",
       "!**/.wrangler",
       "!**/node_modules",
