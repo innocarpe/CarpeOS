@@ -5,14 +5,14 @@ description: >-
   GitHub Releases, and npm publish for @innocarpe/carpeos. Use when the user
   asks to release, bump version, publish to npm, create a git tag, make a
   GitHub release, ship @innocarpe/carpeos, run scripts/release.mjs, or keep
-  Claude Code / Codex CLI / Grok Build on the same versioning standard.
+  Claude Code / Codex CLI / Grok Build / Gajae Code/GJC on the same versioning standard.
 metadata:
   short-description: "SemVer + tag + npm + GitHub Release for CarpeOS"
 ---
 
 # CarpeOS Release (shared harness skill)
 
-**Same workflow for Claude Code, Codex CLI, and Grok Build.**  
+**Same workflow for Claude Code, Codex CLI, Grok Build, and Gajae Code/GJC.**
 Do not invent alternate version schemes, ad-hoc `npm publish`, or untagged releases.
 
 Canonical policy (read when unsure):

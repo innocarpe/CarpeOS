@@ -59,8 +59,8 @@ Policy SSOT:
 - `scripts/release.mjs`
 - `.github/workflows/release.yml`
 
-Do not invent alternate version schemes. Same process for Claude Code, Codex
-CLI, and Grok Build. Install user-global skill links:
+Do not invent alternate version schemes. Same process for Claude Code, Codex CLI,
+Grok Build, and Gajae Code/GJC. Install user-global skill links:
 
 ```sh
 ./scripts/install-release-skill.sh
@@ -82,7 +82,7 @@ CLI, and Grok Build. Install user-global skill links:
 When opening or updating a GitHub PR (`gh pr create`, `gh pr edit`, ship branch):
 
 1. **Load and follow** `skills/carpeos-pr/SKILL.md` (shared skill for Claude
-   Code, Codex CLI, and Grok Build).
+   Code, Codex CLI, Grok Build, and Gajae Code/GJC).
 2. **Use the full template** in `.github/PULL_REQUEST_TEMPLATE.md`. Fill every
    section. Minimal “Summary + Why + Test plan” bodies are **not** sufficient.
 3. Prefer `gh pr create --body-file …` / `gh pr edit --body-file …` so the body
@@ -96,6 +96,20 @@ When opening or updating a GitHub PR (`gh pr create`, `gh pr edit`, ship branch)
    need an explicit “Not run — reason”.
 7. Keep public/private boundary: no credentials, private paths, real project
    names, production logs, or runtime dumps in the PR text.
+8. **Atomic commits and semantic PRs are separate constraints:**
+   - Every commit MUST be one independently understandable change.
+   - A PR MAY contain multiple atomic commits when they form one semantic,
+     reviewable feature, architectural plane, or milestone.
+   - Default PR boundaries are semantic ownership/dependency and acceptance
+     boundaries, not commit count.
+   - NEVER create one PR per commit unless the user explicitly requests
+     commit-level PRs.
+   - For dependent semantic units, use stacked PRs with intentional bases and
+     state
+     the dependency in the PR body.
+9. **Before creating a PR**, inspect the base-to-head commit log and three-dot
+   diff, then verify that the proposed PR has one semantic purpose and no
+   unrelated milestone crossed its boundary.
 
 Install the skill into user harness dirs:
 
