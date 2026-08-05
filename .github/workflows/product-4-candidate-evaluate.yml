@@ -1,0 +1,71 @@
+name: Product 4 Candidate Evidence (unprivileged)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  raw-evidence:
+    name: Produce raw candidate evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      CARPEOS_HOME: ${{ runner.temp }}/carpeos-product4
+      CARPEOS_TRUST_ZONE: tz_synthetic
+    steps:
+      - name: Check out candidate head C
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies without package scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build the local CLI from C without privileged credentials
+        run: pnpm --filter '@carpeos/cli...' build
+
+      - name: Initialize a disposable synthetic store
+        run: node apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
+
+      - name: Replay the exact read-only P02 command twice
+        run: |
+          mkdir -p "$RUNNER_TEMP/product4-artifacts"
+          NODE_NO_WARNINGS=1 node scripts/product4/p02-runner.mjs \
+            --home "$CARPEOS_HOME" \
+            --workspace-root "$GITHUB_WORKSPACE" \
+            --output "$RUNNER_TEMP/product4-artifacts/p02-receipt.json"
+          tree_sha256="$(node scripts/product4/tree-digest.mjs "$GITHUB_WORKSPACE" HEAD)"
+          node scripts/product4/raw-producer.mjs \
+            --p02 "$RUNNER_TEMP/product4-artifacts/p02-receipt.json" \
+            --head-sha "${{ github.event.pull_request.head.sha }}" \
+            --base-sha "${{ github.event.pull_request.base.sha }}" \
+            --tree-sha256 "$tree_sha256" \
+            --workflow-sha "${{ github.workflow_sha }}" \
+            --output "$RUNNER_TEMP/product4-artifacts/raw-report.json"
+
+      - name: Upload raw evidence as untrusted data
+        uses: actions/upload-artifact@v6
+        with:
+          name: product4-raw-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/product4-artifacts/raw-report.json
+          if-no-files-found: error
+          retention-days: 7

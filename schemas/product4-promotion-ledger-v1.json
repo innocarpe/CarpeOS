@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.carpeos.org/product4/schemas/product4-promotion-ledger-v1.json",
+  "title": "CarpeOS Product 4 promotion ledger",
+  "description": "Append-only evidence bookkeeping. It never writes canonical knowledge or grants authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ledger_type",
+    "repository_id",
+    "head_sha",
+    "tree_sha256",
+    "fixture_sha256",
+    "policy_sha256",
+    "context",
+    "external_id",
+    "intent_digest",
+    "state_digest",
+    "attestation_digest",
+    "api_evidence_digest",
+    "ownership_receipt_digest",
+    "ruleset_receipt_digest",
+    "promotion_status",
+    "canonical_write",
+    "blockers",
+    "entries",
+    "ledger_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "product4-promotion-ledger-v1" },
+    "ledger_type": { "const": "candidate_promotion_ledger" },
+    "repository_id": { "const": 1315097793 },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "tree_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fixture_sha256": {
+      "const": "0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f"
+    },
+    "policy_sha256": {
+      "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+    },
+    "context": { "const": "Product 4 Candidate Evidence" },
+    "external_id": {
+      "type": "string",
+      "pattern": "^carpeos-4\\.0\\.0:[0-9a-f]{40}:0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f$"
+    },
+    "intent_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "state_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "attestation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "api_evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "ownership_receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "ruleset_receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "promotion_status": { "enum": ["blocked", "pending_human_authority"] },
+    "canonical_write": { "const": "none" },
+    "blockers": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence", "kind", "status", "actor", "evidence_digest", "observed_at"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1 },
+          "kind": {
+            "enum": [
+              "intent_classified",
+              "evidence_attested",
+              "api_reconciled",
+              "ownership_observed",
+              "ruleset_rehearsed",
+              "promotion_deferred",
+              "promotion_blocked"
+            ]
+          },
+          "status": { "enum": ["observed", "blocked", "deferred"] },
+          "actor": { "enum": ["base_evaluator", "reconciliation", "human_authority"] },
+          "evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "observed_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+          }
+        }
+      }
+    },
+    "ledger_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
