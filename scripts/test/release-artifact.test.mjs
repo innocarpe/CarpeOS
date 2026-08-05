@@ -25,15 +25,15 @@ describe("release artifact workflow", () => {
   });
   it("initializes the installed CLI state before doctor without a source fallback", () => {
     const smokeStart = workflow.indexOf(
-      "      - name: Install and smoke the exact packed artifact",
+      "      - name: Install and smoke the exact packed artifact before release authority",
     );
-    const publishStart = workflow.indexOf("      - name: Publish packed artifact to npm");
-    const smoke = workflow.slice(smokeStart, publishStart);
+    const gateEnd = workflow.indexOf("  publish:");
+    const smoke = workflow.slice(smokeStart, gateEnd);
     const initialization = smoke.indexOf('"$CLI" setup run --apply --home "$CARPEOS_HOME"');
     const doctor = smoke.indexOf('"$CLI" setup doctor --home "$CARPEOS_HOME"');
 
     assert.ok(smokeStart >= 0);
-    assert.ok(publishStart > smokeStart);
+    assert.ok(gateEnd > smokeStart);
     assert.ok(initialization >= 0);
     assert.ok(doctor > initialization);
     assert.match(smoke, /"\$CLI" --version/);
@@ -49,9 +49,30 @@ describe("release artifact workflow", () => {
     assert.equal(
       (workflow.match(/assert-artifact --manifest "\$MANIFEST" --tarball "\$TARBALL"/g) || [])
         .length,
-      2,
+      3,
     );
     assert.match(workflow, /verify-registry --manifest "\$MANIFEST"/);
     assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/);
+  });
+
+  it("runs the read-only release gate before registry configuration and publish authority", () => {
+    const gateStart = workflow.indexOf("  release-gate:");
+    const gateEnd = workflow.indexOf("  publish:");
+    const gate = workflow.slice(gateStart, gateEnd);
+    const verifier = workflow.indexOf("scripts/verify-4.0-gates.mjs");
+    const registry = workflow.indexOf("registry-url:");
+    const credentialMarker = workflow.indexOf(["NODE", "AUTH", "TOKEN:"].join("_"));
+    const publish = workflow.indexOf("npm publish ");
+
+    assert.ok(gateStart >= 0);
+    assert.ok(gateEnd > gateStart);
+    assert.match(gate, /permissions:\n\s+contents: read/);
+    assert.match(gate, /Verify Product 4 release gates/);
+    assert.match(gate, /--receipt-dir artifacts\/receipts/);
+    assert.ok(verifier > gateStart && verifier < registry);
+    assert.ok(verifier < credentialMarker);
+    assert.ok(verifier < publish);
+    assert.match(workflow, /publish:\n\s+name:[\s\S]*needs: release-gate/);
+    assert.doesNotMatch(gate, /registry-url:|NODE_AUTH_TOKEN\x3a|id-token: write|npm publish/);
   });
 });
