@@ -4,11 +4,12 @@ Title: English Conventional Commit subject, e.g.
   docs: document trust-zone resolution for operators
   chore: enforce full PR bodies via carpeos-pr skill
 
-Milestone PRs: one coherent change, prefer one atomic commit unless a maintainer
-asks otherwise.
+Milestone PRs: one semantic review unit may contain multiple atomic commits.
+Commit atomicity and PR grouping are separate: group PRs by semantic ownership,
+dependency, and acceptance boundary, not by commit count.
 
 ═══════════════════════════════════════════════════════════════════════════
-AGENT / HARNESS RULES (Claude Code, Codex CLI, Grok Build)
+AGENT / HARNESS RULES (Claude Code, Codex CLI, Grok Build, Gajae Code/GJC)
 ═══════════════════════════════════════════════════════════════════════════
 - Fill EVERY section below with real content. A three-bullet Summary-only body
   is NOT acceptable.
@@ -125,7 +126,7 @@ Write "None — <one reason>" if no contract impact.
 ## Checklist
 
 - [ ] PR title uses an English Conventional Commit subject.
-- [ ] PR covers one coherent change (prefer one atomic commit for milestone work).
+- [ ] PR covers one coherent semantic change; multiple atomic commits are allowed when they form that change.
 - [ ] No unrelated changes are included.
 - [ ] Fixtures, examples, and sample data are synthetic only.
 - [ ] No credentials, private paths, private knowledge, production logs, or runtime data are included.
