@@ -8,6 +8,7 @@ One PRD file per **major** version. Do not rewrite older majors in place; add
 | **1.0** | Does the loop run? | [PRD-v1.md](PRD-v1.md) | [product-1.0.0.md](maintainers/product-1.0.0.md) |
 | **2.0** | Is this worth remembering? | [PRD-v2.md](PRD-v2.md) | [product-2.0.0.md](maintainers/product-2.0.0.md) |
 | **3.0** | Can it be found and used? | [PRD-v3.md](PRD-v3.md) | [product-3.0.0.md](maintainers/product-3.0.0.md) |
+| **4.0 (planned)** | Can knowledge correction remain append-only, reversible, provenance-carrying, and human-governed without widening canonical authority? | [PRD-v4.md](PRD-v4.md) | **Planned — maintainer DoD not yet landed** |
 
 Minors do **not** get a new PRD file. They extend the current major via a
 maintainer DoD (and ADRs as needed). The active minor design is 3.2:
