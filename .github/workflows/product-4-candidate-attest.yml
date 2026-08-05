@@ -1,0 +1,89 @@
+name: Product 4 Candidate Attestation (base-owned)
+
+on:
+  workflow_run:
+    workflows:
+      - Product 4 Candidate Evidence (unprivileged)
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  attest:
+    name: Recompute trusted Product 4 evidence
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CARPEOS_HOME: ${{ runner.temp }}/carpeos-product4-evaluator
+      CARPEOS_TRUST_ZONE: tz_synthetic
+      PRODUCT4_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+    steps:
+      - name: Check out trusted evaluator base
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Download raw evidence as data
+        uses: actions/download-artifact@v7
+        with:
+          name: product4-raw-${{ github.event.workflow_run.head_sha }}
+          path: ${{ runner.temp }}/product4-raw
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Check out C only into an isolated no-secret workspace
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name || github.repository }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Build C without privileged credentials
+        working-directory: candidate
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter '@carpeos/cli...' build
+
+      - name: Initialize a disposable evaluator store
+        run: node candidate/apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
+
+      - name: Recompute C-bound semantics from the trusted base
+        run: |
+          tree_sha256="$(node scripts/product4/tree-digest.mjs "$GITHUB_WORKSPACE/candidate" HEAD)"
+          NODE_NO_WARNINGS=1 node scripts/product4/evaluator-runner.mjs \
+            --raw-report "$RUNNER_TEMP/product4-raw/raw-report.json" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate" \
+            --home "$CARPEOS_HOME" \
+            --head-sha "${{ github.event.workflow_run.head_sha }}" \
+            --base-sha "$PRODUCT4_BASE_SHA" \
+            --tree-sha256 "$tree_sha256" \
+            --workflow-sha "${{ github.workflow_sha }}" \
+            --output "$RUNNER_TEMP/product4-attestation.json"
+
+      - name: Upload strict attestation data
+        uses: actions/upload-artifact@v6
+        with:
+          name: product4-attestation-${{ github.event.workflow_run.head_sha }}
+          path: ${{ runner.temp }}/product4-attestation.json
+          if-no-files-found: error
+          retention-days: 7

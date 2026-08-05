@@ -1,0 +1,56 @@
+name: Product 4 Candidate Publication (data-only)
+
+on:
+  workflow_run:
+    workflows:
+      - Product 4 Candidate Attestation (base-owned)
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish-data:
+    name: Consume attestation without live authority
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out the trusted publisher
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+
+      - name: Download trusted attestation data
+        uses: actions/download-artifact@v7
+        with:
+          name: product4-attestation-${{ github.event.workflow_run.head_sha }}
+          path: ${{ runner.temp }}/product4-attestation
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Consume only the strict attestation as data
+        run: |
+          node scripts/product4/publisher-runner.mjs \
+            --evaluator-result "$RUNNER_TEMP/product4-attestation/product4-attestation.json" \
+            --workflow-sha "${{ github.workflow_sha }}" \
+            --output "$RUNNER_TEMP/product4-publication.json"
+
+      - name: Upload the blocked data-only publication receipt
+        uses: actions/upload-artifact@v6
+        with:
+          name: product4-publication-${{ github.event.workflow_run.head_sha }}
+          path: ${{ runner.temp }}/product4-publication.json
+          if-no-files-found: error
+          retention-days: 7
