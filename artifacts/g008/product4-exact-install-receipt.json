@@ -1,0 +1,22 @@
+{
+  "schema_version": "product4-g008-exact-install-v1",
+  "receipt_type": "product4_exact_install",
+  "status": "passed",
+  "source_sha": "eb537931d8ee83aa3ba0b6d5645a12ec5f2eac46",
+  "package_name": "@innocarpe/carpeos",
+  "version": "3.2.0",
+  "temporary_tag": "v3.2.0",
+  "tag_scope": "synthetic disposable clone only",
+  "manifest_sha256": "532a696e0dc6e8aa750fbf7e3eafe7b7903bdba722a0c4a3f6b4749414bacbac",
+  "artifact_sha256": "sha256:92705006786767fa5a6fe01c02369f02657de1eeb008294edec2f6d27aeaa136",
+  "installed_version": "3.2.0",
+  "pack_once": "passed",
+  "assert_artifact": "passed",
+  "setup_run": "passed",
+  "setup_doctor": "passed",
+  "dogfood": "passed",
+  "authority": "not_attempted",
+  "environment": "synthetic_disposable",
+  "observed_at": "2026-08-05T17:30:00Z",
+  "receipt_digest": "d07fde4b8ffe720ce3324a1f34cf87f1e034802297e77d8b2e627939a947fff8"
+}
