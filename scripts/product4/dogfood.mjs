@@ -5,38 +5,32 @@
  * Every scenario is expected to refuse an unsafe transition or preserve the frozen contract. The
  * runner never writes a canonical store, requests authority, or contacts an external service.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyReleaseGates } from "../verify-4.0-gates.mjs";
 import { buildCandidateIntent } from "./candidate-intent.mjs";
-import {
-  classifyCandidateState,
-  createCandidateState,
-  promoteCandidateState,
-} from "./candidate-state.mjs";
 import { buildSixCommandLoopReceipt, PRODUCT4_COMMAND_LOOP } from "./command-loop.mjs";
 import { evaluateCandidateEvidence, PREDICATE_IDS } from "./evaluator.mjs";
+import { evaluateRawCandidate } from "./evaluator-runner.mjs";
 import {
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
 } from "./github-evidence-api.mjs";
-import { buildRawCandidateReportFromP02 } from "./raw-producer.mjs";
-import { evaluateRawCandidate } from "./evaluator-runner.mjs";
-import { buildReleaseIdentity, verifyReleaseGates } from "../verify-4.0-gates.mjs";
-import { buildReleaseAuthorityReceipt, reconcileReleaseAuthority } from "./release-authority.mjs";
+import { assertP02Receipt, buildP02Receipt, P02_COMMAND_LINE } from "./p02-replay.mjs";
 import {
   digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
   PRODUCT4_CONTEXT,
   PRODUCT4_POLICY_SHA256,
 } from "./policy-identity.mjs";
-import { assertP02Receipt, buildP02Receipt, P02_COMMAND_LINE } from "./p02-replay.mjs";
+import { buildRawCandidateReportFromP02 } from "./raw-producer.mjs";
+import { buildReleaseAuthorityReceipt, reconcileReleaseAuthority } from "./release-authority.mjs";
 import { projectFixedContext, reconcileRulesetResponse } from "./ruleset-guard.mjs";
 
 export const DOGFOOD_SCHEMA = "product4-dogfood-receipt-v1";
 const RECEIPT_TYPE = "product4_adversarial_dogfood";
-const SHA1 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const RECEIPT_KEYS = [
@@ -62,7 +56,6 @@ const candidateSha = "a".repeat(40);
 const baseSha = "b".repeat(40);
 const treeSha = "c".repeat(64);
 const workflowSha = "d".repeat(40);
-const releaseSha = "e".repeat(40);
 const digest = "f".repeat(64);
 const externalId = `carpeos-4.0.0:${candidateSha}:${MAINTENANCE_STUDY_FIXTURE_SHA256}`;
 
@@ -632,7 +625,9 @@ function assertTimestamp(value, label) {
 
 function assertNoForbiddenFields(value, errors, path = "$") {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNoForbiddenFields(item, errors, `${path}[${index}]`));
+    value.forEach((item, index) => {
+      assertNoForbiddenFields(item, errors, `${path}[${index}]`);
+    });
     return;
   }
   if (!isRecord(value)) return;
