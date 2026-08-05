@@ -20,6 +20,7 @@ build/
 .omx/
 .carpeos/
 # Local agent/session harness state (home paths, token-usage logs) — never commit
+.omc/
 .gjc/
 *.db
 *.sqlite
