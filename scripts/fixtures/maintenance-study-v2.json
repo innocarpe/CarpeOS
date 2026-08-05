@@ -1,0 +1,41 @@
+{
+  "fixture_type": "carpeos.product4-maintenance-study/v2",
+  "fixture_id": "maintenance-study-v2",
+  "repository_id": 1315097793,
+  "trust_zone_id": "tz_synthetic",
+  "from_policy": "adj_v1",
+  "to_policy": "adj_v3",
+  "limit": 100,
+  "command_line": "carpeos adjudicate reconcile-policy --from-policy adj_v1 --to-policy adj_v3 --trust-zone tz_synthetic --limit 100",
+  "disposable_store": {
+    "canonical_events": [
+      {
+        "event_id": "evt_synthetic_maintenance_001",
+        "event_type": "Observation",
+        "policy_version": "adj_v1",
+        "trust_zone_id": "tz_synthetic",
+        "recorded_time": "2026-01-02T00:00:00Z",
+        "source_ref": "synthetic_maintenance_seed_001"
+      }
+    ],
+    "review_rows": [],
+    "disposition_rows": [],
+    "outbox_rows": []
+  },
+  "expected": {
+    "diagnosis": "no_analog",
+    "outcome": "blocked_no_apply",
+    "analog_available": false,
+    "state_transition": "none_supported",
+    "exit_code": 0,
+    "stderr": "",
+    "zero_write": true,
+    "high_water": {
+      "canonical_events": 1,
+      "review_rows": 0,
+      "disposition_rows": 0,
+      "outbox_rows": 0,
+      "protected_uploads": 0
+    }
+  }
+}

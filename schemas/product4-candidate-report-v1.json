@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.carpeos.org/product4/schemas/product4-candidate-report-v1.json",
+  "title": "CarpeOS Product 4 raw candidate report",
+  "description": "Unprivileged producer data. It is evidence input, not trusted authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_type",
+    "repository_id",
+    "head_sha",
+    "base_sha",
+    "tree_sha256",
+    "fixture_sha256",
+    "intent_policy_sha256",
+    "context",
+    "external_id",
+    "producer",
+    "observations"
+  ],
+  "properties": {
+    "schema_version": { "const": "product4-candidate-report-v1" },
+    "report_type": { "const": "raw_candidate_report" },
+    "repository_id": { "const": 1315097793 },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "tree_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fixture_sha256": {
+      "const": "0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f"
+    },
+    "intent_policy_sha256": {
+      "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+    },
+    "context": { "const": "Product 4 Candidate Evidence" },
+    "external_id": {
+      "type": "string",
+      "pattern": "^carpeos-4\\.0\\.0:[0-9a-f]{40}:0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f$"
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflow_sha", "event", "trust_level"],
+      "properties": {
+        "workflow_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "event": { "const": "pull_request" },
+        "trust_level": { "const": "unprivileged" }
+      }
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "p02", "zero_write"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "command_id",
+              "invocation_digest",
+              "exit_code",
+              "stdout_sha256",
+              "stderr_sha256"
+            ],
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "enum": [
+                  "migration_read_oracle",
+                  "six_command_loop",
+                  "p02_replay_a",
+                  "p02_replay_b",
+                  "negative_policy_refusal",
+                  "negative_api_refusal"
+                ]
+              },
+              "invocation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "exit_code": { "type": "integer", "minimum": 0, "maximum": 255 },
+              "stdout_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "stderr_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        "p02": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["diagnosis", "outcome", "analog_available", "state_transition"],
+          "properties": {
+            "diagnosis": { "const": "no_analog" },
+            "outcome": { "const": "blocked_no_apply" },
+            "analog_available": { "const": false },
+            "state_transition": { "const": "none_supported" }
+          }
+        },
+        "zero_write": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canonical_events",
+            "review_rows",
+            "disposition_rows",
+            "outbox_rows",
+            "protected_uploads"
+          ],
+          "properties": {
+            "canonical_events": { "const": 0 },
+            "review_rows": { "const": 0 },
+            "disposition_rows": { "const": 0 },
+            "outbox_rows": { "const": 0 },
+            "protected_uploads": { "const": 0 }
+          }
+        }
+      }
+    }
+  }
+}
