@@ -5,14 +5,14 @@ on:
     tags:
       - "v*.*.*"
 
-permissions:
-  contents: write
-  id-token: write
+permissions: {}
 
 jobs:
-  publish:
-    name: Publish npm + GitHub Release
+  release-gate:
+    name: Verify Product 4 release gates
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -24,17 +24,16 @@ jobs:
         with:
           version: 11.16.0
 
-      - name: Set up Node.js
+      - name: Set up Node.js without registry credentials
         uses: actions/setup-node@v7
         with:
           node-version: 22.22.0
           cache: pnpm
-          registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
+      - name: Install dependencies without registry credentials
         run: pnpm install --frozen-lockfile
 
-      - name: Run checks
+      - name: Run checks before release authority
         run: pnpm check
 
       - name: Read package version
@@ -65,7 +64,7 @@ jobs:
           echo "manifest=$GITHUB_WORKSPACE/.release-artifact/release-artifact.json" >> "$GITHUB_OUTPUT"
           echo "tarball=$GITHUB_WORKSPACE/.release-artifact/$(node -p "require('./.release-artifact/release-artifact.json').filename")" >> "$GITHUB_OUTPUT"
 
-      - name: Install and smoke the exact packed artifact before publish
+      - name: Install and smoke the exact packed artifact before release authority
         env:
           MANIFEST: ${{ steps.artifact.outputs.manifest }}
           TARBALL: ${{ steps.artifact.outputs.tarball }}
@@ -92,6 +91,81 @@ jobs:
           "$CLI" setup run --apply --home "$CARPEOS_HOME"
           "$CLI" setup doctor --home "$CARPEOS_HOME"
           node scripts/smoke-dogfood.mjs --cli "$CLI"
+
+      - name: Verify Product 4 release gates before registry configuration
+        env:
+          MANIFEST: ${{ steps.artifact.outputs.manifest }}
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
+        run: |
+          node scripts/verify-4.0-gates.mjs \
+            --receipt-dir artifacts/receipts \
+            --manifest "$MANIFEST" \
+            --tarball "$TARBALL" \
+            --tag "$GITHUB_REF_NAME" \
+            --release-sha "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/product4-release-gate.json"
+
+      - name: Preserve the exact gated artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: product4-release-artifact
+          path: .release-artifact
+          if-no-files-found: error
+
+  publish:
+    name: Publish npm + GitHub Release
+    needs: release-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download the exact gated artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: product4-release-artifact
+          path: .release-artifact
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js with registry configuration after release gate
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read package version
+        id: pkg
+        run: |
+          VERSION="$(node -p "require('./packages/carpeos/package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: tag $GITHUB_REF_NAME does not match packages/carpeos version $VERSION"
+            exit 1
+          fi
+
+      - name: Verify the exact gated artifact before publish
+        id: artifact
+        run: |
+          MANIFEST="$GITHUB_WORKSPACE/.release-artifact/release-artifact.json"
+          TARBALL="$GITHUB_WORKSPACE/.release-artifact/$(node -p "require('./.release-artifact/release-artifact.json').filename")"
+          node scripts/pack-once.mjs assert-artifact --manifest "$MANIFEST" --tarball "$TARBALL"
+          echo "manifest=$MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
 
       - name: Publish packed artifact to npm
         env:
