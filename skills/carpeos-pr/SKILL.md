@@ -4,14 +4,14 @@ description: >-
   Open or update CarpeOS GitHub pull requests with full, reviewable descriptions.
   Use when creating a PR, editing a PR body, running gh pr create/edit, shipping
   a feature branch, or when the user asks for a PR, pull request, or PR
-  description. Applies to Claude Code, Codex CLI, and Grok Build.
+  description. Applies to Claude Code, Codex CLI, Grok Build, and Gajae Code/GJC.
 metadata:
   short-description: "Full PR body template for CarpeOS (gh pr create/edit)"
 ---
 
 # CarpeOS Pull Request (shared harness skill)
 
-**Same standard for Claude Code, Codex CLI, and Grok Build.**
+**Same standard for Claude Code, Codex CLI, Grok Build, and Gajae Code/GJC.**
 
 Minimal three-bullet PR bodies are **not acceptable**. Every PR must follow the
 repository template and fill every section with real content (or an explicit
@@ -42,11 +42,50 @@ update PR description, ship branch, stack PR, draft PR for review.
    (`capture|sync|retrieval|interfaces|infra`). Prefer `--label` on
    `gh pr create`. If labels were omitted, apply immediately with
    `gh pr edit <N> --add-label …`. A PR without a kind label is **incomplete**.
-6. **One coherent change** — prefer one atomic commit per PR unless the user asks otherwise.
-7. **Title** — English Conventional Commit subject matching the change (and matching the kind label).
-8. **Length** — aim for a reviewable body: enough that a cold reviewer can understand problem, approach, risk, and how to verify without reading the whole diff. Prefer complete sentences over telegram bullets alone.
-9. **Post-create verify** — after create/edit, run the label gate below. Do not report
-   the PR as done until it passes.
+6. **Commits MUST be atomic** — each commit contains one independently understandable
+   change, uses an English Conventional Commit subject, and does not mix unrelated
+   files or concerns.
+7. **PRs are semantic review units, not commit containers** — a PR SHOULD include the
+   complete set of tightly coupled atomic commits needed for one user-visible,
+   architectural, or milestone-level change. Never create one PR per commit merely
+   to make commit history look tidy unless the user explicitly requests commit-level
+   PRs.
+8. **Preserve atomic history** — do not squash, reorder, or force-push atomic commits
+   to manufacture a PR boundary. When a semantic change spans commits, use a stacked
+   PR or a branch range whose diff is exactly that semantic unit.
+9. **Before creating a PR**, inspect `git log <base>..<head>` and
+   `git diff <base>...<head> --stat`; confirm the PR has one semantic purpose,
+   its base is intentional, and no unrelated commit/file has leaked in.
+10. **Title** — English Conventional Commit subject matching the semantic PR change
+    (and matching the kind label).
+11. **Length** — aim for a reviewable body: enough that a cold reviewer can understand problem, approach, risk, and how to verify without reading the whole diff. Prefer complete sentences over telegram bullets alone.
+12. **Post-create verify** — after create/edit, run the label gate below. Do not report
+    the PR as done until it passes.
+
+## Atomic commits vs semantic PRs
+
+These are separate boundaries and MUST be decided separately:
+
+- **Commit boundary:** one independently understandable change per commit. Keep
+  prerequisite, implementation, test, documentation, and cleanup commits atomic
+  when they have independent meaning.
+- **PR boundary:** one semantic review and validation unit. A PR MAY contain multiple
+  atomic commits when they collectively implement one feature, architectural plane,
+  migration, or other coherent milestone.
+- **Default grouping:** choose PRs by semantic scope, ownership, dependency and
+  acceptance/verification boundary — never by commit count.
+- **Stacked work:** use an intentional base branch when a semantic unit depends on
+  another PR. Record the dependency in the PR body and keep each PR's diff
+  limited to its own semantic unit.
+- **Explicit exception:** create one PR per commit only when the user explicitly asks
+  for commit-level PRs. “Keep commits atomic” alone is NOT that request.
+
+Before opening PRs for a multi-commit branch:
+
+1. Read `git log <base>..<head> --oneline` and group commits by semantic unit.
+2. Inspect `git diff <base>...<head> --stat` for each proposed PR base/head pair.
+3. Create one PR per semantic group, preserving all atomic commits inside it.
+4. Verify that no unrelated milestone, file, or acceptance boundary crossed into the PR.
 
 ## Required body structure
 
@@ -203,6 +242,8 @@ If any answer is no, expand the body / fix labels before reporting done.
 
 ## Anti-patterns
 
+- Treating each atomic commit as its own PR without an explicit user request
+
 - Three bullet Summary + one-line Why + checkbox Test plan only
 - Creating a PR then shipping/merging **without** a kind label
 - “CI green” with no local commands listed
@@ -223,6 +264,7 @@ Installs/links into:
 - Claude Code: `~/.claude/skills/carpeos-pr`
 - Codex / agents: `~/.agents/skills/carpeos-pr`
 - Grok Build: `~/.grok/skills/carpeos-pr`
+- Gajae Code/GJC: `~/.gjc/agent/skills/carpeos-pr` and `~/.gjc/skills/carpeos-pr`
 
 In-repo:
 
