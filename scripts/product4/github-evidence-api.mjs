@@ -1,5 +1,6 @@
 import {
   canonicalJson,
+  digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
   PRODUCT4_CONTEXT,
   PRODUCT4_POLICY_SHA256,
@@ -11,6 +12,7 @@ export const CHECK_SUITE_CAP = 1000;
 export const PRODUCT4_CHECK_NAME = "Product 4 Candidate Evidence";
 
 const SHA1 = /^[0-9a-f]{40}$/;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const FORBIDDEN_KEY =
   /token|secret|credential|private_path|protected_plaintext|script|module|url|executable|shell/i;
 
@@ -208,6 +210,122 @@ export function collectCheckRuns({ pages, identity, suiteCap = CHECK_SUITE_CAP }
   }
   return [...runs.values()].sort((left, right) => left.id - right.id);
 }
+export const EVIDENCE_RECEIPT_SCHEMA = "product4-evidence-api-receipt-v1";
+
+export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
+  assertExactCheckQuery(query);
+  const verifiedIdentity = normalizeEvidenceIdentity(identity);
+  if (!Array.isArray(pages) || pages.length < 1 || pages.length > CHECK_SUITE_CAP)
+    throwApiError("malformed_response", "evidence pages must be bounded and non-empty");
+  const runs = collectCheckRuns({ pages, identity: verifiedIdentity });
+  const unsigned = {
+    schema_version: EVIDENCE_RECEIPT_SCHEMA,
+    receipt_type: "exact_check_evidence",
+    status: "verified",
+    repository_id: verifiedIdentity.repository_id,
+    repository_path: verifiedIdentity.repository_path,
+    head_sha: verifiedIdentity.head_sha,
+    external_id: verifiedIdentity.external_id,
+    fixture_sha256: verifiedIdentity.fixture_sha256,
+    policy_sha256: verifiedIdentity.policy_sha256,
+    context: verifiedIdentity.context,
+    check_name: verifiedIdentity.check_name,
+    app_id: verifiedIdentity.app_id,
+    query_digest: digestJson(query),
+    identity_digest: digestJson(verifiedIdentity),
+    page_count: pages.length,
+    suite_count: pages.reduce((count, page) => count + page.items.length, 0),
+    run_ids: runs.map((run) => run.id),
+    observed_at: observedAt,
+  };
+  const receipt = { ...unsigned, receipt_digest: digestJson(unsigned) };
+  return assertEvidenceReceipt(receipt);
+}
+
+export function assertEvidenceReceipt(receipt) {
+  if (!isRecord(receipt)) throwApiError("malformed_response", "evidence receipt is required");
+  const errors = [];
+  const keys = [
+    "schema_version",
+    "receipt_type",
+    "status",
+    "repository_id",
+    "repository_path",
+    "head_sha",
+    "external_id",
+    "fixture_sha256",
+    "policy_sha256",
+    "context",
+    "check_name",
+    "app_id",
+    "query_digest",
+    "identity_digest",
+    "page_count",
+    "suite_count",
+    "run_ids",
+    "observed_at",
+    "receipt_digest",
+  ];
+  for (const key of Object.keys(receipt))
+    if (!keys.includes(key)) errors.push(`${key} is not allowed`);
+  if (receipt.schema_version !== EVIDENCE_RECEIPT_SCHEMA) errors.push("schema_version is invalid");
+  if (receipt.receipt_type !== "exact_check_evidence") errors.push("receipt_type is invalid");
+  if (receipt.status !== "verified") errors.push("status is not verified");
+  if (receipt.repository_id !== PRODUCT4_REPOSITORY_ID) errors.push("repository_id is invalid");
+  if (typeof receipt.repository_path !== "string" || receipt.repository_path.length < 3)
+    errors.push("repository_path is invalid");
+  if (!SHA1.test(receipt.head_sha ?? "")) errors.push("head_sha is invalid");
+  if (
+    receipt.external_id !== `carpeos-4.0.0:${receipt.head_sha}:${MAINTENANCE_STUDY_FIXTURE_SHA256}`
+  )
+    errors.push("external_id is not C-bound");
+  if (receipt.fixture_sha256 !== MAINTENANCE_STUDY_FIXTURE_SHA256)
+    errors.push("fixture_sha256 is invalid");
+  if (receipt.policy_sha256 !== PRODUCT4_POLICY_SHA256) errors.push("policy_sha256 is not P4_0");
+  if (receipt.context !== PRODUCT4_CONTEXT) errors.push("context is invalid");
+  if (receipt.check_name !== PRODUCT4_CHECK_NAME) errors.push("check_name is invalid");
+  if (!Number.isSafeInteger(receipt.app_id) || receipt.app_id <= 0)
+    errors.push("app_id is invalid");
+  for (const key of ["query_digest", "identity_digest", "receipt_digest"])
+    if (!/^[0-9a-f]{64}$/.test(receipt[key] ?? "")) errors.push(`${key} is invalid`);
+  if (!Number.isSafeInteger(receipt.page_count) || receipt.page_count < 1)
+    errors.push("page_count is invalid");
+  if (!Number.isSafeInteger(receipt.suite_count) || receipt.suite_count < 1)
+    errors.push("suite_count is invalid");
+  if (
+    !Array.isArray(receipt.run_ids) ||
+    receipt.run_ids.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+    new Set(receipt.run_ids).size !== receipt.run_ids.length
+  )
+    errors.push("run_ids are invalid");
+  if (!isTimestamp(receipt.observed_at)) errors.push("observed_at is invalid");
+  assertNoForbiddenKeys(receipt, errors);
+  if (errors.length === 0) {
+    const unsigned = { ...receipt };
+    delete unsigned.receipt_digest;
+    if (digestJson(unsigned) !== receipt.receipt_digest) errors.push("receipt_digest is invalid");
+  }
+  if (errors.length > 0) throwApiError("malformed_response", errors.join("; "));
+  return receipt;
+}
+
+function normalizeEvidenceIdentity(identity) {
+  if (!isRecord(identity)) throwApiError("identity_conflict", "evidence identity is required");
+  const normalized = buildEvidenceIdentity({
+    repositoryId: identity.repository_id,
+    repositoryPath: identity.repository_path,
+    headSha: identity.head_sha,
+    externalId: identity.external_id,
+    fixtureSha256: identity.fixture_sha256,
+    policySha256: identity.policy_sha256,
+    context: identity.context,
+    checkName: identity.check_name,
+    appId: identity.app_id,
+  });
+  if (Object.keys(identity).some((key) => !Object.hasOwn(normalized, key)))
+    throwApiError("identity_conflict", "evidence identity contains unsupported fields");
+  return normalized;
+}
 
 export function reconcileLostPost({ matches, identity }) {
   const verified = verifyMatches(matches, identity);
@@ -275,6 +393,9 @@ function assertPage(page) {
 function assertSha(value, pattern, label) {
   if (typeof value !== "string" || !pattern.test(value))
     throwApiError("invalid_identity", `${label} is invalid`);
+}
+function isTimestamp(value) {
+  return typeof value === "string" && TIMESTAMP.test(value);
 }
 
 function assertNoForbiddenKeys(value, errors, path = "$") {

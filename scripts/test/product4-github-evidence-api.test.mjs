@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   assertExactCheckQuery,
   buildEvidenceIdentity,
+  buildEvidenceReceipt,
   buildExactCheckQuery,
   collectCheckRuns,
   collectPaginatedPages,
@@ -139,6 +140,25 @@ test("M4 caps suite enumeration and de-duplicates only identical run responses",
   );
 });
 
+test("M4 emits a strict exact-evidence receipt from verified pages", () => {
+  const query = buildExactCheckQuery({
+    repositoryPath: identity.repository_path,
+    headSha,
+  });
+  const receipt = buildEvidenceReceipt({
+    query,
+    identity,
+    pages: [{ items: [suite(1, [run(11), run(12)])], headers: { link: "" } }],
+    observedAt: "2026-01-02T00:00:00Z",
+  });
+  assert.equal(receipt.status, "verified");
+  assert.deepEqual(receipt.run_ids, [11, 12]);
+  assert.match(receipt.receipt_digest, /^[0-9a-f]{64}$/);
+  assert.throws(
+    () => buildEvidenceReceipt({ query, identity, pages: [], observedAt: "2026-01-02T00:00:00Z" }),
+    /bounded and non-empty/,
+  );
+});
 test("M4 reconciles lost POST/PATCH without blind duplicate writes", () => {
   const pending = {
     ...identity,
