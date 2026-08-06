@@ -96,13 +96,14 @@ jobs:
             --clearenv
             --ro-bind "$CARPEOS_SANDBOX_SOURCE" /candidate
             --bind "$CARPEOS_SANDBOX_WORK" /work
+            --bind "$CARPEOS_HOME" /home
             --bind "$CARPEOS_SANDBOX_OUT" /output
             --tmpfs /tmp
             --proc /proc
             --dev /dev
             --dir /run
             --chdir /candidate
-            --setenv HOME /tmp
+            --setenv HOME /home
             --setenv PATH /usr/local/bin:/usr/bin:/bin
             --cap-drop ALL
             --ro-bind /usr /usr
@@ -118,28 +119,38 @@ jobs:
             --ambient-caps=-all
             --
             "$node_path"
-            -e 'const fs=require("node:fs"); const status=fs.readFileSync("/proc/self/status","utf8"); if (!status.includes("NoNewPrivs:" + String.fromCharCode(9) + "1")) process.exit(23); fs.writeFileSync("/output/sandbox-probe.json", JSON.stringify({backend:"bubblewrap",network:"disabled",candidate_inputs:"read_only",trusted_mounts:false,writable_paths:["/home","/output","/tmp"],capabilities:"dropped",no_new_privileges:true,process_limit:64,memory_limit_mb:1024}));'
+            /candidate/scripts/product4/sandbox-probe.mjs
+            /output/sandbox-probe.json
           )
+          ulimit -u 64
+          ulimit -v 1048576
+          ulimit -f 102400
           "${sandbox[@]}"
-          probe_sha256="$(sha256sum "$CARPEOS_SANDBOX_OUT/sandbox-probe.json" | cut -d' ' -f1)"
-          expected_probe_sha256="$(node --input-type=module -e 'import { sandboxProbeDigest } from "./scripts/product4/p02-runner.mjs"; process.stdout.write(sandboxProbeDigest())')"
-          test "$probe_sha256" = "$expected_probe_sha256"
           tree_sha256="$(node scripts/product4/tree-digest.mjs "$CARPEOS_SANDBOX_SOURCE" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           export BASE_SHA="${{ github.event.pull_request.base.sha }}"
           export TREE_SHA256="$tree_sha256"
-          export PROBE_SHA256="$probe_sha256"
+          export PROBE_PATH="$CARPEOS_SANDBOX_OUT/sandbox-probe.json"
+          export CANDIDATE_ROOT="$CARPEOS_SANDBOX_SOURCE"
           node --input-type=module <<'NODE'
-          import { writeFileSync } from "node:fs";
-          import { buildP02SandboxReceipt } from "./scripts/product4/p02-runner.mjs";
+          import { readFileSync, writeFileSync } from "node:fs";
+          import {
+            assertSandboxProbeObservation,
+            buildP02SandboxReceipt,
+            sandboxProbeDigest,
+          } from "./scripts/product4/p02-runner.mjs";
 
+          const probe = assertSandboxProbeObservation(
+            JSON.parse(readFileSync(process.env.PROBE_PATH, "utf8")),
+          );
           const receipt = buildP02SandboxReceipt({
-            candidateRoot: process.env.CARPEOS_SANDBOX_SOURCE,
+            candidateRoot: process.env.CANDIDATE_ROOT,
             headSha: process.env.HEAD_SHA,
             baseSha: process.env.BASE_SHA,
             treeSha256: process.env.TREE_SHA256,
-            probeSha256: process.env.PROBE_SHA256,
+            probe,
+            probeSha256: sandboxProbeDigest(probe),
           });
           writeFileSync(process.env.RECEIPT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, {
             encoding: "utf8",

@@ -33,7 +33,11 @@ import {
   normalizeCheckRunsResponse,
   normalizeCheckSuitesResponse,
 } from "../product4/github-evidence-api.mjs";
-import { buildP02SandboxReceipt, sandboxProbeDigest } from "../product4/p02-runner.mjs";
+import {
+  buildP02SandboxReceipt,
+  buildSandboxProbeObservation,
+  sandboxProbeDigest,
+} from "../product4/p02-runner.mjs";
 import {
   digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
@@ -455,12 +459,14 @@ test("M4 refuses missing and forged sandbox evidence before candidate execution"
     () => observeCandidateExecution({ candidateRoot: candidate, trustedRoot: trusted }),
     /sandbox_receipt_missing/,
   );
+  const probe = buildSandboxProbeObservation();
   const valid = buildP02SandboxReceipt({
     candidateRoot: candidate,
     headSha,
     baseSha: "c".repeat(40),
     treeSha256: identity.tree_sha256,
-    probeSha256: sandboxProbeDigest(),
+    probe,
+    probeSha256: sandboxProbeDigest(probe),
   });
   assert.equal(
     observeCandidateExecution({

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { buildSixCommandLoopReceipt } from "../product4/command-loop.mjs";
@@ -9,7 +12,13 @@ import {
   buildP02Receipt,
   P02_COMMAND_LINE,
 } from "../product4/p02-replay.mjs";
-import { mutationProbeBetween } from "../product4/p02-runner.mjs";
+import {
+  assertSandboxProbeObservation,
+  buildP02SandboxReceipt,
+  buildSandboxProbeObservation,
+  mutationProbeBetween,
+  sandboxProbeDigest,
+} from "../product4/p02-runner.mjs";
 import {
   digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
@@ -317,4 +326,63 @@ test("M3 refuses unattributed transient mutations instead of claiming per-table 
     () => mutationProbeBetween(before, between, after),
     /mutation_observation_ambiguous/,
   );
+});
+
+test("M4 refuses claim-only sandbox probes without measured evidence", () => {
+  assert.throws(
+    () =>
+      assertSandboxProbeObservation({
+        backend: "bubblewrap",
+        network: "disabled",
+        candidate_inputs: "read_only",
+        trusted_mounts: false,
+        writable_paths: ["/home", "/output", "/tmp"],
+        capabilities: "dropped",
+        no_new_privileges: true,
+        process_limit: 64,
+        memory_limit_mb: 1024,
+      }),
+    /sandbox_probe/,
+  );
+  assert.throws(() => sandboxProbeDigest(), /sandbox probe digest requires/);
+  assert.throws(
+    () =>
+      buildP02SandboxReceipt({
+        candidateRoot: mkdtempSync(join(tmpdir(), "product4-probe-")),
+        headSha: "a".repeat(40),
+        baseSha: "b".repeat(40),
+        treeSha256: "c".repeat(64),
+        probeSha256: "d".repeat(64),
+      }),
+    /observed probe object|bare probe hashes/,
+  );
+});
+
+test("M4 accepts only observations whose evidence matches the fixed contract", () => {
+  const probe = buildSandboxProbeObservation();
+  assert.equal(probe.schema_version, "product4-sandbox-probe-v1");
+  assert.match(sandboxProbeDigest(probe), /^[0-9a-f]{64}$/);
+  assert.throws(
+    () =>
+      buildSandboxProbeObservation({
+        rlimit_nproc: 128,
+      }),
+    /process limit was not observed/,
+  );
+  assert.throws(
+    () =>
+      buildSandboxProbeObservation({
+        no_new_privileges_line: "NoNewPrivs:\t0",
+      }),
+    /NoNewPrivs was not observed/,
+  );
+  const root = mkdtempSync(join(tmpdir(), "product4-receipt-probe-"));
+  const receipt = buildP02SandboxReceipt({
+    candidateRoot: root,
+    headSha: "a".repeat(40),
+    baseSha: "b".repeat(40),
+    treeSha256: "c".repeat(64),
+    probe,
+  });
+  assert.equal(receipt.probe_sha256, sandboxProbeDigest(probe));
 });
