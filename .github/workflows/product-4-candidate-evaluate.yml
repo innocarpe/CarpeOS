@@ -157,23 +157,24 @@ jobs:
             --ambient-caps=-all
             --
           )
-          # Process/memory match the sandbox contract for the probe. Install/build
-          # run under the same rlimits; do not set a low file-size ulimit.
-          # Apply rlimits inside the sandbox (sudo resets host ulimit).
+          # Install/build need headroom. Contract rlimits apply only around the
+          # measured probe (sudo also resets any host-side ulimit).
           "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
-            ulimit -u 64
-            ulimit -v 1048576
             rm -rf /work/*
             cp -RL --no-preserve=ownership /candidate/. /work/
             find /work -mindepth 1 -exec chmod u+rwX {} +
             cd /work
             # Offline + frozen lockfile. Avoid --frozen-store (ReadOnlyStoreIndex fails
-            # to open index.db under this mount).
+            # to open index.db under this mount). CI=true + confirmModulesPurge defend
+            # ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY after --clearenv.
             pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir /pnpm-store --config.confirmModulesPurge=false
             pnpm --filter "@carpeos/cli..." build
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
+            ulimit -u 64
+            ulimit -v 1048576
+            ulimit -f 102400
             # Observed probe (not claim-only static JSON).
-            node /work/scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
+            node scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           # sudo bwrap writes as root; reclaim for unprivileged host validation.
           sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_HOME"
