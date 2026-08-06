@@ -14,6 +14,45 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.0.0] - 2026-08-07
+
+### Added
+
+- **Product 6.0.0 Agentic Layer (hold-first brain)** — post-capture write-time knowledge plane
+  under ADR 0017, without LLM in capture and without automatic `AcceptanceDecision`:
+  - `@carpeos/agentic`: durable jobs (lease state machine), stage digests, E1 rule admit,
+    E2 redact/EvidencePack (reuses `@carpeos/v5`), E3/E4 triage+extract (offline **fake**
+    default; live **`deepseek-v4-flash`** via DeepSeek Direct when explicitly allowed),
+    E5 deterministic verify, `agentic_v1` gate (hold-first), proposal records
+    (`canonical_effect: none` until materialize), materialize draft Observation +
+    disposition, golden-12 offline suite.
+  - Local-store **`agentic_capture_feed`**: post-commit feed insert only (fail-open;
+    no network/LLM/await inside capture).
+  - Runner: `processAgenticOnce` drains feed → pipeline → optional materialize; job
+    lease audit trail; E6 `derived_from` lineage markers; optional E9 project hook.
+  - CLI: `carpeos agentic status|run|golden|list-held|materialize`
+    - Product path: `carpeos agentic run --once --materialize`
+    - Live Flash: `--allow-network` requires `DEEPSEEK_API_KEY` + spend cap (network
+      off by default)
+    - Kill switch: `CARPEOS_AGENTIC=0|off` (skips feed + runner)
+
+### Safety
+
+- Capture path never calls LLM or awaits agentic jobs.
+- Real model id freeze: **`deepseek-v4-flash` only** (no multi-model escalation).
+- No automatic `AcceptanceDecision`; no LLM-only Supersession.
+- V5 remains draft cortex (`canonical_effect: "none"`); promotion bridge is `agentic_v1`.
+- Public fixtures synthetic only.
+
+### Notes / residuals (honest hold-first major)
+
+- **Not claimed:** full Product 6 thesis (“knowledge product finished”) or GraphRAG ranking.
+- **P3 pending (target 6.1.x):** narrow auto-promote + precision suite ≥ 0.90.
+- **P4–P6 pending (later minors):** denser links/graph metrics, draft Claims product path,
+  GraphRAG ranking on typed promoted units.
+- **E10** periodic reconcile deferred.
+- Live Flash quality depends on operator credentials and spend caps; CI stays offline/fake.
+
 ## [5.0.1] - 2026-08-06
 
 ### Added

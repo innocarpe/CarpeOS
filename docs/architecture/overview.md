@@ -1,10 +1,11 @@
 # CarpeOS Architecture Overview
 
-Status: current-main architecture audit after **Product 5.0.1** package ship
-(`@innocarpe/carpeos@5.0.1`) with **Product 6 Agentic Layer** as the next major
-plane (ADR 0017; not yet implemented on npm). Local canonical + adjudication +
-retrieval remain the operator loop. Product 4 trust/evidence and Product 5 draft
-cortex remain as shipped. Hosted deployment is still not claimed.
+Status: current-main architecture audit after **Product 6.0.0** package ship
+(`@innocarpe/carpeos@6.0.0`) — **hold-first Agentic Layer** (ADR 0017 P0–P2
+product loop on npm). Local canonical + adjudication + retrieval remain the
+default operator loop; agentic is post-capture and optional-kill. Product 4
+trust/evidence and Product 5 draft cortex remain as shipped. Hosted deployment
+is still not claimed.
 
 CarpeOS keeps private knowledge in a local canonical store and derives
 rebuildable, non-authoritative read models from it. The canonical boundary is not
@@ -24,8 +25,8 @@ a graph, vector index, MCP response, export, or provider payload.
 | Product 3.2 B1 apply, writer, receipt, Supersession construction, and sync convergence | Deferred | Not part of 3.2 or 4.0 package claim |
 | Product 4 trust/evidence plane (P4_0, evaluator, raw producer, publisher schemas, observed sandbox) | **Shipped** on npm `@innocarpe/carpeos@4.0.0` | Fail-closed without independent live authority; synthetic fixtures are not live authority |
 | Product 4 live trust-plane workflows | In tree; **workflow_dispatch-only** until ownership activation | Not every-PR; not self-granted authority |
-| Product 5 draft lane (`carpeos v5`) | **Shipped on npm** through `@innocarpe/carpeos@5.0.1` | `canonical_effect: "none"`; not capture hot path; M8 authority seam deferred |
-| Product 6 Agentic Layer (`@carpeos/agentic`) | **Planned** (ADR 0017 / PRD-v6); prep docs + scaffold | Post-capture Flash-only brain; `agentic_v1` gate; no capture LLM; no auto AcceptanceDecision |
+| Product 5 draft lane (`carpeos v5`) | **Shipped on npm** through `@innocarpe/carpeos@5.x` | `canonical_effect: "none"`; not capture hot path; M8 authority seam deferred |
+| Product 6 Agentic Layer (`@carpeos/agentic`) | **Hold-first shipped** on npm `@innocarpe/carpeos@6.0.0` | Post-capture feed + Flash-only multi-stage + `agentic_v1` hold materialize; no capture LLM; no auto AcceptanceDecision; P3–P6 residual |
 
 Source evidence: [local store](../../packages/local-store/src/store.ts),
 [retrieval](../../packages/retrieval/src/query.ts),
