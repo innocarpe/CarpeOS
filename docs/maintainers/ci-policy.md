@@ -38,8 +38,9 @@ CI does **not** exist to:
 | **Trust / release plane** | explicit product activation or release paths | Product 4 evidence, release authority | **not** default PR required; cost justified by the plane |
 | **Local** | agent / human **before push / PR** | parallel PR-lean preflight (`make preflight`) | target ≤ PR lean; fail closed locally |
 
-Prefer **one workflow file** with **parallel jobs** for PR lean, not a single
-serial mega-step. Local `pnpm check` remains the sequential twin for agents.
+PR lean and Main full may share job definitions with `if:` conditions, or use
+separate jobs. Prefer **one workflow file with clear lanes** over copy-pasted
+workflows.
 
 ### 2.0 Path filter (required-check safe)
 
@@ -61,30 +62,28 @@ Rules:
    `scripts/test/ci-workflow.test.mjs` and this section in the same PR.
 5. Local agents still run `make preflight` before PR when they touch code.
 
-### 2.0.1 Parallel PR lean jobs + caching
-
-Implementation (`.github/workflows/ci.yml`):
+### 2.0.1 Slim parallel PR lean (solo-maintainer target)
 
 ```text
 changes (path filter)
-    ├─ quality      format + lint          ∥
-    ├─ boundary     public-boundary        ∥
-    └─ build        pnpm build → artifact
-            ├─ typecheck   (download dist)  ∥
-            └─ test        (download dist)  ∥
-main-full (push main only; after build+test)
+    ├─ static     format + lint + public-boundary   ∥  (one install)
+    └─ monorepo   build → typecheck → test          ∥  (one install)
+main-full (push main only; reuses monorepo-dist artifact)
 Checks (aggregate, required name)
 ```
 
 | Concern | Approach |
 | --- | --- |
-| Shared install | composite `.github/actions/setup-node-pnpm` (`cache: pnpm` + frozen lockfile) |
-| Build once | `build` job uploads `monorepo-dist`; typecheck/test/main-full download it |
-| Required check | job **`Checks`** aggregates; does not re-run `pnpm check` serially |
-| Wall clock | dominated by max(quality, boundary, build+max(typecheck,test)), not sum of all |
+| Shared install | composite `.github/actions/setup-node-pnpm` (`cache: pnpm`) |
+| Static vs heavy | `static` cheap; `monorepo` owns build/typecheck/test |
+| Artifact | upload `monorepo-dist` **only on main push** for main-full |
+| Required check | job **`Checks`** aggregates path skip / static / monorepo / main-full |
+| Wall clock | ≈ max(static, monorepo) after path filter |
+| Growth path | when `pnpm test` > ~3m, split monorepo tests by package — do not re-split static |
 
-Do **not** reintroduce a serial `pnpm check` step on GHA unless abandoning the
-parallel graph with an explicit policy change.
+Do **not** reintroduce a five-way quality/boundary/build/typecheck/test fan-out
+without a measured wall-clock win over install tax. Local twin:
+`make preflight` / `pnpm check`.
 
 ### 2.1 Local preflight (mandatory before PR)
 
@@ -112,13 +111,11 @@ Keep this set small and non-duplicative:
 
 | Check | How | Notes |
 | --- | --- | --- |
-| Format + lint | job `quality` | parallel with boundary/build |
-| Public boundary | job `boundary` | parallel |
-| Build | job `build` → artifact | once |
-| Typecheck | job `typecheck` | after build artifact |
-| Unit / contract tests | job `test` | after build artifact |
+| Format + lint + public-boundary | job `static` | one cheap install |
+| Build + typecheck + test | job `monorepo` | one heavy install; sequential inside job |
 | Secret scan | `secret-scan.yml` (Gitleaks) | separate workflow OK |
 | Aggregate | job `Checks` | required status name |
+| Main full | job `main-full` | push to `main` only |
 
 Local agents still use sequential `pnpm check` or parallel `make preflight`.
 

@@ -77,15 +77,15 @@ Trigger on any of:
 
 ### PR lean (default merge gate)
 
-- **Parallel GHA jobs** (not one serial `pnpm check`):
-  - `quality` — format + lint
-  - `boundary` — public-boundary
-  - `build` → artifact → `typecheck` ∥ `test`
+- **Slim parallel GHA jobs** (not serial `pnpm check`, not five-way fan-out):
+  - `static` — format + lint + public-boundary (one install)
+  - `monorepo` — build → typecheck → test (one install)
   - aggregate job **`Checks`** (required status name)
+  - `main-full` only on push to `main`
 - Shared setup: `.github/actions/setup-node-pnpm` (`cache: pnpm`)
-- **Path-filtered:** monorepo jobs only when CI-relevant paths change
-  (`dorny/paths-filter`); docs-only → aggregate Checks success
-- Local twin remains `make preflight` / `pnpm check` (sequential OK locally)
+- **Path-filtered:** static/monorepo only when CI-relevant paths change;
+  docs-only → Checks success
+- Local twin: `make preflight` / `pnpm check`
 - secret scan (`secret-scan.yml`) — every PR
 
 ### Main full
