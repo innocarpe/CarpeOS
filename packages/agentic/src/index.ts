@@ -11,6 +11,8 @@ export * from "./digest.js";
 export * from "./gate.js";
 export * from "./jobs.js";
 export * from "./pack.js";
+export * from "./pipeline.js";
+export * from "./proposals.js";
 export type { SqlDatabase, SqlStatement } from "./sql.js";
 export * from "./stages.js";
 export * from "./types.js";
