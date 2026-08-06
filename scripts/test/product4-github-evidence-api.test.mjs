@@ -181,6 +181,18 @@ test("M4 traverses every RFC 5988 next link and rejects incomplete full pages", 
       }),
     /incomplete_pagination/,
   );
+  await assert.rejects(
+    () =>
+      collectPaginatedPages({
+        firstUrl: "https://api.test/error",
+        fetchPage: async () => ({
+          status: 403,
+          items: [],
+          headers: { link: "" },
+        }),
+      }),
+    /unauthorized_response/,
+  );
   const normalizedResponses = {
     "page-1": {
       total_count: 2,
@@ -294,7 +306,7 @@ test("M4 refuses missing suite enumeration, duplicate exact matches, partial pag
         pages: [runPage],
         observedAt: "2026-01-02T00:00:00Z",
       }),
-    /incomplete_pagination|independent check-suites/,
+    /incomplete_pagination|independent check-suite/,
   );
 
   const suitePage = normalizeCheckSuitesResponse(
@@ -314,6 +326,42 @@ test("M4 refuses missing suite enumeration, duplicate exact matches, partial pag
         observedAt: "2026-01-02T00:00:00Z",
       }),
     /duplicate_refusal/,
+  );
+
+  const duplicatePage = normalizedRunPage(
+    [githubRun(12)],
+    '<https://api.test/run-page-2>; rel="next"',
+  );
+  const duplicateRunPages = [suitePage, duplicatePage, normalizedRunPage([githubRun(12)])];
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: duplicateRunPages,
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /duplicate_refusal/,
+  );
+
+  const nestedSuitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [githubSuite(1)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  nestedSuitePage.runs = [normalizedRunPage([githubRun(15, 1)]).items[0]];
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [nestedSuitePage, normalizedRunPage([])],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /malformed_response|independent check-suite/,
   );
 
   const partialSuitePage = normalizeCheckSuitesResponse(
@@ -363,7 +411,7 @@ test("M4 refuses missing suite enumeration, duplicate exact matches, partial pag
         pages: [queuedSuitePage, runPage],
         observedAt: "2026-01-02T00:00:00Z",
       }),
-    /terminal_refusal/,
+    /terminal_refusal|duplicate_refusal/,
   );
 });
 test("M4 binds C1 query fields to the normalized C2 identity", () => {
@@ -431,6 +479,9 @@ test("M4 adapts real GitHub suite/run response shapes and rejects invented nesti
   const runPage = normalizedRunPage([githubRun(42, 41)]);
   assert.equal(runPage.items[0].check_name, identity.check_name);
   assert.equal(runPage.items[0].suite_id, 41);
+  assert.equal(runPage.suites[0].repository_id, identity.repository_id);
+  assert.equal(runPage.suites[0].head_sha, identity.head_sha);
+  assert.equal(runPage.suites[0].app_id, identity.app_id);
   assert.deepEqual(
     collectCheckRuns({ pages: [runPage], identity }).map((run) => run.id),
     [42],
@@ -456,7 +507,7 @@ test("M4 adapts real GitHub suite/run response shapes and rejects invented nesti
     /invented nested|check_suites/,
   );
 });
-test("M4 accepts documented suite/run shapes and binds omitted identity fields", () => {
+test("M4 normalizes documented suite/run shapes with explicit returned identity fields", () => {
   const suitePage = normalizeCheckSuitesResponse(
     {
       total_count: 1,
@@ -578,6 +629,40 @@ test("M4 refuses foreign repository/App/C and missing check identity in real res
   assert.throws(
     () => assertRealCheckRun({ ...githubRun(57), app: undefined }, identity),
     /App identity/,
+  );
+  for (const [label, overrides, code] of [
+    ["repository", { repository: { id: identity.repository_id } }, /malformed_response/],
+    ["App", { app: {} }, /app_identity_missing/],
+    ["head C", { head_sha: undefined }, /duplicate_refusal/],
+    ["check name", { name: undefined }, /duplicate_refusal/],
+    ["external identity", { external_id: undefined }, /duplicate_refusal/],
+    ["suite identity", { check_suite: { ...githubSuite(1), id: undefined } }, /malformed_response/],
+  ]) {
+    assert.throws(
+      () =>
+        normalizeCheckRunsResponse(
+          {
+            total_count: 1,
+            check_runs: [githubRun(58, 1, overrides)],
+            headers: { link: "" },
+          },
+          { identity },
+        ),
+      code,
+      label,
+    );
+  }
+  assert.throws(
+    () =>
+      normalizeCheckRunsResponse(
+        {
+          total_count: 1,
+          check_runs: [{ ...githubRun(59), check_suite: undefined }],
+          headers: { link: "" },
+        },
+        { identity },
+      ),
+    /malformed_response/,
   );
 });
 
@@ -718,6 +803,13 @@ test("M4 requires a fresh exact pending-run GET before retrying a lost PATCH", (
     freshGet: () => [],
   });
   assert.equal(missing.status, "patch_indeterminate");
+  const errorEnvelope = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    freshGet: () => ({ status: 404, data: pending }),
+  });
+  assert.equal(errorEnvelope.status, "patch_indeterminate");
 });
 test("M4 reconciles lost POST/PATCH without blind duplicate writes", () => {
   const pending = {
@@ -814,5 +906,46 @@ test("M4 refuses HTTP error statuses embedded in GitHub wrapper responses", () =
       },
       { identity },
     ),
+  );
+  assert.throws(
+    () =>
+      normalizeCheckRunsResponse(
+        {
+          status: 403,
+          data: {
+            total_count: 0,
+            check_runs: [],
+            headers: { link: "" },
+          },
+          identity,
+        },
+        undefined,
+      ),
+    /unauthorized_response/,
+  );
+  assert.throws(
+    () =>
+      normalizeCheckRunsResponse({
+        data: {
+          status: 404,
+          total_count: 0,
+          check_runs: [],
+          headers: { link: "" },
+        },
+        identity,
+      }),
+    /not_found_response/,
+  );
+  assert.throws(
+    () =>
+      normalizeCheckRunsResponse(
+        {
+          headers: { get: () => "409" },
+          total_count: 0,
+          check_runs: [],
+        },
+        { identity },
+      ),
+    /conflict_response/,
   );
 });

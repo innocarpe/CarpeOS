@@ -128,6 +128,7 @@ export async function collectPaginatedPages({
       throwApiError("incomplete_pagination", "Link traversal loop detected");
     visited.add(nextUrl);
     const rawPage = await fetchPage(nextUrl);
+    assertHttpSuccessStatus(rawPage);
     const page =
       normalizePage !== undefined
         ? await normalizePage(rawPage, { identity, url: nextUrl })
@@ -404,6 +405,7 @@ export function assertRealCheckRun(run, identityOrOptions) {
 }
 
 export function normalizeCheckSuitesResponse(responseOrOptions, options) {
+  assertHttpSuccessStatus(responseOrOptions);
   const { response, identity, headers } = resolveAdapterInput(responseOrOptions, options);
   const payload = unwrapGitHubResponse(response);
   if (Object.hasOwn(payload, "items") || Object.hasOwn(payload, "runs"))
@@ -424,6 +426,7 @@ export function normalizeCheckSuitesResponse(responseOrOptions, options) {
 }
 
 export function normalizeCheckRunsResponse(responseOrOptions, options) {
+  assertHttpSuccessStatus(responseOrOptions);
   const { response, identity, headers, suiteId } = resolveAdapterInput(responseOrOptions, options);
   const payload = unwrapGitHubResponse(response);
   if (Object.hasOwn(payload, "items") || Object.hasOwn(payload, "runs"))
@@ -437,12 +440,11 @@ export function normalizeCheckRunsResponse(responseOrOptions, options) {
     assertRealCheckRun(run, { identity: verifiedIdentity, suiteId }),
   );
   const suites = new Map();
-  for (const run of items) {
-    const suite = { id: run.suite_id };
+  for (const [index] of items.entries()) {
+    const suite = assertRealCheckSuite(rawRuns[index].check_suite, verifiedIdentity);
     const existing = suites.get(suite.id);
-    if (existing !== undefined && canonicalJson(existing) !== canonicalJson(suite))
-      throwApiError("duplicate_refusal", `conflicting duplicate check suite ${suite.id}`);
-    if (existing === undefined) suites.set(suite.id, suite);
+    if (existing !== undefined) suites.set(suite.id, mergeNormalizedSuite(existing, suite));
+    else suites.set(suite.id, suite);
   }
   return markAdapterPage(
     {
@@ -515,7 +517,9 @@ function resolveAdapterInput(responseOrOptions, options) {
 }
 
 function normalizeGitHubPageIfNeeded(response, identity) {
-  if (!isRecord(response) || identity === undefined) return response;
+  if (!isRecord(response)) return response;
+  assertHttpSuccessStatus(response);
+  if (identity === undefined) return response;
   const payload = unwrapGitHubResponse(response);
   if (Array.isArray(payload.check_runs)) return normalizeCheckRunsResponse(response, { identity });
   if (Array.isArray(payload.check_suites))
@@ -525,19 +529,22 @@ function normalizeGitHubPageIfNeeded(response, identity) {
 function unwrapGitHubResponse(response) {
   if (!isRecord(response)) throwApiError("malformed_response", "GitHub response is required");
   assertHttpSuccessStatus(response);
+  let payload = response;
   if (
     isRecord(response.data) &&
     !Array.isArray(response.check_suites) &&
     !Array.isArray(response.check_runs)
-  )
-    return response.data;
-  if (
+  ) {
+    payload = response.data;
+  } else if (
     isRecord(response.body) &&
     !Array.isArray(response.check_suites) &&
     !Array.isArray(response.check_runs)
-  )
-    return response.body;
-  return response;
+  ) {
+    payload = response.body;
+  }
+  assertHttpSuccessStatus(payload);
+  return payload;
 }
 
 /**
@@ -545,11 +552,14 @@ function unwrapGitHubResponse(response) {
  * Missing status is allowed for already-normalized adapter pages.
  */
 function assertHttpSuccessStatus(response) {
-  const status =
-    response.status ??
-    response.statusCode ??
-    response.status_code ??
-    (isRecord(response.headers) ? response.headers.status : undefined);
+  if (!isRecord(response)) return;
+  const headerStatus =
+    typeof response.headers?.get === "function"
+      ? (response.headers.get("status") ?? response.headers.get("Status"))
+      : isRecord(response.headers)
+        ? (response.headers.status ?? response.headers.statusCode ?? response.headers.status_code)
+        : undefined;
+  const status = response.status ?? response.statusCode ?? response.status_code ?? headerStatus;
   if (status === undefined || status === null) return;
   const numeric = typeof status === "number" ? status : Number(status);
   if (!Number.isSafeInteger(numeric))
@@ -559,7 +569,7 @@ function assertHttpSuccessStatus(response) {
   if (numeric === 404)
     throwApiError("not_found_response", "GitHub response status 404 is not found");
   if (numeric === 409)
-    throwApiError("conflict_response", "GitHub response status 409 is conflicted");
+    throwApiError("conflict_response", `GitHub response status ${numeric} is conflicted`);
   if (numeric === 422)
     throwApiError("unprocessable_response", "GitHub response status 422 is unprocessable");
   if (numeric < 200 || numeric >= 300)
@@ -823,7 +833,11 @@ export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
     throwApiError("malformed_response", "evidence pages must be bounded and non-empty");
   if (pages.some((page) => page[ADAPTER_PAGE] !== true))
     throwApiError("malformed_response", "real GitHub adapter pages are required");
+  for (const page of pages) assertPage(page);
   assertCompleteAdapterPagination(pages);
+  const exactRunMatchCount = assertIndependentAdapterShapes(pages);
+  if (exactRunMatchCount > 1)
+    throwApiError("duplicate_refusal", "exact C/name/App lookup returned multiple check runs");
   const runs = collectCheckRuns({ pages, identity: verifiedIdentity });
   if (runs.length === 0)
     throwApiError("malformed_response", "verified evidence must contain a check run");
@@ -899,6 +913,36 @@ function assertQueryIdentity(actual, expected) {
     if (actual[key] !== expected[key])
       throwApiError("identity_conflict", `query identity ${key} does not match`);
   }
+}
+function assertIndependentAdapterShapes(pages) {
+  let exactRunMatchCount = 0;
+  let suitePageCount = 0;
+  for (const page of pages) {
+    const kind = page[ADAPTER_KIND];
+    if (kind === "check_suites") {
+      suitePageCount += 1;
+      if (
+        Object.hasOwn(page, "runs") ||
+        Object.hasOwn(page, "check_runs") ||
+        Object.hasOwn(page, "suites") ||
+        page.items.some(
+          (suite) =>
+            isRecord(suite) && (Object.hasOwn(suite, "runs") || Object.hasOwn(suite, "check_runs")),
+        )
+      )
+        throwApiError(
+          "malformed_response",
+          "independent check-suite pages must not contain nested check runs",
+        );
+    } else if (kind === "check_runs") {
+      exactRunMatchCount += page.items.length;
+    } else {
+      throwApiError("malformed_response", "unknown evidence adapter page");
+    }
+  }
+  if (suitePageCount === 0)
+    throwApiError("malformed_response", "independent check-suite enumeration is required");
+  return exactRunMatchCount;
 }
 
 function assertCompleteAdapterPagination(pages) {
@@ -1062,7 +1106,6 @@ export function reconcileLostPost({ matches, identity }) {
 }
 
 export function reconcileLostPatch({
-  matches,
   identity,
   pendingRun,
   attemptedPatch,
@@ -1087,6 +1130,8 @@ export function reconcileLostPatch({
   const pendingIdentity = readReconciliationRun(pendingRun, verifiedIdentity);
   if (pendingIdentity === null || !isPendingState(pendingRun))
     return indeterminatePatch("pending run is foreign or no longer pending");
+  // Internal evaluator callers may provide a pre-fetched freshRun value; legacy matches
+  // are intentionally ignored and can never authorize a retry.
   const freshValue = freshRun ?? freshPendingRun;
   const freshReader = freshGet ?? fetchPendingRun ?? getPendingRun ?? fetchRun ?? getRun;
   if (freshReader !== undefined && typeof freshReader !== "function")
@@ -1252,11 +1297,19 @@ function extractFreshRunMatches(value, identity) {
     return value.items.map((run) => normalizeFreshRun(run, identity));
   }
   if (!isRecord(value)) return [];
-  if (Object.hasOwn(value, "run")) return extractFreshRunMatches(value.run, identity);
-  if (Object.hasOwn(value, "response")) return extractFreshRunMatches(value.response, identity);
+  if (Object.hasOwn(value, "run")) {
+    assertHttpSuccessStatus(value);
+    return extractFreshRunMatches(value.run, identity);
+  }
+  if (Object.hasOwn(value, "response")) {
+    assertHttpSuccessStatus(value);
+    return extractFreshRunMatches(value.response, identity);
+  }
   if (Array.isArray(value.check_runs)) return normalizeCheckRunsResponse(value, { identity }).items;
-  if (isRecord(value.data) || isRecord(value.body))
+  if (isRecord(value.data) || isRecord(value.body)) {
+    assertHttpSuccessStatus(value);
     return extractFreshRunMatches(value.data ?? value.body, identity);
+  }
   if (Number.isSafeInteger(value.id)) return [normalizeFreshRun(value, identity)];
   return [];
 }
