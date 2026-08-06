@@ -157,6 +157,9 @@ jobs:
             node /work/scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
+          # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
+          # the unprivileged host job can validate and seal the receipt.
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail

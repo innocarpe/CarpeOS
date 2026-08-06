@@ -129,6 +129,9 @@ jobs:
             /output/sandbox-probe.json
           )
           "${sandbox[@]}"
+          # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
+          # the unprivileged host job can validate and seal the receipt.
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
           tree_sha256="$(node scripts/product4/tree-digest.mjs "$CARPEOS_SANDBOX_SOURCE" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.pull_request.head.sha }}"
