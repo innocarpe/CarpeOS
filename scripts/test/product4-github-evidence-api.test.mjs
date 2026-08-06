@@ -287,7 +287,13 @@ test("M4 refuses missing suite enumeration, duplicate exact matches, partial pag
   });
   const runPage = normalizedRunPage([githubRun(12, 1)]);
   assert.throws(
-    () => buildEvidenceReceipt({ query, identity, pages: [runPage], observedAt: "2026-01-02T00:00:00Z" }),
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [runPage],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
     /incomplete_pagination|independent check-suites/,
   );
 
@@ -329,9 +335,7 @@ test("M4 refuses missing suite enumeration, duplicate exact matches, partial pag
     /incomplete_pagination/,
   );
 
-  const queuedRun = normalizedRunPage([
-    githubRun(14, 1, { status: "queued", conclusion: null }),
-  ]);
+  const queuedRun = normalizedRunPage([githubRun(14, 1, { status: "queued", conclusion: null })]);
   assert.throws(
     () =>
       buildEvidenceReceipt({

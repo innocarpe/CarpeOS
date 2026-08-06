@@ -1170,7 +1170,6 @@ function reconcileFreshPatchResponse({
   }
 }
 
-
 function buildFreshRunQuery(identity, runId) {
   if (!Number.isSafeInteger(runId) || runId <= 0)
     throwApiError("invalid_reconciliation", "pending run id is invalid");
@@ -1228,8 +1227,7 @@ function extractFreshRunMatches(value, identity) {
   if (!isRecord(value)) return [];
   if (Object.hasOwn(value, "run")) return extractFreshRunMatches(value.run, identity);
   if (Object.hasOwn(value, "response")) return extractFreshRunMatches(value.response, identity);
-  if (Array.isArray(value.check_runs))
-    return normalizeCheckRunsResponse(value, { identity }).items;
+  if (Array.isArray(value.check_runs)) return normalizeCheckRunsResponse(value, { identity }).items;
   if (isRecord(value.data) || isRecord(value.body))
     return extractFreshRunMatches(value.data ?? value.body, identity);
   if (Number.isSafeInteger(value.id)) return [normalizeFreshRun(value, identity)];
