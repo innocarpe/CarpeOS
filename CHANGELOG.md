@@ -12,7 +12,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- **P4 link / graph density** (Product 6.2 path):
+  - E6 deterministic structure/link: `derived_from` + `about` edge proposals (optional
+    `supports` to sibling units); no free `related` spam.
+  - Materialize writes structured provenance + subject so `graph_v2` rebuild densifies
+    `meaning_unit` nodes (required lineage).
+  - `computeGraphDensityMetrics` / uplift gate; CLI `carpeos agentic graph-metrics`.
+  - Product path `agentic run --materialize` invokes E9 retrieval+graph rebuild hook.
+  - Still never auto-creates `AcceptanceDecision`; graph remains projection-only.
 
 ## [6.1.0] - 2026-08-07
 

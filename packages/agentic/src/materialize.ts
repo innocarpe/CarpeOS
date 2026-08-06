@@ -5,8 +5,10 @@
  */
 
 import type { LocalCaptureStore } from "@carpeos/local-store";
+import type { ProvenanceRef } from "@carpeos/schema";
 import { type AgenticProposalRecord, markProposalMaterialized } from "./proposals.js";
 import type { SqlDatabase } from "./sql.js";
+import { edgesToProvenanceRefs, structureAgenticLinks } from "./structure.js";
 import { AGENTIC_POLICY_VERSION } from "./types.js";
 
 export type MaterializeAgenticInput = {
@@ -20,6 +22,8 @@ export type MaterializeAgenticInput = {
    * Default false → hold draft only (P2).
    */
   allow_promote_materialize?: boolean;
+  /** Override subject for about edges; defaults to store.projectId. */
+  subject_ref?: string | null;
 };
 
 export type MaterializeAgenticResult = {
@@ -31,6 +35,10 @@ export type MaterializeAgenticResult = {
   observation_status: "created" | "replay" | "none" | "failed";
   disposition_status: "written" | "replay" | "skipped" | "failed";
   reason_codes: string[];
+  /** P4: number of provenance refs written for graph density. */
+  provenance_ref_count: number;
+  /** P4: subject used for about edges in graph rebuild. */
+  subject_ref: string | null;
   canonical_effect: "observation" | "none";
 };
 
@@ -47,6 +55,12 @@ export function materializeAgenticProposal(
     policy_version: AGENTIC_POLICY_VERSION,
   };
 
+  const subjectRef =
+    input.subject_ref?.trim() ||
+    proposal.edges?.find((e) => e.kind === "about")?.to_ref?.trim() ||
+    store.projectId ||
+    null;
+
   if (proposal.policy_version !== AGENTIC_POLICY_VERSION) {
     return {
       ...base,
@@ -56,6 +70,8 @@ export function materializeAgenticProposal(
       observation_status: "none",
       disposition_status: "skipped",
       reason_codes: ["policy_version_mismatch"],
+      provenance_ref_count: 0,
+      subject_ref: subjectRef,
       canonical_effect: "none",
     };
   }
@@ -69,6 +85,8 @@ export function materializeAgenticProposal(
       observation_status: "replay",
       disposition_status: "replay",
       reason_codes: ["already_materialized"],
+      provenance_ref_count: 0,
+      subject_ref: subjectRef,
       canonical_effect: "observation",
     };
   }
@@ -96,6 +114,8 @@ export function materializeAgenticProposal(
         observation_status: "none",
         disposition_status: disp.status,
         reason_codes: ["reject_disposition_only"],
+        provenance_ref_count: 0,
+        subject_ref: subjectRef,
         canonical_effect: "none",
       };
     } catch (e) {
@@ -107,6 +127,8 @@ export function materializeAgenticProposal(
         observation_status: "none",
         disposition_status: "failed",
         reason_codes: [e instanceof Error ? e.message : "disposition_failed"],
+        provenance_ref_count: 0,
+        subject_ref: subjectRef,
         canonical_effect: "none",
       };
     }
@@ -115,6 +137,39 @@ export function materializeAgenticProposal(
   const wantPromote = gateDecision === "promote" && input.allow_promote_materialize === true;
   const disposition: "hold" | "promote" = wantPromote ? "promote" : "hold";
   const lifecycleStatus = wantPromote ? "active" : "draft";
+
+  // P4: ensure structure edges exist even for pre-P4 proposal rows.
+  const edges =
+    proposal.edges !== undefined && proposal.edges.length > 0
+      ? proposal.edges
+      : structureAgenticLinks({
+          unit_ref: proposal.proposal_id,
+          source_event_id: proposal.source_event_id,
+          artifact_id: input.artifact_id,
+          subject_ref: subjectRef,
+          candidate: proposal.candidate,
+        }).edges;
+
+  const provenance: ProvenanceRef[] = edgesToProvenanceRefs(edges).map((ref) => ({
+    ref_type: ref.ref_type,
+    ref_id: ref.ref_id,
+    relationship: ref.relationship,
+  }));
+  // Always include source event + artifact as derived_from if structure missed them.
+  if (!provenance.some((p) => p.ref_id === proposal.source_event_id)) {
+    provenance.unshift({
+      ref_type: "event",
+      ref_id: proposal.source_event_id,
+      relationship: "derived_from",
+    });
+  }
+  if (!provenance.some((p) => p.ref_id === input.artifact_id)) {
+    provenance.push({
+      ref_type: "artifact",
+      ref_id: input.artifact_id,
+      relationship: "derived_from",
+    });
+  }
 
   try {
     const disp = store.recordKnowledgeDisposition({
@@ -126,6 +181,7 @@ export function materializeAgenticProposal(
         `kind:${proposal.candidate.kind}`,
         "agentic_v1",
         wantPromote ? "materialize_promote" : "materialize_hold_first",
+        `structure_edges:${edges.length}`,
       ],
       statement: proposal.candidate.statement,
       policyVersion: AGENTIC_POLICY_VERSION,
@@ -142,6 +198,8 @@ export function materializeAgenticProposal(
       evidenceArtifactRefs: [input.artifact_id],
       sourceEventId: proposal.source_event_id,
       confidence: proposal.candidate.confidence,
+      provenance,
+      ...(subjectRef !== null ? { subjectRef } : {}),
       idempotencyKey: agenticObservationIdempotencyKey(
         proposal.source_event_id,
         AGENTIC_POLICY_VERSION,
@@ -163,6 +221,8 @@ export function materializeAgenticProposal(
             ? (extraction.error ?? "observation_failed")
             : (extraction.reason ?? "observation_skipped"),
         ],
+        provenance_ref_count: provenance.length,
+        subject_ref: subjectRef,
         canonical_effect: "none",
       };
     }
@@ -181,8 +241,10 @@ export function materializeAgenticProposal(
       observation_status: extraction.status === "replay" ? "replay" : "created",
       disposition_status: disp.status,
       reason_codes: wantPromote
-        ? ["materialized_promote_observation"]
-        : ["materialized_hold_draft_observation"],
+        ? ["materialized_promote_observation", "graph_lineage_written"]
+        : ["materialized_hold_draft_observation", "graph_lineage_written"],
+      provenance_ref_count: provenance.length,
+      subject_ref: subjectRef,
       canonical_effect: "observation",
     };
   } catch (e) {
@@ -194,6 +256,8 @@ export function materializeAgenticProposal(
       observation_status: "failed",
       disposition_status: "failed",
       reason_codes: [e instanceof Error ? e.message : "materialize_failed"],
+      provenance_ref_count: provenance.length,
+      subject_ref: subjectRef,
       canonical_effect: "none",
     };
   }

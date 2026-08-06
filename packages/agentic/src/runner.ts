@@ -20,6 +20,10 @@ export type AgenticRunnerReport = {
   feed_skipped: number;
   pipelines: AgenticPipelineResult[];
   materializations: number;
+  /** P4 structure edge proposals across pipelines. */
+  structure_edge_count: number;
+  /** P4 E9 projection hook fired. */
+  project_invoked: boolean;
   network_used: boolean;
   flash_calls: number;
   reason_codes: string[];
@@ -59,6 +63,8 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     feed_skipped: 0,
     pipelines: [],
     materializations: 0,
+    structure_edge_count: 0,
+    project_invoked: false,
     network_used: false,
     flash_calls: 0,
     reason_codes: [],
@@ -102,6 +108,12 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
 
     const signal = signal_text.length > 0 ? signal_text : `(empty capture ${row.source_event_id})`;
 
+    const structureContext = {
+      artifact_id: row.artifact_id,
+      subject_ref: input.store.projectId,
+      sibling_unit_event_ids: observationIds,
+    };
+
     // Offline-first pass (always valid product path).
     let pipeline = runAgenticProposalPipeline(input.agenticDb, {
       trust_zone_id: row.trust_zone_id,
@@ -112,6 +124,7 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
       allow_network: false,
       allow_auto_promote: input.allow_auto_promote === true,
       agentic_enabled: true,
+      ...structureContext,
       ...nowOpt,
     });
 
@@ -155,16 +168,13 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           agentic_enabled: true,
           flash_triage_text,
           flash_extract_text,
+          ...structureContext,
           ...nowOpt,
         });
       }
     }
 
-    // E6: lineage edge marker on gate reason_codes (derived_from → source evidence).
-    pipeline = {
-      ...pipeline,
-      proposals: attachDerivedFromMarkers(pipeline.proposals, row.source_event_id),
-    };
+    report.structure_edge_count += pipeline.structure_edge_count;
     report.pipelines.push(pipeline);
 
     if (lease !== undefined) {
@@ -204,6 +214,7 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           proposal,
           artifact_id: row.artifact_id,
           allow_promote_materialize: input.allow_auto_promote === true,
+          subject_ref: input.store.projectId,
         });
         if (mat.ok && mat.observation_event_id !== null) {
           report.materializations += 1;
@@ -225,23 +236,11 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
       trust_zone_id,
       observation_event_ids: observationIds,
     });
+    report.project_invoked = true;
     report.reason_codes.push("project_hook_invoked");
   }
 
   return report;
-}
-
-function attachDerivedFromMarkers(
-  proposals: AgenticProposalRecord[],
-  source_event_id: string,
-): AgenticProposalRecord[] {
-  return proposals.map((p) => ({
-    ...p,
-    gate: {
-      ...p.gate,
-      reason_codes: [...p.gate.reason_codes, `edge:derived_from:${source_event_id}`],
-    },
-  }));
 }
 
 /** List proposals held under agentic_v1 for operator review. */

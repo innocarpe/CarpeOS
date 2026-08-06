@@ -10,6 +10,7 @@ import {
   AGENTIC_FLASH_MODEL_ID,
   AGENTIC_PLANE,
   AGENTIC_POLICY_VERSION,
+  computeGraphDensityMetrics,
   countAgenticJobs,
   createFlashSpendState,
   evaluateAutoPromotePrecisionFromPath,
@@ -40,6 +41,7 @@ import {
 } from "@carpeos/okf-projection";
 import {
   ackEmbeddingJob,
+  buildGraphProjection,
   defaultEmbeddingProvider,
   ensureEmbeddingJob,
   leaseEmbeddingJobs,
@@ -1405,7 +1407,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|materialize|precision). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|materialize|precision|graph-metrics). See: carpeos help agentic",
     );
   }
 
@@ -1559,6 +1561,12 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             spend: createFlashSpendState({
               spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
             }),
+            // E9: rebuild retrieval + graph_v2 projection after materialize (never SoT).
+            on_project: () => {
+              withLocalRetrievalDatabase(store, (retrievalDb) =>
+                rebuildLocalRetrievalIndex(retrievalDb, new Date()),
+              );
+            },
           });
           writeJson(process.stdout, {
             ok: report.ok,
@@ -1568,6 +1576,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             model_id: AGENTIC_FLASH_MODEL_ID,
             allow_network: allowNetwork,
             network_used: report.network_used,
+            structure_edge_count: report.structure_edge_count,
+            project_invoked: report.project_invoked,
           });
           return report.ok ? 0 : 1;
         } finally {
@@ -1745,6 +1755,53 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         return report.pass ? 0 : 1;
       } finally {
         db.close();
+      }
+    }
+    case "graph-metrics": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+          rebuild: { type: "boolean", default: true },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const store = openStore(options, env);
+      try {
+        if (parsed.values.rebuild !== false) {
+          withLocalRetrievalDatabase(store, (retrievalDb) =>
+            rebuildLocalRetrievalIndex(retrievalDb, new Date()),
+          );
+        }
+        const events = store
+          .listCanonicalEventSnapshots({
+            visibleTrustZoneIds: [store.trustZone.trust_zone_id],
+          })
+          .map((row) => row.event);
+        const snapshot = buildGraphProjection({
+          events,
+          origins: new Map(),
+        });
+        const metrics = computeGraphDensityMetrics(snapshot);
+        writeJson(process.stdout, {
+          ok: true,
+          command: "agentic.graph-metrics",
+          trust_zone_id: store.trustZone.trust_zone_id,
+          project_id: store.projectId,
+          metrics,
+          rebuilt: parsed.values.rebuild !== false,
+        });
+        return 0;
+      } finally {
+        store.close();
       }
     }
     default:
@@ -2022,6 +2079,7 @@ USAGE
   carpeos agentic list-held [--limit N]
   carpeos agentic materialize --proposal-id <id> --artifact-id <id> [--allow-promote]
   carpeos agentic precision [--path <golden-manifest.json>]
+  carpeos agentic graph-metrics [--home <path>] [--rebuild]
 
 SUBCOMMANDS
   status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
@@ -2030,6 +2088,7 @@ SUBCOMMANDS
   list-held    List agentic_v1 hold proposals for human review
   materialize  Materialize one proposal to draft Observation + disposition
   precision    P3 offline auto-promote precision suite (must ≥ 0.90; zero must_not leaks)
+  graph-metrics  P4 meaning graph density (rebuild graph_v2; projection only)
 
 HARD FENCES
   - Capture inserts feed only (no LLM/network/await in capture transaction)
