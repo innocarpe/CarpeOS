@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -18,6 +18,7 @@ import {
 import {
   assertBaseOwnedProtocolEvidence,
   assertCandidateWorkspaceBoundary,
+  assertExecutableRootBinding,
   assertStrictReplayEvidence,
   buildBaseOwnedProtocolEvidence,
   classifyImmutableCandidateScope,
@@ -42,6 +43,7 @@ import {
 } from "../product4/policy-identity.mjs";
 import { publishAttestation } from "../product4/publisher.mjs";
 import { buildRawCandidateReport } from "../product4/raw-producer.mjs";
+import { gitTreeSha256 } from "../product4/tree-digest.mjs";
 
 const headSha = "a".repeat(40);
 const identity = {
@@ -351,6 +353,61 @@ function evaluate(overrides = {}) {
     requireCandidateExecutionObservation: true,
     ...overrides,
   });
+}
+const syntheticGitEnv = {
+  ...process.env,
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+};
+
+function runSyntheticGit(cwd, args) {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: syntheticGitEnv,
+  });
+  assert.equal(result.status, 0, result.stderr?.trim() || `git ${args.join(" ")} failed`);
+  return result.stdout.trim();
+}
+
+function writeSyntheticCliEntrypoint(root) {
+  const entrypoint = join(root, "apps/carpeos-cli/dist/index.js");
+  mkdirSync(dirname(entrypoint), { recursive: true });
+  writeFileSync(entrypoint, "export {};\n", "utf8");
+}
+
+function createExecutableRootFixture() {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "product4-executable-root-"));
+  const candidateRoot = join(fixtureRoot, "candidate");
+  mkdirSync(candidateRoot);
+  runSyntheticGit(candidateRoot, ["init"]);
+  runSyntheticGit(candidateRoot, ["config", "user.email", "product4-tests@example.invalid"]);
+  runSyntheticGit(candidateRoot, ["config", "user.name", "Product 4 tests"]);
+  writeFileSync(join(candidateRoot, ".gitignore"), "dist/\n", "utf8");
+  writeFileSync(join(candidateRoot, "tracked.txt"), "fixture\n", "utf8");
+  runSyntheticGit(candidateRoot, ["add", ".gitignore", "tracked.txt"]);
+  runSyntheticGit(candidateRoot, ["commit", "--message", "synthetic C"]);
+
+  const workspaceRoot = join(fixtureRoot, "workspace");
+  const cliRoot = join(fixtureRoot, "cli");
+  runSyntheticGit(fixtureRoot, ["clone", candidateRoot, workspaceRoot]);
+  runSyntheticGit(fixtureRoot, ["clone", candidateRoot, cliRoot]);
+  writeSyntheticCliEntrypoint(workspaceRoot);
+  writeSyntheticCliEntrypoint(cliRoot);
+
+  return {
+    candidateRoot,
+    workspaceRoot,
+    cliRoot,
+    home: mkdtempSync(join(fixtureRoot, "home-")),
+    expectedHeadSha: runSyntheticGit(candidateRoot, ["rev-parse", "HEAD"]),
+    expectedTreeSha256: gitTreeSha256({ repoRoot: candidateRoot }),
+    trustedRoot: mkdtempSync(join(fixtureRoot, "trusted-")),
+  };
+}
+
+function assertExecutableFixture(fixture) {
+  return assertExecutableRootBinding(fixture);
 }
 
 test("M4 emits a strict attestation only after independent all-predicate recomputation", () => {
@@ -785,6 +842,46 @@ test("M4 refuses caller-supplied protocol observations", () => {
   );
 });
 
+test("M4 accepts clean executable roots while allowing ignored CLI build output", () => {
+  const fixture = createExecutableRootFixture();
+  assert.doesNotThrow(() => assertExecutableFixture(fixture));
+});
+
+test("M4 refuses tracked workspace mutations after the candidate build", () => {
+  const fixture = createExecutableRootFixture();
+  writeFileSync(join(fixture.workspaceRoot, "tracked.txt"), "workspace mutation\n", "utf8");
+  assert.throws(
+    () => assertExecutableFixture(fixture),
+    /candidate_workspace_boundary: workspace root must be a clean checkout of C/,
+  );
+});
+
+test("M4 refuses non-ignored workspace content after the candidate build", () => {
+  const fixture = createExecutableRootFixture();
+  writeFileSync(join(fixture.workspaceRoot, "workspace-untracked.txt"), "untracked\n", "utf8");
+  assert.throws(
+    () => assertExecutableFixture(fixture),
+    /candidate_workspace_boundary: workspace root must be a clean checkout of C/,
+  );
+});
+
+test("M4 refuses tracked CLI mutations after the candidate build", () => {
+  const fixture = createExecutableRootFixture();
+  writeFileSync(join(fixture.cliRoot, "tracked.txt"), "CLI mutation\n", "utf8");
+  assert.throws(
+    () => assertExecutableFixture(fixture),
+    /candidate_workspace_boundary: CLI root must be a clean checkout of C/,
+  );
+});
+
+test("M4 refuses non-ignored CLI content after the candidate build", () => {
+  const fixture = createExecutableRootFixture();
+  writeFileSync(join(fixture.cliRoot, "cli-untracked.txt"), "untracked\n", "utf8");
+  assert.throws(
+    () => assertExecutableFixture(fixture),
+    /candidate_workspace_boundary: CLI root must be a clean checkout of C/,
+  );
+});
 test("M4 rejects workspace overlap and output symlink overwrite attempts", () => {
   const trusted = mkdtempSync(join(tmpdir(), "product4-trusted-"));
   const isolated = mkdtempSync(join(tmpdir(), "product4-candidate-"));

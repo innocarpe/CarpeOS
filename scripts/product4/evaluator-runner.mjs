@@ -216,8 +216,9 @@ function assertSandboxWorkspaceBoundary({ workspaceRoot, cliRoot }) {
 
 /**
  * Bind every executed root to exact C identity. Candidate must be a clean git
- * checkout of C. Workspace/CLI may be dirty sandboxed builds, but must still
- * resolve to the same HEAD as C and must not overlap trusted/home/output roots.
+ * checkout of C. Workspace/CLI may contain ignored sandbox build outputs, but
+ * tracked and non-ignored content must remain clean and resolve to the same HEAD
+ * as C without overlapping trusted/home/output roots.
  */
 export function assertExecutableRootBinding({
   candidateRoot,
@@ -284,6 +285,8 @@ export function assertExecutableRootBinding({
     throwRunnerError("head_moved", "workspace root HEAD is not the expected C");
   if (cliHead !== expectedHeadSha)
     throwRunnerError("head_moved", "CLI root HEAD is not the expected C");
+  assertCleanGitWorktree(workspaceReal, "workspace");
+  assertCleanGitWorktree(cliReal, "CLI");
 
   assertCliEntrypoint(cliReal);
   if (workspaceReal !== cliReal) assertCliEntrypoint(workspaceReal);
