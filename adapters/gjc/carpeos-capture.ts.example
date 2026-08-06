@@ -1,0 +1,71 @@
+/**
+ * CarpeOS capture hook for Gajae Code / GJC.
+ *
+ * Install (product path):
+ *   carpeos setup hooks install --apply
+ *   # writes to ~/.gjc/agent/hooks/carpeos-capture.ts
+ *
+ * Manual:
+ *   cp adapters/gjc/carpeos-capture.ts.example ~/.gjc/agent/hooks/carpeos-capture.ts
+ *
+ * Auto-discovered by GJC. Fail-open: capture errors never block the agent.
+ *
+ * Placeholder __CARPEOS_BIN__ is rewritten to an absolute carpeos wrapper path
+ * by `carpeos setup hooks install`.
+ */
+import { spawn } from "node:child_process";
+import type { HookAPI } from "@gajae-code/coding-agent";
+
+const CARPEOS_BIN = "__CARPEOS_BIN__";
+
+function capture(eventName: string, payload: Record<string, unknown>): void {
+  try {
+    const body = JSON.stringify({
+      hook_event_name: eventName,
+      timestamp: new Date().toISOString(),
+      ...payload,
+    });
+    const child = spawn(
+      CARPEOS_BIN,
+      ["capture-hook", "--provider", "gjc", "--fail-open", "--quiet"],
+      {
+        stdio: ["pipe", "ignore", "ignore"],
+        detached: true,
+      },
+    );
+    child.unref();
+    child.stdin?.end(body, "utf8");
+  } catch {
+    // fail-open
+  }
+}
+
+export default function (pi: HookAPI): void {
+  pi.on("session_start", async (event) => {
+    capture("SessionStart", {
+      session_id: (event as { sessionId?: string }).sessionId,
+      type: "session_start",
+    });
+  });
+
+  pi.on("turn_end", async (event) => {
+    capture("Stop", {
+      type: "turn_end",
+      ...(event as Record<string, unknown>),
+    });
+  });
+
+  pi.on("tool_result", async (event) => {
+    capture("PostToolUse", {
+      type: "tool_result",
+      ...(event as Record<string, unknown>),
+    });
+  });
+
+  pi.on("session_shutdown", async (event) => {
+    capture("SessionEnd", {
+      type: "session_shutdown",
+      ...(event as Record<string, unknown>),
+    });
+  });
+}

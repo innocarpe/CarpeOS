@@ -52,6 +52,30 @@ numeric timeout shape rather than a millisecond value.
 
 Official reference: <https://docs.x.ai/build/features/hooks>
 
+## DeepSeek Build
+
+Grok-derived terminal agent (`deepseek-build` / `dsb`). Product install writes
+`~/.deepseek-build/hooks.json` from `deepseek-build/hooks.json.example` and uses
+`--provider deepseek_build`. MCP registration is deferred until the host exposes
+a stable `mcp` CLI; hooks are prepared now for when lifecycle support lands.
+
+## Gajae Code / GJC
+
+Product install writes a TypeScript plugin to
+`~/.gjc/agent/hooks/carpeos-capture.ts` (auto-discovered by GJC) and stores MCP
+via `gjc mcp add`. Capture provider id: `gjc` (alias `gajae`).
+
+## Deep Code
+
+No Claude-style lifecycle hooks yet. Product install merges
+`mcpServers.carpeos` into `~/.deepcode/settings.json` (other keys and secrets
+are preserved). Capture provider id `deepcode` is accepted for manual envelopes.
+
+## Reasonix
+
+Product install registers MCP with `reasonix mcp add carpeos`. Lifecycle hooks
+are not merged yet (see `reasonix/README.md`). Capture provider id: `reasonix`.
+
 ## Kimi / frontier consumers
 
 `kimi/` documents how frontier agents (including Kimi K3-class models) consume

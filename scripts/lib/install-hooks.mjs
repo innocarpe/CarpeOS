@@ -1,7 +1,12 @@
 /**
- * Capture-hook install helpers for Claude / Codex / Grok host configs.
+ * Capture-hook install helpers for multi-host agent configs.
  * Merges CarpeOS entries without wiping user hooks; rewrites commands to an
  * absolute carpeos wrapper path (prefer ~/.local/bin/carpeos).
+ *
+ * Hosts with lifecycle capture install:
+ *   claude, codex, grok, deepseek-build (JSON hooks), gjc (TypeScript hook plugin)
+ * MCP-only hosts (no lifecycle merge here — see install-core registerHostMcp):
+ *   deepcode, reasonix
  */
 import {
   copyFileSync,
@@ -11,13 +16,57 @@ import {
   renameSync,
   writeFileSync,
   chmodSync,
+  unlinkSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
-export const HOOK_HOSTS = ["claude", "codex", "grok"];
+/** Hosts that receive capture lifecycle install. */
+export const HOOK_HOSTS = ["claude", "codex", "grok", "gjc", "deepseek-build"];
+
+/** All setup hosts (hooks and/or MCP). */
+export const SETUP_HOSTS = [
+  "claude",
+  "codex",
+  "grok",
+  "gjc",
+  "deepcode",
+  "reasonix",
+  "deepseek-build",
+];
+
 export const CAPTURE_HOOK_MARKER = "capture-hook --provider";
+
+/** @type {Record<string, string>} */
+const HOST_ALIASES = {
+  gajae: "gjc",
+  "gajae-code": "gjc",
+  dsb: "deepseek-build",
+  deepseek_build: "deepseek-build",
+  "deep-code": "deepcode",
+};
+
+/**
+ * Canonical host id from user input.
+ * @param {string} host
+ */
+export function normalizeHostId(host) {
+  const key = String(host || "")
+    .trim()
+    .toLowerCase();
+  return HOST_ALIASES[key] ?? key;
+}
+
+/**
+ * capture-hook --provider id for a setup host.
+ * @param {string} host
+ */
+export function hostToProvider(host) {
+  const h = normalizeHostId(host);
+  if (h === "deepseek-build") return "deepseek_build";
+  return h;
+}
 
 /**
  * Default user-layer config path per host (not CarpeOS home).
@@ -26,15 +75,22 @@ export const CAPTURE_HOOK_MARKER = "capture-hook --provider";
  */
 export function defaultHookConfigPath(host, env = process.env) {
   const userHome = env.HOME?.trim() || homedir();
-  if (host === "claude") {
+  const h = normalizeHostId(host);
+  if (h === "claude") {
     return join(userHome, ".claude", "settings.json");
   }
-  if (host === "codex") {
+  if (h === "codex") {
     return join(userHome, ".codex", "hooks.json");
   }
-  if (host === "grok") {
-    // Product path for Grok Build user-layer hooks (see adapters/README.md).
+  if (h === "grok") {
     return join(userHome, ".grok", "hooks.json");
+  }
+  if (h === "deepseek-build") {
+    // Grok-derived; product path prepared for DeepSeek Build hooks layer.
+    return join(userHome, ".deepseek-build", "hooks.json");
+  }
+  if (h === "gjc") {
+    return join(userHome, ".gjc", "agent", "hooks", "carpeos-capture.ts");
   }
   throw new Error(`unsupported hook host: ${host}`);
 }
@@ -79,17 +135,26 @@ export function resolveHooksTemplateDir(repoOrPackageRoot, fromUrl = import.meta
  * @param {string} templateDir
  */
 export function loadHookTemplate(host, templateDir) {
-  if (host === "claude") {
+  const h = normalizeHostId(host);
+  if (h === "claude") {
     const path = join(templateDir, "claude", "settings.json.example");
     return JSON.parse(readFileSync(path, "utf8"));
   }
-  if (host === "codex") {
+  if (h === "codex") {
     const path = join(templateDir, "codex", "hooks.json.example");
     return JSON.parse(readFileSync(path, "utf8"));
   }
-  if (host === "grok") {
+  if (h === "grok") {
     const path = join(templateDir, "grok", "hooks.json.example");
     return JSON.parse(readFileSync(path, "utf8"));
+  }
+  if (h === "deepseek-build") {
+    const path = join(templateDir, "deepseek-build", "hooks.json.example");
+    return JSON.parse(readFileSync(path, "utf8"));
+  }
+  if (h === "gjc") {
+    const path = join(templateDir, "gjc", "carpeos-capture.ts.example");
+    return { kind: "gjc_ts", source: readFileSync(path, "utf8") };
   }
   throw new Error(`unsupported hook host: ${host}`);
 }
@@ -97,12 +162,21 @@ export function loadHookTemplate(host, templateDir) {
 /**
  * Absolute-safe capture-hook command string for a host provider.
  * @param {string} binDir
- * @param {string} provider
+ * @param {string} providerOrHost - provider id or setup host id
  */
-export function captureHookCommand(binDir, provider) {
+export function captureHookCommand(binDir, providerOrHost) {
   const bin = resolve(binDir, "carpeos");
   const quoted = shellQuotePath(bin);
+  const provider = hostToProvider(providerOrHost);
   return `${quoted} capture-hook --provider ${provider} --fail-open --quiet`;
+}
+
+/**
+ * Absolute carpeos binary path (unquoted).
+ * @param {string} binDir
+ */
+export function carpeosBinPath(binDir) {
+  return resolve(binDir, "carpeos");
 }
 
 /**
@@ -122,9 +196,13 @@ export function isCarpeosCaptureCommand(command, provider) {
     return false;
   }
   const normalized = command.replace(/['"]/g, " ");
+  const providerId = hostToProvider(provider);
   return (
     normalized.includes("capture-hook") &&
-    (normalized.includes(`--provider ${provider}`) || normalized.includes(`--provider=${provider}`))
+    (normalized.includes(`--provider ${providerId}`) ||
+      normalized.includes(`--provider=${providerId}`) ||
+      normalized.includes(`--provider ${provider}`) ||
+      normalized.includes(`--provider=${provider}`))
   );
 }
 
@@ -135,6 +213,11 @@ export function isCarpeosCaptureCommand(command, provider) {
  * @param {string} binDir
  */
 export function materializeHookTemplate(template, host, binDir) {
+  if (template && template.kind === "gjc_ts") {
+    const bin = carpeosBinPath(binDir);
+    const source = String(template.source || "").replaceAll("__CARPEOS_BIN__", bin);
+    return { kind: "gjc_ts", source, provider: hostToProvider(host) };
+  }
   const command = captureHookCommand(binDir, host);
   const clone = structuredClone(template);
   const hooksRoot = clone.hooks;
@@ -195,8 +278,10 @@ export function mergeHostHooks(existing, carpeosTemplate, host) {
     // Use first template group as the CarpeOS payload for this event.
     const templateGroup = structuredClone(templateGroups[0]);
     const templateEntries = Array.isArray(templateGroup.hooks) ? templateGroup.hooks : [];
+    const provider = hostToProvider(host);
     const carpeosEntries = templateEntries.filter(
-      (entry) => entry && entry.type === "command" && isCarpeosCaptureCommand(entry.command, host),
+      (entry) =>
+        entry && entry.type === "command" && isCarpeosCaptureCommand(entry.command, provider),
     );
     if (carpeosEntries.length === 0) {
       continue;
@@ -326,14 +411,48 @@ export function uninstallHostHooks(existing, host) {
 export function probeHostHooks(input) {
   const exists = input.exists ?? existsSync;
   const readFile = input.readFile ?? readFileSync;
-  const expected = captureHookCommand(input.binDir, input.host);
+  const host = normalizeHostId(input.host);
+  const expected = captureHookCommand(input.binDir, host);
 
   if (!exists(input.configPath)) {
     return {
-      host: input.host,
+      host,
       status: "not_installed",
       config_path: input.configPath,
       detail: "config file missing",
+    };
+  }
+
+  // GJC TypeScript plugin path
+  if (host === "gjc" || input.configPath.endsWith(".ts")) {
+    let text = "";
+    try {
+      text = readFile(input.configPath, "utf8");
+    } catch (error) {
+      return {
+        host,
+        status: "failed",
+        config_path: input.configPath,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    const hasCapture = text.includes("capture-hook") && text.includes("gjc");
+    const hasAbs = text.includes(carpeosBinPath(input.binDir));
+    if (!hasCapture) {
+      return {
+        host,
+        status: "not_installed",
+        config_path: input.configPath,
+        detail: "file present but no CarpeOS capture hook",
+      };
+    }
+    return {
+      host,
+      status: hasAbs ? "ok" : "stale_path",
+      config_path: input.configPath,
+      entries: 1,
+      command: expected,
+      kind: "gjc_ts",
     };
   }
 
@@ -458,14 +577,89 @@ export function installCaptureHooks(options) {
   /** @type {object[]} */
   const results = [];
 
-  for (const host of options.hosts) {
+  for (const rawHost of options.hosts) {
+    const host = normalizeHostId(rawHost);
     if (!HOOK_HOSTS.includes(host)) {
-      results.push({ host, status: "skipped", reason: "unsupported host" });
+      results.push({
+        host,
+        status: "skipped",
+        reason:
+          host === "deepcode" || host === "reasonix"
+            ? "mcp-only host (no lifecycle hooks merge; use setup run --register-mcp)"
+            : "unsupported host",
+      });
       continue;
     }
     const configPath = options.pathForHost?.(host) ?? defaultHookConfigPath(host, env);
     const template = loadHookTemplate(host, options.templateDir);
     const materialized = materializeHookTemplate(template, host, options.binDir);
+    const command = captureHookCommand(options.binDir, host);
+
+    // GJC: TypeScript hook plugin file (not JSON merge).
+    if (materialized && materialized.kind === "gjc_ts") {
+      const body = `${materialized.source}\n`;
+      let existing = "";
+      if (exists(configPath)) {
+        try {
+          existing = readFile(configPath, "utf8");
+        } catch (error) {
+          results.push({
+            host,
+            status: "failed",
+            config_path: configPath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+      }
+      const changed = existing !== body;
+      if (options.dryRun) {
+        results.push({
+          host,
+          status: "dry_run",
+          config_path: configPath,
+          would_change: changed,
+          events: ["session_start", "turn_end", "tool_result", "session_shutdown"],
+          command,
+          kind: "gjc_ts",
+        });
+        continue;
+      }
+      if (!changed) {
+        results.push({
+          host,
+          status: "unchanged",
+          config_path: configPath,
+          command,
+          kind: "gjc_ts",
+        });
+        continue;
+      }
+      mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
+      if (exists(configPath)) {
+        try {
+          copyFile(configPath, `${configPath}.carpeos-bak`);
+        } catch {
+          // best-effort
+        }
+      }
+      writeFile(configPath, body, { encoding: "utf8", mode: 0o600 });
+      try {
+        chmod(configPath, 0o600);
+      } catch {
+        // ignore
+      }
+      log(`Installed GJC capture hook → ${configPath}`);
+      results.push({
+        host,
+        status: "installed",
+        config_path: configPath,
+        events: ["session_start", "turn_end", "tool_result", "session_shutdown"],
+        command,
+        kind: "gjc_ts",
+      });
+      continue;
+    }
 
     let existing = {};
     if (exists(configPath)) {
@@ -483,7 +677,6 @@ export function installCaptureHooks(options) {
     }
 
     const { merged, changed, events } = mergeHostHooks(existing, materialized, host);
-    const command = captureHookCommand(options.binDir, host);
 
     if (options.dryRun) {
       results.push({
@@ -565,7 +758,8 @@ export function uninstallCaptureHooks(options) {
   /** @type {object[]} */
   const results = [];
 
-  for (const host of options.hosts) {
+  for (const rawHost of options.hosts) {
+    const host = normalizeHostId(rawHost);
     if (!HOOK_HOSTS.includes(host)) {
       results.push({ host, status: "skipped", reason: "unsupported host" });
       continue;
@@ -578,6 +772,45 @@ export function uninstallCaptureHooks(options) {
         status: "absent",
         config_path: configPath,
       });
+      continue;
+    }
+
+    // GJC TypeScript hook: delete CarpeOS file when it is ours.
+    if (host === "gjc") {
+      let text = "";
+      try {
+        text = readFile(configPath, "utf8");
+      } catch (error) {
+        results.push({
+          host,
+          status: "failed",
+          config_path: configPath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+      const isOurs =
+        text.includes("capture-hook") && text.includes("--provider") && text.includes("gjc");
+      if (options.dryRun) {
+        results.push({
+          host,
+          status: "dry_run",
+          config_path: configPath,
+          would_change: isOurs,
+        });
+        continue;
+      }
+      if (!isOurs) {
+        results.push({ host, status: "unchanged", config_path: configPath });
+        continue;
+      }
+      try {
+        unlinkSync(configPath);
+      } catch {
+        writeFile(configPath, "// carpeos capture hook removed\n", { encoding: "utf8" });
+      }
+      log(`Removed GJC capture hook (${configPath})`);
+      results.push({ host, status: "uninstalled", config_path: configPath });
       continue;
     }
 
@@ -677,28 +910,60 @@ export function parseHookHostsSpec(spec) {
   }
   const hosts = value
     .split(",")
-    .map((h) => h.trim())
+    .map((h) => normalizeHostId(h.trim()))
     .filter(Boolean);
   for (const h of hosts) {
-    if (!HOOK_HOSTS.includes(h)) {
-      throw new Error(`invalid hook host "${h}" (allowed: auto, none, claude, codex, grok)`);
+    if (!HOOK_HOSTS.includes(h) && !SETUP_HOSTS.includes(h)) {
+      throw new Error(
+        `invalid hook host "${h}" (allowed: auto, none, ${SETUP_HOSTS.join(", ")}, aliases: gajae,dsb)`,
+      );
     }
   }
+  // MCP-only hosts are accepted in the list but skipped at install time.
   return { hosts, skip: false };
 }
 
 /**
+ * Detect whether a setup host binary (or home install) is present.
+ * @param {string} host
+ * @param {(cmd: string) => boolean} commandExistsFn
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function hostIsPresent(host, commandExistsFn, env = process.env) {
+  const h = normalizeHostId(host);
+  if (h === "deepseek-build") {
+    if (commandExistsFn("deepseek-build") || commandExistsFn("dsb")) return true;
+    const home = env.HOME?.trim() || homedir();
+    return (
+      existsSync(join(home, ".deepseek-build", "bin", "deepseek-build")) ||
+      existsSync(join(home, ".deepseek-build", "bin", "dsb"))
+    );
+  }
+  if (h === "gjc") {
+    return commandExistsFn("gjc") || commandExistsFn("gajae");
+  }
+  if (h === "deepcode") {
+    return commandExistsFn("deepcode");
+  }
+  if (h === "reasonix") {
+    return commandExistsFn("reasonix");
+  }
+  return commandExistsFn(h);
+}
+
+/**
  * Resolve which hosts to touch for hooks install when spec is auto.
- * Prefer hosts that exist on PATH; if none, install all three user-layer paths.
+ * Prefer hosts that exist on PATH / known home bins; if none, install core JSON hosts.
  * @param {(cmd: string) => boolean} commandExistsFn
  * @param {string[] | undefined} hostList
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function resolveHookHosts(commandExistsFn, hostList) {
+export function resolveHookHosts(commandExistsFn, hostList, env = process.env) {
   if (Array.isArray(hostList) && hostList.length > 0) {
-    return hostList;
+    return hostList.map(normalizeHostId);
   }
-  const detected = HOOK_HOSTS.filter((h) => commandExistsFn(h));
-  return detected.length > 0 ? detected : [...HOOK_HOSTS];
+  const detected = HOOK_HOSTS.filter((h) => hostIsPresent(h, commandExistsFn, env));
+  return detected.length > 0 ? detected : ["claude", "codex", "grok"];
 }
 
 function stripHooksKey(group) {

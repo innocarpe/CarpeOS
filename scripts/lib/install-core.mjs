@@ -17,6 +17,9 @@ import {
   resolveHooksTemplateDir,
   uninstallCaptureHooks,
   HOOK_HOSTS,
+  SETUP_HOSTS,
+  hostIsPresent,
+  normalizeHostId,
 } from "./install-hooks.mjs";
 
 export const DEFAULT_TRUST_ZONE = "tz_local_default";
@@ -415,14 +418,21 @@ export function installLocal(options) {
 export function detectHosts(run = defaultRun) {
   /** @type {{ name: string, command: string }[]} */
   const hosts = [];
-  if (commandExists("claude", run)) {
-    hosts.push({ name: "claude", command: "claude" });
-  }
-  if (commandExists("codex", run)) {
-    hosts.push({ name: "codex", command: "codex" });
-  }
-  if (commandExists("grok", run)) {
-    hosts.push({ name: "grok", command: "grok" });
+  const existsCmd = (cmd) => commandExists(cmd, run);
+  /** @type {Array<[string, string]>} */
+  const candidates = [
+    ["claude", "claude"],
+    ["codex", "codex"],
+    ["grok", "grok"],
+    ["gjc", "gjc"],
+    ["deepcode", "deepcode"],
+    ["reasonix", "reasonix"],
+    ["deepseek-build", "deepseek-build"],
+  ];
+  for (const [name, command] of candidates) {
+    if (hostIsPresent(name, existsCmd)) {
+      hosts.push({ name, command });
+    }
   }
   return hosts;
 }
@@ -447,20 +457,22 @@ export function registerHostMcp(input) {
     `CARPEOS_MCP_VISIBLE_TRUST_ZONES=${config.trust_zone_id}`,
   ];
 
-  if (!commandExists(host, run) && host !== "claude" && host !== "codex" && host !== "grok") {
-    return { host, status: "skipped", reason: "unknown host" };
+  const hostId = normalizeHostId(host);
+  const existsCmd = (cmd) => commandExists(cmd, run);
+  if (!SETUP_HOSTS.includes(hostId)) {
+    return { host: hostId, status: "skipped", reason: "unknown host" };
   }
-  if (!commandExists(host, run)) {
-    return { host, status: "skipped", reason: `${host} not on PATH` };
+  if (!hostIsPresent(hostId, existsCmd) && hostId !== "deepseek-build") {
+    return { host: hostId, status: "skipped", reason: `${hostId} not on PATH` };
   }
 
-  log(`Registering MCP with ${host}...`);
+  log(`Registering MCP with ${hostId}...`);
   if (dryRun) {
-    return { host, status: "dry_run", mcpCommand, envPairs };
+    return { host: hostId, status: "dry_run", mcpCommand, envPairs };
   }
 
   try {
-    if (host === "claude") {
+    if (hostId === "claude") {
       // Remove prior registration if present (ignore failures).
       run("claude", ["mcp", "remove", "carpeos"]);
       const envArgs = envPairs.flatMap((pair) => ["--env", pair]);
@@ -490,14 +502,14 @@ export function registerHostMcp(input) {
         ]);
       }
       return {
-        host,
+        host: hostId,
         status: result.status === 0 ? "registered" : "failed",
         code: result.status,
         stderr: (result.stderr || result.stdout).trim().slice(0, 500),
       };
     }
 
-    if (host === "codex") {
+    if (hostId === "codex") {
       run("codex", ["mcp", "remove", "carpeos"]);
       const result = run("codex", [
         "mcp",
@@ -508,19 +520,19 @@ export function registerHostMcp(input) {
         mcpCommand,
       ]);
       return {
-        host,
+        host: hostId,
         status: result.status === 0 ? "registered" : "failed",
         code: result.status,
         stderr: (result.stderr || result.stdout).trim().slice(0, 500),
       };
     }
 
-    if (host === "grok") {
+    if (hostId === "grok") {
       // grok mcp add may not accept env flags; wrapper already sources mcp.env.
       run("grok", ["mcp", "remove", "carpeos"]);
       const result = run("grok", ["mcp", "add", "carpeos", "--", mcpCommand]);
       return {
-        host,
+        host: hostId,
         status: result.status === 0 ? "registered" : "failed",
         code: result.status,
         stderr: (result.stderr || result.stdout).trim().slice(0, 500),
@@ -528,14 +540,116 @@ export function registerHostMcp(input) {
       };
     }
 
-    return { host, status: "skipped", reason: "unsupported host" };
+    if (hostId === "reasonix") {
+      // Legacy form: reasonix mcp add <name> <command> [args...]  (no "--" separator)
+      run("reasonix", ["mcp", "remove", "carpeos"]);
+      const envArgs = envPairs.flatMap((pair) => ["--env", pair]);
+      const result = run("reasonix", ["mcp", "add", "carpeos", ...envArgs, mcpCommand]);
+      return {
+        host: hostId,
+        status: result.status === 0 ? "registered" : "failed",
+        code: result.status,
+        stderr: (result.stderr || result.stdout).trim().slice(0, 500),
+      };
+    }
+
+    if (hostId === "gjc") {
+      // GJC stores MCP definitions (runtime load may be session/flag dependent).
+      run("gjc", ["mcp", "remove", "carpeos"]);
+      const envArgs = envPairs.flatMap((pair) => ["--env", pair]);
+      const result = run("gjc", [
+        "mcp",
+        "add",
+        "carpeos",
+        "--force",
+        "--command",
+        mcpCommand,
+        ...envArgs,
+      ]);
+      return {
+        host: hostId,
+        status: result.status === 0 ? "registered" : "failed",
+        code: result.status,
+        stderr: (result.stderr || result.stdout).trim().slice(0, 500),
+        note: "GJC MCP store; use --mcp-config or session support as host evolves",
+      };
+    }
+
+    if (hostId === "deepcode") {
+      return registerDeepcodeMcp({ config, mcpCommand, envPairs, dryRun: false, log });
+    }
+
+    if (hostId === "deepseek-build") {
+      return {
+        host: hostId,
+        status: "skipped",
+        reason:
+          "DeepSeek Build has no stable mcp CLI yet; hooks.json prepared via hooks install; MCP when host lands",
+      };
+    }
+
+    return { host: hostId, status: "skipped", reason: "unsupported host" };
   } catch (error) {
     return {
-      host,
+      host: hostId,
       status: "failed",
       stderr: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * Merge carpeos into ~/.deepcode/settings.json mcpServers (preserve other keys/secrets).
+ * @param {{
+ *   config: ReturnType<typeof buildConfig>,
+ *   mcpCommand: string,
+ *   envPairs: string[],
+ *   dryRun: boolean,
+ *   log: (msg: string) => void,
+ * }} input
+ */
+export function registerDeepcodeMcp(input) {
+  const { config, mcpCommand, envPairs, dryRun, log } = input;
+  // Prefer user home, not carpeos home
+  const userHome = process.env.HOME?.trim() || dirname(config.home);
+  const path = join(userHome, ".deepcode", "settings.json");
+  const envObj = Object.fromEntries(
+    envPairs.map((pair) => {
+      const i = pair.indexOf("=");
+      return [pair.slice(0, i), pair.slice(i + 1)];
+    }),
+  );
+  const carpeosServer = {
+    command: mcpCommand,
+    args: [],
+    env: envObj,
+  };
+
+  if (dryRun) {
+    return { host: "deepcode", status: "dry_run", path, mcpCommand };
+  }
+
+  let existing = {};
+  if (existsSync(path)) {
+    try {
+      existing = JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+      return {
+        host: "deepcode",
+        status: "failed",
+        path,
+        stderr: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  if (!existing.mcpServers || typeof existing.mcpServers !== "object") {
+    existing.mcpServers = {};
+  }
+  existing.mcpServers.carpeos = carpeosServer;
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, `${JSON.stringify(existing, null, 2)}\n`, { mode: 0o600 });
+  log(`Registered MCP carpeos in ${path} (secrets preserved; only mcpServers.carpeos written)`);
+  return { host: "deepcode", status: "registered", path };
 }
 
 /**
@@ -602,17 +716,54 @@ export function doctorInstall(input) {
   }
 
   if (!input.skipHostProbe) {
-    for (const host of ["claude", "codex", "grok"]) {
-      if (!commandExists(host, run)) {
+    const existsCmd = (cmd) => commandExists(cmd, run);
+    for (const host of SETUP_HOSTS) {
+      if (!hostIsPresent(host, existsCmd)) {
         checks.push(`${host}: not installed`);
         continue;
       }
-      const list = run(host, ["mcp", "list"]);
+      if (host === "deepcode") {
+        const settingsPath = join(
+          process.env.HOME?.trim() || homedir(),
+          ".deepcode",
+          "settings.json",
+        );
+        let hasCarpeos = false;
+        if (exists(settingsPath)) {
+          try {
+            const parsed = JSON.parse(readFileSync(settingsPath, "utf8"));
+            hasCarpeos = Boolean(parsed?.mcpServers?.carpeos);
+          } catch {
+            hasCarpeos = false;
+          }
+        }
+        checks.push(
+          `${host}_mcp: ${hasCarpeos ? "carpeos in settings.json" : "carpeos not in settings.json"}`,
+        );
+        if (!hasCarpeos) {
+          failures.push(
+            `${host}: carpeos MCP not in settings.json (re-run setup run --register-mcp)`,
+          );
+        }
+        continue;
+      }
+      if (host === "deepseek-build") {
+        checks.push(`${host}_mcp: deferred (hooks-first host; no mcp CLI yet)`);
+        continue;
+      }
+      if (!commandExists(host === "gjc" ? "gjc" : host, run) && host !== "reasonix") {
+        // hostIsPresent may use home bin; still try MCP if CLI exists
+      }
+      const cli = host === "gjc" ? "gjc" : host === "deepseek-build" ? "deepseek-build" : host;
+      if (!commandExists(cli, run) && !(host === "reasonix" && commandExists("reasonix", run))) {
+        checks.push(`${host}_mcp: skipped (cli missing)`);
+        continue;
+      }
+      const list = run(cli, host === "reasonix" ? ["mcp", "list"] : ["mcp", "list"]);
       const text = `${list.stdout}\n${list.stderr}`;
       const hasCarpeos = /\bcarpeos\b/i.test(text);
       checks.push(`${host}_mcp: ${hasCarpeos ? "carpeos listed" : "carpeos not listed"}`);
-      // Host list failure is warning-level only for doctor ok if wrappers exist
-      if (!hasCarpeos) {
+      if (!hasCarpeos && (host === "claude" || host === "codex" || host === "grok")) {
         failures.push(`${host}: carpeos MCP not listed (re-run install or register manually)`);
       }
     }
@@ -1130,10 +1281,11 @@ OPTIONS
   --trust-zone <id|auto>      Trust zone id (default: tz_local_default)
                               Use "auto" for a stable host-derived id
   --register-mcp <spec>       Who gets MCP registration:
-                              auto | none | claude,codex,grok
-                              (default: auto = every host CLI found on PATH)
+                              auto | none | claude,codex,grok,gjc,deepcode,reasonix,deepseek-build
+                              (aliases: gajae, dsb; default: auto = hosts on PATH)
   --register-hooks <spec>     Also install capture hooks during "run":
-                              auto | none | claude,codex,grok
+                              auto | none | claude,codex,grok,gjc,deepseek-build
+                              (deepcode/reasonix are MCP-only for setup)
                               (default: none — use "setup hooks install")
   --hosts <spec>              With "hooks *": same as --register-hooks host list
                               With "run": alias for --register-mcp (legacy)
@@ -1221,12 +1373,12 @@ export function resolveSetupPlan(args, ctx = {}) {
     skipMcp = false;
     hostList = registerMcp
       .split(",")
-      .map((h) => h.trim())
+      .map((h) => normalizeHostId(h.trim()))
       .filter(Boolean);
     for (const h of hostList) {
-      if (!["claude", "codex", "grok"].includes(h)) {
+      if (!SETUP_HOSTS.includes(h)) {
         throw new Error(
-          `invalid --register-mcp host "${h}" (allowed: auto, none, claude, codex, grok)`,
+          `invalid --register-mcp host "${h}" (allowed: auto, none, ${SETUP_HOSTS.join(", ")})`,
         );
       }
     }

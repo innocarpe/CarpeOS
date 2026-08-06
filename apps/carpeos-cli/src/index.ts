@@ -36,7 +36,14 @@ import {
   SyncHttpError,
   SyncHttpTransport,
 } from "@carpeos/sync-client";
-import { HookInputError, isSupportedProvider, normalizeHookEnvelope } from "./adapters.js";
+import {
+  HookInputError,
+  isSupportedProvider,
+  normalizeHookEnvelope,
+  normalizeProviderId,
+  supportedProviderHelpList,
+} from "./adapters.js";
+
 import {
   CycleFailure,
   type CyclePreflight,
@@ -566,10 +573,11 @@ async function runCaptureHook(argv: readonly string[], env: NodeJS.ProcessEnv): 
       "no-extract": { type: "boolean", default: false },
     },
   });
-  const provider = parsed.values.provider;
-  if (provider === undefined || !isSupportedProvider(provider)) {
-    throw new CliUsageError("capture-hook requires --provider codex, claude, or grok");
+  const providerRaw = parsed.values.provider;
+  if (providerRaw === undefined || !isSupportedProvider(providerRaw)) {
+    throw new CliUsageError(`capture-hook requires --provider ${supportedProviderHelpList()}`);
   }
+  const provider = normalizeProviderId(providerRaw) ?? providerRaw;
   if (parsed.values.input !== "stdin" && parsed.values.input !== "argv") {
     throw new CliUsageError("--input must be stdin or argv");
   }
@@ -1560,7 +1568,7 @@ COMMANDS
   version              Print package name + version (JSON)
   init                 Initialize local runtime store (~/.carpeos by default)
   project identify     Print resolved project_id / client_id / trust zone
-  capture-hook         Ingest a provider hook envelope (codex|claude|grok)
+  capture-hook         Ingest a provider hook envelope (claude|codex|grok|gjc|deepcode|reasonix|deepseek_build)
   extract              Extract Observation from an EvidenceArtifact event (via adjudicate)
   adjudicate           Knowledge adjudication and preview-only policy reconciliation
   outbox               Local durable outbox (status|lease|ack|retry)
@@ -1745,11 +1753,12 @@ NOTES
       return `carpeos capture-hook — ingest a provider session hook (no plaintext secrets in stdout)
 
 USAGE
-  carpeos capture-hook --provider <codex|claude|grok> [options]
+  carpeos capture-hook --provider <claude|codex|grok|gjc|deepcode|reasonix|deepseek_build> [options]
   # hook JSON on stdin by default
 
 OPTIONS
-  --provider <name>          codex | claude | grok (required)
+  --provider <name>          claude|codex|grok|gjc|deepcode|reasonix|deepseek_build (required)
+
   --input stdin|argv         Default: stdin. argv expects one JSON positional
   --fail-open                Exit 0 on capture failure (provider must continue)
   --quiet                    Suppress success JSON on stdout

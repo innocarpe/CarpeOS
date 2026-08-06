@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "carpeos": {
+      "command": "carpeos-mcp-server",
+      "args": [],
+      "env": {
+        "CARPEOS_MCP_STORE_PATH": "__CARPEOS_STORE__",
+        "CARPEOS_MCP_RUNTIME_DIR": "__CARPEOS_HOME__",
+        "CARPEOS_MCP_WORKSPACE_ROOT": "__CARPEOS_WORKSPACE__",
+        "CARPEOS_MCP_TRUST_ZONE": "__CARPEOS_TRUST_ZONE__",
+        "CARPEOS_MCP_VISIBLE_TRUST_ZONES": "__CARPEOS_TRUST_ZONE__"
+      }
+    }
+  }
+}

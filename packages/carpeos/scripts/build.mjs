@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as esbuild from "esbuild";
-import { cpSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,19 +74,24 @@ cpSync(join(repoRoot, "scripts/lib/install-hooks.mjs"), join(setupOut, "install-
 // Capture-hook templates (adapters are not in the npm package otherwise).
 const hooksOut = join(setupOut, "hooks");
 mkdirSync(hooksOut, { recursive: true });
-for (const host of ["claude", "codex", "grok"]) {
+/** @type {Array<{ host: string, files: string[] }>} */
+const hookTemplateHosts = [
+  { host: "claude", files: ["settings.json.example"] },
+  { host: "codex", files: ["hooks.json.example"] },
+  { host: "grok", files: ["hooks.json.example"] },
+  { host: "deepseek-build", files: ["hooks.json.example"] },
+  { host: "gjc", files: ["carpeos-capture.ts.example"] },
+  { host: "deepcode", files: ["mcp.example.json"] },
+  { host: "reasonix", files: ["README.md"] },
+];
+for (const { host, files } of hookTemplateHosts) {
   const hostOut = join(hooksOut, host);
   mkdirSync(hostOut, { recursive: true });
-  if (host === "claude") {
-    cpSync(
-      join(repoRoot, "adapters/claude/settings.json.example"),
-      join(hostOut, "settings.json.example"),
-    );
-  } else {
-    cpSync(
-      join(repoRoot, `adapters/${host}/hooks.json.example`),
-      join(hostOut, "hooks.json.example"),
-    );
+  for (const file of files) {
+    const src = join(repoRoot, "adapters", host, file);
+    if (existsSync(src)) {
+      cpSync(src, join(hostOut, file));
+    }
   }
 }
 writeFileSync(
