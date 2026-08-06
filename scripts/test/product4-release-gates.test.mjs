@@ -10,12 +10,17 @@ import {
   createCandidateState,
   promoteCandidateState,
 } from "../product4/candidate-state.mjs";
-import { evaluateCandidateEvidence, PREDICATE_IDS } from "../product4/evaluator.mjs";
+import {
+  evaluateCandidateEvidence,
+  PREDICATE_IDS,
+  sealTrustedEvidence,
+} from "../product4/evaluator.mjs";
 import {
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
   normalizeCheckRunsResponse,
+  normalizeCheckSuitesResponse,
 } from "../product4/github-evidence-api.mjs";
 import {
   digestJson,
@@ -219,18 +224,24 @@ function candidateEvidence() {
     evaluator_workflow_sha: workflowSha,
     evaluated_at: timestamp,
   };
-  const trustedEvidence = {
-    schema_version: "carpeos.product4-trusted-evidence/v1",
-    owner: "base_evaluator",
-    identity: { ...identity },
-    predicate_digest: digestJson(trustedPredicates),
-    observation_digest: digestJson(observations),
-    source_report_digest: digestJson(candidateReport),
-    source: {
-      kind: "base_recompute",
-      evaluator_tree_sha256: "e".repeat(64),
+  const trustedEvidence = sealTrustedEvidence({
+    trustedEvidence: {
+      schema_version: "carpeos.product4-trusted-evidence/v1",
+      owner: "base_evaluator",
+      identity: { ...identity },
+      predicate_digest: digestJson(trustedPredicates),
+      observation_digest: digestJson(observations),
+      source_report_digest: digestJson(candidateReport),
+      source: {
+        kind: "base_recompute",
+        evaluator_tree_sha256: "e".repeat(64),
+      },
     },
-  };
+    identity,
+    trustedPredicates,
+    observations,
+    candidateReport,
+  });
   const evaluation = evaluateCandidateEvidence({
     identity,
     candidateReport,
@@ -317,6 +328,10 @@ function candidateEvidence() {
     conclusion: "success",
     check_suite: checkSuite,
   };
+  const suitePage = normalizeCheckSuitesResponse(
+    { total_count: 1, check_suites: [checkSuite], headers: { link: "" } },
+    { identity: evidenceIdentity },
+  );
   const page = normalizeCheckRunsResponse(
     { total_count: 1, check_runs: [checkRun], headers: { link: "" } },
     { identity: evidenceIdentity },
@@ -324,7 +339,7 @@ function candidateEvidence() {
   const apiEvidence = buildEvidenceReceipt({
     query,
     identity: evidenceIdentity,
-    pages: [page],
+    pages: [suitePage, page],
     observedAt: timestamp,
   });
   const promotionLedger = buildPromotionLedger({

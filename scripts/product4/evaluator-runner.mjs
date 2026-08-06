@@ -18,8 +18,8 @@ import {
   assertEvaluatorAttestation,
   evaluateCandidateEvidence,
   PREDICATE_IDS,
-  TRUSTED_EVIDENCE_SCHEMA,
   sealTrustedEvidence,
+  TRUSTED_EVIDENCE_SCHEMA,
 } from "./evaluator.mjs";
 import {
   assertExactCheckQuery,
@@ -569,6 +569,7 @@ function buildLostResponseObservation(input, identity) {
       pendingRun: input.patch.pendingRun,
       attemptedPatch: input.patch.attemptedPatch,
       retryCount: input.patch.retryCount,
+      // Hardened API requires an independent fresh exact check-run GET result before retry.
       freshRun: input.patch.freshRun,
     });
   } catch (error) {

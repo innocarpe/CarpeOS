@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { buildCandidateIntent } from "../product4/candidate-intent.mjs";
 import { buildSixCommandLoopReceipt, PRODUCT4_COMMAND_LOOP } from "../product4/command-loop.mjs";
@@ -12,8 +12,8 @@ import {
   assertEvaluatorAttestation,
   attestationDigest,
   evaluateCandidateEvidence,
-  sealTrustedEvidence,
   PREDICATE_IDS,
+  sealTrustedEvidence,
 } from "../product4/evaluator.mjs";
 import {
   assertBaseOwnedProtocolEvidence,
@@ -21,8 +21,8 @@ import {
   buildBaseOwnedProtocolEvidence,
   classifyImmutableCandidateScope,
   evaluateRawCandidate,
-  evaluateRawCandidateWithBaseOwnedProvider,
   evaluateRawCandidateWithBaseOwnedProtocolInputs,
+  evaluateRawCandidateWithBaseOwnedProvider,
   observeCandidateExecution,
   writeEvaluatorResult,
 } from "../product4/evaluator-runner.mjs";
@@ -209,16 +209,12 @@ function protocolEvidenceInputs() {
     conclusion: "success",
     check_suite: suite,
   };
-  const page = normalizeCheckRunsResponse(
-    { total_count: 1, check_runs: [run], headers: { link: "" } },
+  const suitePage = normalizeCheckSuitesResponse(
+    { total_count: 1, check_suites: [suite], headers: { link: "" } },
     { identity: normalizedApiIdentity },
   );
-  const suitePage = normalizeCheckSuitesResponse(
-    {
-      total_count: 1,
-      check_suites: [suite],
-      headers: { link: "" },
-    },
+  const page = normalizeCheckRunsResponse(
+    { total_count: 1, check_runs: [run], headers: { link: "" } },
     { identity: normalizedApiIdentity },
   );
   const duplicateRun = { ...run, conclusion: "failure" };
@@ -262,7 +258,7 @@ function protocolEvidenceInputs() {
       observedAt: "2026-01-02T00:00:00Z",
     },
     duplicate_refusal: {
-      pages: [page, duplicatePage],
+      pages: [suitePage, page, duplicatePage],
       identity: apiIdentity,
     },
     lost_response_reconciliation: {
@@ -271,9 +267,10 @@ function protocolEvidenceInputs() {
       patch: {
         matches: [],
         pendingRun,
+        // Independent fresh GET still shows the same pending identity → retry_once.
+        freshRun: structuredClone(pendingRun),
         attemptedPatch: { status: "completed", conclusion: "success" },
         retryCount: 0,
-        freshRun: pendingRun,
       },
     },
     negative_cases: {
