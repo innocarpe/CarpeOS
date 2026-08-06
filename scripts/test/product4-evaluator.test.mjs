@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   assertEvaluatorAttestation,
@@ -7,6 +10,11 @@ import {
   evaluateCandidateEvidence,
   PREDICATE_IDS,
 } from "../product4/evaluator.mjs";
+import {
+  assertCandidateWorkspaceBoundary,
+  classifyImmutableCandidateScope,
+  writeEvaluatorResult,
+} from "../product4/evaluator-runner.mjs";
 import {
   MAINTENANCE_STUDY_FIXTURE_SHA256,
   PRODUCT4_CONTEXT,
@@ -45,6 +53,10 @@ const observations = {
     outbox_rows: 0,
     protected_uploads: 0,
   },
+  candidate_execution: {
+    unprivileged: true,
+    isolated: true,
+  },
 };
 const provenance = {
   base_sha: "c".repeat(40),
@@ -70,6 +82,7 @@ function evaluate(overrides = {}) {
     provenance,
     issuerWorkflowSha: provenance.evaluator_workflow_sha,
     candidateReportedSuccess: true,
+    requireCandidateExecutionObservation: true,
     ...overrides,
   });
 }
@@ -83,6 +96,95 @@ test("M4 emits a strict attestation only after independent all-predicate recompu
   assert.equal(result.attestation.observations.zero_write.outbox_rows, 0);
   assertEvaluatorAttestation(result.attestation);
   assert.equal(result.attestation_digest, attestationDigest(result.attestation));
+});
+test("M4 rejects unknown fields at every nested attestation boundary", () => {
+  const cases = [
+    (attestation) => {
+      attestation.predicate_results[0].unexpected = true;
+    },
+    (attestation) => {
+      attestation.observations.unexpected = true;
+    },
+    (attestation) => {
+      attestation.observations.p02.unexpected = true;
+    },
+    (attestation) => {
+      attestation.observations.zero_write.unexpected = true;
+    },
+    (attestation) => {
+      attestation.observations.high_water.unexpected = true;
+    },
+    (attestation) => {
+      attestation.observations.candidate_execution.unexpected = true;
+    },
+    (attestation) => {
+      attestation.provenance.unexpected = true;
+    },
+  ];
+  for (const mutate of cases) {
+    const malformed = structuredClone(evaluate().attestation);
+    mutate(malformed);
+    assert.throws(() => assertEvaluatorAttestation(malformed), /invalid_attestation/);
+  }
+});
+
+test("M4 refuses forged privileged candidate execution observations", () => {
+  const forged = evaluate({
+    observations: {
+      ...observations,
+      candidate_execution: { unprivileged: false, isolated: true },
+    },
+  });
+  assert.equal(forged.status, "refused");
+  assert.match(forged.blockers.join("; "), /candidate_execution\.unprivileged/);
+});
+
+test("M4 classifies immutable C/tree scope and keeps ambiguous scope pending", () => {
+  const identityInput = { headSha, treeSha256: identity.tree_sha256 };
+  const candidate = classifyImmutableCandidateScope({
+    ...identityInput,
+    scopePaths: [
+      "apps/carpeos-cli/src/index.ts",
+      "scripts/product4/policy-identity.mjs",
+      "scripts/product4/p02-runner.mjs",
+    ],
+  });
+  assert.equal(candidate.intent, true);
+  assert.equal(candidate.state, "pending_evidence");
+  assert.equal(candidate.classification.candidate, true);
+  assert.equal(candidate.classification.scope_digest, candidate.scope_digest);
+
+  const pending = classifyImmutableCandidateScope({ ...identityInput, scopePaths: [] });
+  assert.equal(pending.intent, false);
+  assert.equal(pending.state, "classification_pending");
+  assert.equal(pending.classification.candidate, undefined);
+
+  const nonCandidate = classifyImmutableCandidateScope({
+    ...identityInput,
+    scopePaths: ["docs/README.md"],
+  });
+  assert.equal(nonCandidate.intent, false);
+  assert.equal(nonCandidate.state, "not_applicable");
+  assert.equal(nonCandidate.classification.candidate, false);
+});
+
+test("M4 rejects workspace overlap and output symlink overwrite attempts", () => {
+  const trusted = mkdtempSync(join(tmpdir(), "product4-trusted-"));
+  const isolated = mkdtempSync(join(tmpdir(), "product4-candidate-"));
+  assert.doesNotThrow(() =>
+    assertCandidateWorkspaceBoundary({ candidateRoot: isolated, trustedRoot: trusted }),
+  );
+  assert.throws(
+    () => assertCandidateWorkspaceBoundary({ candidateRoot: isolated, trustedRoot: isolated }),
+    /candidate_workspace_boundary/,
+  );
+
+  const outputLink = join(isolated, "output-link");
+  symlinkSync(trusted, outputLink, "dir");
+  assert.throws(
+    () => writeEvaluatorResult(join(outputLink, "attestation.json"), evaluate()),
+    /output_refusal/,
+  );
 });
 
 test("M4 ignores candidate-reported success and refuses forged trusted observations", () => {

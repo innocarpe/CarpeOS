@@ -46,6 +46,24 @@ const ATTESTATION_KEYS = [
   "observations",
   "provenance",
 ];
+const PREDICATE_RESULT_KEYS = ["predicate_id", "passed", "evidence_digest"];
+const OBSERVATION_KEYS = ["p02", "zero_write", "high_water", "candidate_execution"];
+const REQUIRED_OBSERVATION_KEYS = ["p02", "zero_write", "high_water"];
+const P02_KEYS = ["diagnosis", "outcome", "analog_available", "state_transition"];
+const MUTATION_KEYS = [
+  "canonical_events",
+  "review_rows",
+  "disposition_rows",
+  "outbox_rows",
+  "protected_uploads",
+];
+const CANDIDATE_EXECUTION_KEYS = ["unprivileged", "isolated"];
+const PROVENANCE_KEYS = [
+  "source_report_sha256",
+  "base_sha",
+  "evaluator_workflow_sha",
+  "evaluated_at",
+];
 
 export class EvaluatorError extends Error {
   constructor(code, message, blockers = []) {
@@ -64,12 +82,13 @@ export function evaluateCandidateEvidence({
   provenance,
   issuerWorkflowSha,
   candidateReportedSuccess,
+  requireCandidateExecutionObservation = false,
 }) {
   const blockers = [];
   try {
     assertIdentity(identity);
     assertTrustedPredicates(trustedPredicates);
-    assertObservations(observations);
+    assertObservations(observations, undefined, { requireCandidateExecutionObservation });
     assertProvenance(provenance, issuerWorkflowSha);
     assertSafeReport(candidateReport);
   } catch (error) {
@@ -97,7 +116,7 @@ export function evaluateCandidateEvidence({
     predicate_results: PREDICATE_IDS.map((predicate_id) => ({
       predicate_id,
       passed: true,
-      evidence_digest: digestJson({ predicate_id, trusted: true, observations }),
+      evidence_digest: digestJson({ predicate_id, passed: true, observations }),
     })),
     observations: clone(observations),
     provenance: {
@@ -142,8 +161,13 @@ export function assertEvaluatorAttestation(attestation) {
   if (!SHA1.test(attestation.issuer_workflow_sha ?? ""))
     errors.push("issuer_workflow_sha is invalid");
   assertPredicates(attestation.predicate_results, errors);
-  assertObservations(attestation.observations, errors);
-  assertProvenance(attestation.provenance, attestation.provenance?.evaluator_workflow_sha, errors);
+  assertObservations(attestation.observations, errors, {
+    requireCandidateExecutionObservation: true,
+  });
+  assertPredicateEvidenceDigests(attestation.predicate_results, attestation.observations, errors);
+  assertProvenance(attestation.provenance, attestation.provenance?.evaluator_workflow_sha, errors, {
+    requireSourceReportSha256: true,
+  });
   assertNoForbiddenKeys(attestation, errors);
   if (errors.length > 0) throwEvaluatorError("invalid_attestation", errors.join("; "));
   return attestation;
@@ -186,7 +210,7 @@ function assertPredicates(predicates, errors) {
     return;
   }
   const seen = new Set();
-  for (const result of predicates) {
+  for (const [index, result] of predicates.entries()) {
     if (
       !isRecord(result) ||
       !PREDICATE_IDS.includes(result.predicate_id) ||
@@ -195,6 +219,7 @@ function assertPredicates(predicates, errors) {
       errors.push("predicate_results contains an unknown or duplicate predicate");
       continue;
     }
+    assertExactKeys(result, PREDICATE_RESULT_KEYS, `predicate_results[${index}]`, errors);
     seen.add(result.predicate_id);
     if (result.passed !== true || !SHA256.test(result.evidence_digest ?? ""))
       errors.push(`predicate ${result.predicate_id} is not a passed fixed result`);
@@ -202,26 +227,57 @@ function assertPredicates(predicates, errors) {
   if (seen.size !== PREDICATE_IDS.length)
     errors.push("predicate_results is missing a fixed predicate");
 }
+function assertPredicateEvidenceDigests(predicates, observations, errors) {
+  if (!Array.isArray(predicates) || !isRecord(observations)) return;
+  for (const result of predicates) {
+    if (!isRecord(result) || !PREDICATE_IDS.includes(result.predicate_id)) continue;
+    const expected = digestJson({
+      predicate_id: result.predicate_id,
+      passed: true,
+      observations,
+    });
+    if (result.evidence_digest !== expected)
+      errors.push(`predicate ${result.predicate_id} evidence is not bound to observations`);
+  }
+}
 
-function assertObservations(observations, errors) {
+function assertObservations(
+  observations,
+  errors,
+  { requireCandidateExecutionObservation = false } = {},
+) {
   const collectedErrors = errors ?? [];
   const collecting = errors !== undefined;
   if (!isRecord(observations)) {
     collectedErrors.push("observations are required");
   } else {
-    const required = ["p02", "zero_write", "high_water"];
-    assertExactKeys(observations, required, "observations", collectedErrors);
+    assertExactKeys(
+      observations,
+      OBSERVATION_KEYS,
+      "observations",
+      collectedErrors,
+      REQUIRED_OBSERVATION_KEYS,
+    );
     if (!isRecord(observations.p02)) collectedErrors.push("p02 observation is required");
-    else if (
-      observations.p02.diagnosis !== "no_analog" ||
-      observations.p02.outcome !== "blocked_no_apply" ||
-      observations.p02.analog_available !== false ||
-      observations.p02.state_transition !== "none_supported"
-    ) {
-      collectedErrors.push("P02 observation is not the truthful no-analog result");
+    else {
+      assertExactKeys(observations.p02, P02_KEYS, "observations.p02", collectedErrors);
+      if (
+        observations.p02.diagnosis !== "no_analog" ||
+        observations.p02.outcome !== "blocked_no_apply" ||
+        observations.p02.analog_available !== false ||
+        observations.p02.state_transition !== "none_supported"
+      ) {
+        collectedErrors.push("P02 observation is not the truthful no-analog result");
+      }
     }
     assertZeroWrite(observations.zero_write, collectedErrors);
     assertHighWater(observations.high_water, collectedErrors);
+    if (observations.candidate_execution === undefined) {
+      if (requireCandidateExecutionObservation)
+        collectedErrors.push("candidate_execution observation is required");
+    } else {
+      assertCandidateExecution(observations.candidate_execution, collectedErrors);
+    }
   }
   if (collectedErrors.length > 0 && !collecting)
     throwEvaluatorError("observation_refusal", collectedErrors.join("; "));
@@ -232,13 +288,8 @@ function assertZeroWrite(value, errors) {
     errors.push("zero_write observation is required");
     return;
   }
-  for (const key of [
-    "canonical_events",
-    "review_rows",
-    "disposition_rows",
-    "outbox_rows",
-    "protected_uploads",
-  ])
+  assertExactKeys(value, MUTATION_KEYS, "zero_write", errors);
+  for (const key of MUTATION_KEYS)
     if (value[key] !== 0) errors.push(`zero_write.${key} must be zero`);
 }
 
@@ -247,23 +298,32 @@ function assertHighWater(value, errors) {
     errors.push("high_water observation is required");
     return;
   }
-  for (const key of [
-    "canonical_events",
-    "review_rows",
-    "disposition_rows",
-    "outbox_rows",
-    "protected_uploads",
-  ])
+  assertExactKeys(value, MUTATION_KEYS, "high_water", errors);
+  for (const key of MUTATION_KEYS)
     if (!Number.isSafeInteger(value[key]) || value[key] < 0 || value[key] > 1_000_000)
       errors.push(`high_water.${key} is invalid`);
 }
 
-function assertProvenance(provenance, evaluatorWorkflowSha, errors) {
+function assertProvenance(
+  provenance,
+  evaluatorWorkflowSha,
+  errors,
+  { requireSourceReportSha256 = false } = {},
+) {
   const collectedErrors = errors ?? [];
   const collecting = errors !== undefined;
   if (!isRecord(provenance)) {
     collectedErrors.push("provenance is required");
   } else {
+    const requiredKeys = requireSourceReportSha256
+      ? PROVENANCE_KEYS
+      : ["base_sha", "evaluator_workflow_sha", "evaluated_at"];
+    assertExactKeys(provenance, PROVENANCE_KEYS, "provenance", collectedErrors, requiredKeys);
+    if (
+      provenance.source_report_sha256 !== undefined &&
+      !SHA256.test(provenance.source_report_sha256)
+    )
+      collectedErrors.push("provenance.source_report_sha256 is invalid");
     if (!SHA1.test(provenance.base_sha ?? ""))
       collectedErrors.push("provenance.base_sha is invalid");
     if (!SHA1.test(provenance.evaluator_workflow_sha ?? ""))
@@ -280,6 +340,16 @@ function assertProvenance(provenance, evaluatorWorkflowSha, errors) {
     throwEvaluatorError("provenance_refusal", collectedErrors.join("; "));
 }
 
+function assertCandidateExecution(value, errors) {
+  if (!isRecord(value)) {
+    errors.push("candidate_execution observation is required");
+    return;
+  }
+  assertExactKeys(value, CANDIDATE_EXECUTION_KEYS, "candidate_execution", errors);
+  if (value.unprivileged !== true) errors.push("candidate_execution.unprivileged must be true");
+  if (value.isolated !== true) errors.push("candidate_execution.isolated must be true");
+}
+
 function assertSafeReport(report) {
   if (!isRecord(report)) throwEvaluatorError("report_refusal", "raw candidate report is required");
   const errors = [];
@@ -287,10 +357,12 @@ function assertSafeReport(report) {
   if (errors.length > 0) throwEvaluatorError("report_refusal", errors.join("; "));
 }
 
-function assertExactKeys(value, allowed, label, errors) {
+function assertExactKeys(value, allowed, label, errors, required = allowed) {
   if (!isRecord(value)) return;
   for (const key of Object.keys(value))
     if (!allowed.includes(key)) errors.push(`${label}.${key} is not allowed`);
+  for (const key of required)
+    if (!Object.hasOwn(value, key)) errors.push(`${label}.${key} is required`);
 }
 
 function assertNoForbiddenKeys(value, errors, path = "$") {
