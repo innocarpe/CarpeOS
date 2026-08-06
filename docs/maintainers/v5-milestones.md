@@ -36,6 +36,7 @@ Do **not** parallelize: canonical migrations; Worker auth + telemetry ledger; M8
 - Price snapshot for Direct flash: official pricing page (cache hit/miss + output per 1M tokens).
 - Live calls need operator-issued `DEEPSEEK_API_KEY` / `OPENROUTER_API_KEY` in env only; never fixtures or git.
 - Cost experiment: synthetic pack digests only; spend cap + kill switch; body-free receipts.
+- Live runner: `docs/maintainers/v5-cost-experiment.md` and `packages/v5/scripts/live-cost-experiment.mjs` (`--allow-network`, default out `~/.carpeos/v5-cost-experiments/`).
 
 ## Recompute command
 
