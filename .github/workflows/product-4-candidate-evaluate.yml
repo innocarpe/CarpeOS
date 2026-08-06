@@ -146,7 +146,7 @@ jobs:
             mode: 0o400,
           });
           NODE
-          chmod -R a-w "$CARPEOS_SANDBOX_OUT"
+          sudo -n chmod -R a-w "$CARPEOS_SANDBOX_OUT"
       - name: Replay the exact read-only P02 command twice
         run: |
           mkdir -p "$RUNNER_TEMP/product4-artifacts"
