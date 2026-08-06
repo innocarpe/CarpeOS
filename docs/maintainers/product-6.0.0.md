@@ -1,6 +1,7 @@
 # Product 6.0.0 — Definition of Done (maintainers)
 
-Status: **Hold-first Agentic Layer shipped as `@innocarpe/carpeos@6.0.0` (2026-08-07)**  
+Status: **Hold-first major shipped as `@innocarpe/carpeos@6.0.0`; P3–P6 follow-ons through
+`6.4.0`; complete topology residuals (E10/human review/backfill) target `6.5.0`.**  
 Base package: multi-host setup + V5 draft lane + Product 6 agentic product loop on npm.
 
 **Model freeze:** DeepSeek Direct **`deepseek-v4-flash` only** for all real LLM stages.
@@ -30,12 +31,15 @@ Post-capture Agentic Layer forms **grounded, typed, graph-linked knowledge** und
 | **P4** Links | provenance edges densify meaning graph | graph rebuild metrics |
 | **P5** Draft Claims | fact_candidate/decision draft Claims; accept still human | Claim count > 0 draft-only |
 | **P6** GraphRAG ranking | typed promoted units improve retrieval judgments | offline query set |
+| **E10 + human + backfill** | reconcile proposals; human accept/promote; history feed | CLI + tests → npm 6.5 |
 
 ## Code DoD (minimum for npm `6.0.0` major claim)
 
 A honest 6.0.0 cut requires **at least P2 complete** plus:
 
-- [x] ADR 0017 coded planes for E1–E5 + E7–E8 + feed/runner (E6 lineage markers; E9 hook; E10 deferred)
+- [x] ADR 0017 coded planes for E1–E5 + E7–E8 + feed/runner (E6 lineage markers; E9 hook)
+- [x] P3–P6 shipped (precision, links, draft Claims, GraphRAG) through 6.4.0
+- [ ] E10 reconcile + human accept/promote + feed backfill (6.5.0 path)
 - [x] `@carpeos/agentic` durable jobs + Flash-only live path (`callAgenticFlash` / `--allow-network`)
 - [x] Capture path still has **zero** LLM calls (feed insert only; fail-open)
 - [x] Cite integrity on persist paths (E5 before proposal/materialize)

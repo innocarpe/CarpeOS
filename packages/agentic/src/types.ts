@@ -29,7 +29,8 @@ export type AgenticStageId =
   | "structure"
   | "gate"
   | "materialize"
-  | "project";
+  | "project"
+  | "reconcile";
 
 /** Prompt/schema identity for stage digests (Flash multi-workflow, not multi-model). */
 export const AGENTIC_PROMPT_VERSIONS = {
@@ -42,6 +43,7 @@ export const AGENTIC_PROMPT_VERSIONS = {
   gate: "agentic.gate/v1",
   materialize: "agentic.materialize/v1",
   project: "agentic.project/v1",
+  reconcile: "agentic.reconcile/v1",
 } as const satisfies Record<AgenticStageId, string>;
 
 export type AgenticJob = {

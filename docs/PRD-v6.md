@@ -1,8 +1,9 @@
 # PRD v6 — CarpeOS 6.0.0 (Agentic Layer)
 
-Status: **Hold-first product loop shipped on npm as `@innocarpe/carpeos@6.0.0`**
-(ADR 0017 planes E1–E8 + feed/runner). Full thesis residuals P3–P6 remain
-(auto-promote, denser links, draft Claims, GraphRAG ranking).
+Status: **Product 6 Agentic Layer P0–P6 shipped through `@innocarpe/carpeos@6.4.0`**;
+complete topology residuals (E10 reconcile, human accept/promote, feed backfill)
+target **6.5.0**. Hard fences unchanged (no capture LLM; no auto AcceptanceDecision;
+Flash-only).
 
 Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md) · [PRD-v3](PRD-v3.md) ·
 [PRD-v4](PRD-v4.md) · [PRD-v5](PRD-v5.md) · **PRD-v6**

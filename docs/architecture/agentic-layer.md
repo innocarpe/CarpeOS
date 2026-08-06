@@ -1,7 +1,7 @@
 # Agentic Layer architecture (Product 6)
 
-Status: **target architecture** for `@carpeos/agentic` (ADR 0017).  
-Not fully implemented until V6 milestones say so.
+Status: **implemented architecture** for `@carpeos/agentic` (ADR 0017) through P6 on npm
+`6.4.0`; E10 reconcile + human accept/promote + feed backfill land with 6.5.0.
 
 ## Why this layer exists
 
