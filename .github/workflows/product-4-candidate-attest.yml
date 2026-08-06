@@ -23,7 +23,6 @@ jobs:
     env:
       CARPEOS_TRUST_ZONE: tz_synthetic
       PRODUCT4_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
-      CARPEOS_CANDIDATE_ROOT: ${{ runner.temp }}/carpeos-product4-candidate
     steps:
       - name: Configure disposable runner paths
         run: |
