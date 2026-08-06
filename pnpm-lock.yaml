@@ -179,6 +179,8 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/v5: {}
+
 packages:
 
   '@biomejs/biome@2.5.5':
