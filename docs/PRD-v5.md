@@ -1,6 +1,6 @@
 # PRD v5 — CarpeOS 5.0.0
 
-Status: **Draft-lane complete (DeepSeek Direct primary)** — offline M0–M7, end-to-end draft pipeline, local TELEMETRY_DB store, and opt-in live cost experiment are implemented. Real network remains **off by default**. M8 (4.0 body-free seam) stays **deferred** until independent Product 4 acceptance exists. This is **not** an npm release tag claim.
+Status: **Draft-lane complete (DeepSeek Direct primary); release-ready when authorized** — offline M0–M7, end-to-end draft pipeline, local TELEMETRY_DB store, CLI, M8 decision receipt, and opt-in live cost experiment are implemented. Real network remains **off by default**. M8 full accept stays **deferred** until independent Product 4 **release** evidence exists. npm `@innocarpe/carpeos@5.0.0` requires a separate release cut (see [product-5.0.0.md](maintainers/product-5.0.0.md)).
 
 Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md) · [PRD-v3](PRD-v3.md) · [PRD-v4](PRD-v4.md)
 

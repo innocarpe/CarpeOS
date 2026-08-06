@@ -1,0 +1,35 @@
+{
+  "schema": "carpeos.v5.release-readiness-receipt/v1",
+  "timestamp": "2026-08-06T08:00:00.000Z",
+  "target_version": "5.0.0",
+  "from_version": "3.2.0",
+  "tag": "v5.0.0",
+  "draft_lane_shippable": true,
+  "m8_complete": false,
+  "m8_status": "deferred",
+  "primary_provider": "deepseek_direct",
+  "primary_model": "deepseek-v4-flash",
+  "openrouter_required": false,
+  "capture_hot_path_wired": false,
+  "canonical_effect": "none",
+  "preflight": {
+    "pnpm_check": "required_on_cut",
+    "m0_recompute": "required_on_cut",
+    "m8_decision": "required_on_cut",
+    "release_dry_run": "3.2.0 -> 5.0.0 verified in prep"
+  },
+  "blockers_to_publish": [
+    "maintainer_authorization_to_cut_and_push_tag",
+    "release_workflow_npm_token_on_tag_push"
+  ],
+  "non_blockers": [
+    "m8_release_seam_deferred_by_design",
+    "cf_worker_telemetry_optional",
+    "product4_npm_4.0.0_not_required"
+  ],
+  "notes": [
+    "Do not invent Product 4 release acceptance for M8.",
+    "Push of main + tag v5.0.0 requires explicit maintainer OK.",
+    "After publish, activate exact @innocarpe/carpeos@5.0.0 and run carpeos v5 readiness."
+  ]
+}

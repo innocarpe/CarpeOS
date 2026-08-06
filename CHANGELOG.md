@@ -12,13 +12,34 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- Product 5.0 draft lane (in-tree, opt-in): `@carpeos/v5` offline contracts,
-  DeepSeek Direct–primary provider boundary, draft pipeline, local TELEMETRY_DB,
-  M7 all-200 evaluation, and `carpeos v5` CLI (`status`, `readiness`,
-  `eval-all200`, `draft`). Always `canonical_effect: "none"`; not on the capture
-  hot path; OpenRouter not required. See `docs/PRD-v5.md` and ADR 0016.
-  npm major `5.0.0` is **not** cut until a separate release.
-- V5-M8 decision machinery and `artifacts/v5/m8/final-decision-receipt.json` (release seam deferred; draft lane shippable).
+- **Product 5.0 draft lane (opt-in)** behind `@carpeos/v5` and `carpeos v5`:
+  - Offline contracts M0–M7: redaction, EvidencePack, reducer oracle, attempts/review
+    sidecar, local TELEMETRY_DB store + SQL migration, frozen all-200 evaluation.
+  - End-to-end draft pipeline (`runDraftPipeline` / `carpeos v5 draft`):
+    redact → pack → extract → draft reduce → eval.
+  - **DeepSeek Direct primary** extract route (`deepseek-v4-flash` @
+    `https://api.deepseek.com`); network **off by default**; OpenRouter optional and
+    **not required**.
+  - Operator CLI: `carpeos v5 status|readiness|eval-all200|draft|m8`.
+  - Live cost experiment runner (`packages/v5/scripts/live-cost-experiment.mjs`) with
+    spend cap; credentials only via env / `~/.carpeos/v5-provider.env`.
+  - M8 seam scan + final decision receipt
+    (`artifacts/v5/m8/final-decision-receipt.json`): release seam **deferred** without
+    inventing Product 4 acceptance; draft lane remains shippable.
+  - ADR 0016 (draft-only + DeepSeek primary), PRD-v5, product-5.0.0 DoD.
+
+### Safety
+
+- Every V5 record remains `canonical_effect: "none"`.
+- Capture hot path is **not** wired to LLM/network.
+- schema-v1, adj_v3, and canonical migrations are unchanged.
+- PRD-v4 / Product 4 remains independently releasable; V5 does not gate 4.0.0.
+- V5-off is a valid fallback (disable opt-in; capture/canonical continue).
+
+### Notes
+
+- This major is the **draft-lane** product cut. It does not claim hosted Cloudflare
+  Worker telemetry deploy or a completed Product 4 release-authority seam.
 
 ## [3.2.0] - 2026-08-04
 
