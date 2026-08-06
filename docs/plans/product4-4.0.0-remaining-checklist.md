@@ -62,3 +62,10 @@ Tag / npm publish require **explicit maintainer authorization** after the above.
 → (optional) release-prep PR only with authority
 → 5.0.0 release work unblocked for “4.0 code plane”
 ```
+
+## Release packaging status
+
+- Package version target for this cut: **4.0.0** (`packages/carpeos/package.json`, `CHANGELOG.md`).
+- Live independent authority / approval may still be **Defer** for operational
+  activation; package SemVer 4.0.0 ships the Product 4 **code plane**.
+- Residual #238-style hardening may land in **4.0.1** / **4.1.0**.

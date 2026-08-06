@@ -4,7 +4,7 @@ Status: maintainer policy for the public npm package and Git tags.
 
 This document is the source of truth for how CarpeOS versions are chosen, tagged,
 and published. Follow it before the first and every subsequent npm release.
-Current public release: `@innocarpe/carpeos@3.2.0`, published on npm and
+Current public release target: `@innocarpe/carpeos@4.0.0` (Product 4 code plane; tag/publish after merge), published on npm and
 verified through global activation. Its shipped `adj_v3` work keeps automatic
 Claim creation off and creates no `AcceptanceDecision`; evaluators and dogfood
 are evidence-only, synthetic, and disposable. B0 policy reconciliation is

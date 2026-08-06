@@ -41,6 +41,52 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 - This major is the **draft-lane** product cut. It does not claim hosted Cloudflare
   Worker telemetry deploy or a completed Product 4 release-authority seam.
 
+## [4.0.0] - 2026-08-06
+
+### Added
+
+- **Product 4.0 governed evidence plane** (PRD-v4 / trust-plane scripts and contracts):
+  - Frozen P4_0 evaluator policy identity, candidate intent/state, migration
+    read-oracle, and six-command loop receipts (synthetic, public-safe fixtures).
+  - Truthful P02 double-replay with deterministic equality, zero-write mutation
+    probes, and fail-closed no-analog diagnosis.
+  - Unprivileged raw candidate report producer and base-owned evaluator runner
+    with sealed trusted-evidence envelopes (caller-supplied protocol authority
+    refused).
+  - Exact-C GitHub evidence API guards: suite/run pagination, identity binding,
+    duplicate refusal, lost POST/PATCH reconciliation, path/HTTP error refusal.
+  - Publisher C/artifact/run binding and release-authority freshness schemas
+    (fail-closed without independent live authority).
+  - Observed bubblewrap sandbox probe/receipt contract (measured controls; not
+    claim-only static digests).
+  - Host isolation for candidate install/build/init inside the sandbox boundary
+    on the Product 4 evaluate trust-plane workflow.
+- Local **preflight** gate (`make preflight` / `pnpm preflight`) mirroring PR lean
+  checks in parallel before `gh pr create`.
+- Maintainer docs: Product 4 cold-start handoff and remaining checklist.
+
+### Changed
+
+- Product 4 live trust-plane workflows (`product-4-candidate-*`) are
+  **workflow_dispatch-only** until ownership/App activation; PR quality stays on
+  unit/contract tests and preflight (not every-PR bubblewrap).
+- CI policy documents PR-lean / main-full / trust-release / local preflight lanes.
+
+### Safety
+
+- Production base-owned protocol evidence still fails closed without a trusted
+  read-only provider/token; synthetic fixtures are not live authority.
+- Independent release authority, human approval, and live settings receipts remain
+  **out of band**; this package cut does not invent them.
+- Residual stricter sandbox residual work (if any) may follow in 4.0.1 / 4.1.0
+  without blocking this major.
+
+### Notes
+
+- Major product claim is **Product 4 trust/evidence plane** on the public package.
+- Product 5 draft-lane work remains under **[Unreleased]** for a later 5.0 cut;
+  V5 stays opt-in with `canonical_effect: "none"` and does not gate this release.
+
 ## [3.2.0] - 2026-08-04
 
 ### Added
@@ -332,7 +378,8 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/innocarpe/carpeos/compare/v3.2.0...v4.0.0
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
 [0.1.2]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.2
