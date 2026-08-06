@@ -19,9 +19,7 @@
     "canonical_effect": "none",
     "v5_off_release_path_verified": true,
     "four_zero_seam": null,
-    "blockers": [
-      "no accepted body-free 4.0 evidence seam"
-    ],
+    "blockers": ["no accepted body-free 4.0 evidence seam"],
     "status": "deferred"
   },
   "classified_receipts": [
@@ -35,9 +33,7 @@
       "accepted_as_install_smoke": true,
       "digest": "sha256:b50f050ca8a13d35e36a3ddaacda2703974caf767a1f0eb74287efef45aca44f",
       "blockers": [],
-      "notes": [
-        "install_smoke_passed_authority_not_attempted"
-      ]
+      "notes": ["install_smoke_passed_authority_not_attempted"]
     },
     {
       "path": "artifacts/g008/product4-release-gate-defer-receipt.json",
