@@ -45,11 +45,13 @@ import {
   buildGraphProjection,
   defaultEmbeddingProvider,
   ensureEmbeddingJob,
+  evaluateGraphRagQuerySet,
   leaseEmbeddingJobs,
   makeEmbeddingRecord,
   rebuildLocalRetrievalIndex,
   searchLocalRetrievalIndex,
   storeLocalVector,
+  type GraphRagQuerySet,
 } from "@carpeos/retrieval";
 import type { RetrievalChunk, RetrievalQuery } from "@carpeos/schema";
 import {
@@ -1408,7 +1410,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag). See: carpeos help agentic",
     );
   }
 
@@ -1851,6 +1853,42 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         store.close();
       }
     }
+    case "graphrag": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          path: { type: "string" },
+          "hit-rate-min": { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const path =
+        parsed.values.path ??
+        resolve(process.cwd(), "fixtures/agentic/v1/graphrag-query-set/manifest.json");
+      const hitMin = Number(parsed.values["hit-rate-min"] ?? "0.9");
+      const querySet = JSON.parse(readFileSync(path, "utf8")) as GraphRagQuerySet;
+      const report = evaluateGraphRagQuerySet(querySet, {
+        hit_rate_min: Number.isFinite(hitMin) && hitMin > 0 ? hitMin : 0.9,
+      });
+      writeJson(process.stdout, {
+        ok: report.pass,
+        command: "agentic.graphrag",
+        path,
+        report: {
+          schema: report.schema,
+          pass: report.pass,
+          hit_rate: report.hit_rate,
+          hit_rate_min: report.hit_rate_min,
+          case_count: report.case_count,
+          pass_count: report.pass_count,
+          fail_count: report.fail_count,
+          reason_codes: report.reason_codes,
+          cases: report.cases,
+        },
+      });
+      return report.pass ? 0 : 1;
+    }
     default:
       throw new CliUsageError(
         `unknown agentic subcommand: ${subcommand}\nRun: carpeos help agentic`,
@@ -2128,6 +2166,7 @@ USAGE
   carpeos agentic materialize --proposal-id <id> --artifact-id <id> [--allow-promote]
   carpeos agentic precision [--path <golden-manifest.json>]
   carpeos agentic graph-metrics [--home <path>] [--rebuild]
+  carpeos agentic graphrag [--path <query-set.json>] [--hit-rate-min 0.9]
 
 SUBCOMMANDS
   status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
@@ -2138,6 +2177,7 @@ SUBCOMMANDS
   materialize  Materialize one proposal to draft Observation and/or draft Claim
   precision    P3 offline auto-promote precision suite (must ≥ 0.90; zero must_not leaks)
   graph-metrics  P4 meaning graph density (rebuild graph_v2; projection only)
+  graphrag     P6 offline GraphRAG query set (typed promoted units > evidence residue)
 
 HARD FENCES
   - Capture inserts feed only (no LLM/network/await in capture transaction)

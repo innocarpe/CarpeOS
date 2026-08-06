@@ -12,6 +12,7 @@ import type {
   RetrievalSourceRecord,
 } from "@carpeos/schema";
 import { validateConformance } from "@carpeos/schema";
+import { buildTypedUnitBoostMap } from "./graphrag.js";
 import {
   rankHybrid,
   scoreFts,
@@ -51,11 +52,14 @@ export function searchMemory(input: SearchInput): RetrievalResult {
     semantic_score: input.semanticScores?.get(chunk.chunk_id) ?? 0,
     recency_score: scoreRecency(chunk, newestEpochMs),
   }));
+  // P6: GraphRAG typed-unit boosts (promoted active claim/summary/decision > evidence).
+  const typedUnitBoost = buildTypedUnitBoostMap(input.chunks);
   const ranked = rankHybrid(candidates, input.query.ranking.weights, {
     ...(input.query.ranking.boost_worktree_id === undefined
       ? {}
       : { boostWorktreeId: input.query.ranking.boost_worktree_id }),
     ...(input.graphProximity === undefined ? {} : { graphProximity: input.graphProximity }),
+    typedUnitBoost,
   });
   // Score first, then sparse diversity selection before canonical recheck.
   // Over-select slightly so excluded candidates after recheck still leave room.

@@ -6,6 +6,7 @@ export * from "./embedding-jobs.js";
 export * from "./local-index.js";
 export * from "./provenance.js";
 export * from "./query.js";
+export * from "./graphrag.js";
 export * from "./ranking.js";
 export * from "./resolutions.js";
 export * from "./graph-projection.js";

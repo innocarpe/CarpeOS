@@ -12,7 +12,11 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- **P6 GraphRAG ranking** (Product 6.4 path):
+  - Typed promoted unit boosts in hybrid ranking (active claim/summary/decision > draft > evidence)
+  - Graph hop proximity remains non-authoritative (projection only)
+  - Offline query set `fixtures/agentic/v1/graphrag-query-set/` with hit_rate ≥ 0.90
+  - CLI `carpeos agentic graphrag` for suite receipt
 
 ## [6.3.0] - 2026-08-07
 
