@@ -30,10 +30,10 @@ const input = {
     },
     {
       command_id: "p02_replay_b",
-      invocation_digest: "1".repeat(64),
+      invocation_digest: "e".repeat(64),
       exit_code: 0,
-      stdout_sha256: "2".repeat(64),
-      stderr_sha256: "3".repeat(64),
+      stdout_sha256: "f".repeat(64),
+      stderr_sha256: "0".repeat(64),
     },
   ],
   p02: {
@@ -100,8 +100,37 @@ test("M4 derives raw observations from the actual P02 replay receipt", () => {
     report.observations.commands.map((command) => command.command_id),
     ["p02_replay_a", "p02_replay_b"],
   );
+  assert.deepEqual(
+    report.observations.commands.map(({ invocation_digest, stdout_sha256, stderr_sha256 }) => ({
+      invocation_digest,
+      stdout_sha256,
+      stderr_sha256,
+    })),
+    [
+      {
+        invocation_digest: report.observations.commands[0].invocation_digest,
+        stdout_sha256: report.observations.commands[0].stdout_sha256,
+        stderr_sha256: report.observations.commands[0].stderr_sha256,
+      },
+      {
+        invocation_digest: report.observations.commands[0].invocation_digest,
+        stdout_sha256: report.observations.commands[0].stdout_sha256,
+        stderr_sha256: report.observations.commands[0].stderr_sha256,
+      },
+    ],
+  );
 });
 
+test("M4 rejects replay command evidence that diverges between identical runs", () => {
+  assert.throws(
+    () =>
+      buildRawCandidateReport({
+        ...input,
+        commands: [input.commands[0], { ...input.commands[1], invocation_digest: "1".repeat(64) }],
+      }),
+    /p02_evidence_mismatch/,
+  );
+});
 test("M4 rejects forged P02, inactive policy-like fields, and executable report fields", () => {
   assert.throws(
     () => buildRawCandidateReport({ ...input, p02: { ...input.p02, outcome: "applied" } }),
