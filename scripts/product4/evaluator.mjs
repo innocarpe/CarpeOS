@@ -6,7 +6,7 @@ import {
   PRODUCT4_REPOSITORY_ID,
 } from "./policy-identity.mjs";
 
-export const EVALUATOR_ATTESTATION_SCHEMA = "product4-evaluator-attestation-v1";
+export const EVALUATOR_ATTESTATION_SCHEMA = "carpeos.product4-evaluator-attestation/v1";
 export const PREDICATE_IDS = Object.freeze([
   "identity_bound",
   "fixture_bound",
@@ -46,6 +46,26 @@ const ATTESTATION_KEYS = [
   "observations",
   "provenance",
 ];
+const CORE_IDENTITY_KEYS = Object.freeze([
+  "repository_id",
+  "head_sha",
+  "tree_sha256",
+  "fixture_sha256",
+  "policy_sha256",
+  "context",
+  "external_id",
+]);
+export const TRUSTED_EVIDENCE_SCHEMA = "carpeos.product4-trusted-evidence/v1";
+const TRUSTED_EVIDENCE_KEYS = [
+  "schema_version",
+  "owner",
+  "identity",
+  "predicate_digest",
+  "observation_digest",
+  "source_report_digest",
+  "source",
+];
+const TRUSTED_EVIDENCE_SOURCE_KEYS = ["kind", "evaluator_tree_sha256"];
 const PREDICATE_RESULT_KEYS = ["predicate_id", "passed", "evidence_digest"];
 const OBSERVATION_KEYS = ["p02", "zero_write", "high_water", "candidate_execution"];
 const REQUIRED_OBSERVATION_KEYS = ["p02", "zero_write", "high_water"];
@@ -81,6 +101,7 @@ export function evaluateCandidateEvidence({
   observations,
   provenance,
   issuerWorkflowSha,
+  trustedEvidence,
   candidateReportedSuccess,
   requireCandidateExecutionObservation = false,
 }) {
@@ -91,6 +112,15 @@ export function evaluateCandidateEvidence({
     assertObservations(observations, undefined, { requireCandidateExecutionObservation });
     assertProvenance(provenance, issuerWorkflowSha);
     assertSafeReport(candidateReport);
+    assertReportIdentity(candidateReport, identity);
+    assertSourceReportBinding(provenance, candidateReport);
+    assertTrustedEvidence(
+      trustedEvidence,
+      identity,
+      trustedPredicates,
+      observations,
+      candidateReport,
+    );
   } catch (error) {
     blockers.push(error instanceof Error ? error.message : "trusted evidence is invalid");
   }
@@ -116,7 +146,12 @@ export function evaluateCandidateEvidence({
     predicate_results: PREDICATE_IDS.map((predicate_id) => ({
       predicate_id,
       passed: true,
-      evidence_digest: digestJson({ predicate_id, passed: true, observations }),
+      evidence_digest: predicateEvidenceDigest({
+        predicateId: predicate_id,
+        passed: true,
+        identity,
+        observations,
+      }),
     })),
     observations: clone(observations),
     provenance: {
@@ -164,8 +199,13 @@ export function assertEvaluatorAttestation(attestation) {
   assertObservations(attestation.observations, errors, {
     requireCandidateExecutionObservation: true,
   });
-  assertPredicateEvidenceDigests(attestation.predicate_results, attestation.observations, errors);
-  assertProvenance(attestation.provenance, attestation.provenance?.evaluator_workflow_sha, errors, {
+  assertPredicateEvidenceDigests(
+    attestation.predicate_results,
+    attestation.observations,
+    attestation,
+    errors,
+  );
+  assertProvenance(attestation.provenance, attestation.issuer_workflow_sha, errors, {
     requireSourceReportSha256: true,
   });
   assertNoForbiddenKeys(attestation, errors);
@@ -195,6 +235,89 @@ function assertIdentity(identity) {
   if (identity.external_id !== expected)
     throwEvaluatorError("identity_refusal", "external id is not C-bound");
 }
+function coreIdentity(value) {
+  return Object.fromEntries(CORE_IDENTITY_KEYS.map((key) => [key, value?.[key]]));
+}
+
+function assertReportIdentity(report, identity) {
+  if (!isRecord(report))
+    throwEvaluatorError("identity_refusal", "candidate report identity is required");
+  const present = CORE_IDENTITY_KEYS.filter((key) =>
+    key === "policy_sha256"
+      ? Object.hasOwn(report, "policy_sha256") || Object.hasOwn(report, "intent_policy_sha256")
+      : Object.hasOwn(report, key),
+  );
+  if (present.length !== CORE_IDENTITY_KEYS.length)
+    throwEvaluatorError("identity_refusal", "candidate report identity is incomplete");
+  for (const key of CORE_IDENTITY_KEYS) {
+    const reportValue =
+      key === "policy_sha256" ? (report.policy_sha256 ?? report.intent_policy_sha256) : report[key];
+    if (reportValue !== identity[key])
+      throwEvaluatorError("identity_refusal", `candidate report ${key} is not bound to C identity`);
+  }
+  if (
+    Object.hasOwn(report, "policy_sha256") &&
+    Object.hasOwn(report, "intent_policy_sha256") &&
+    report.policy_sha256 !== report.intent_policy_sha256
+  )
+    throwEvaluatorError("identity_refusal", "candidate report policy identity is ambiguous");
+}
+
+function assertSourceReportBinding(provenance, report) {
+  if (!isRecord(provenance) || !Object.hasOwn(provenance, "source_report_sha256")) return;
+  if (provenance.source_report_sha256 !== digestJson(report))
+    throwEvaluatorError(
+      "provenance_refusal",
+      "source report digest is not bound to candidate report",
+    );
+}
+function assertTrustedEvidence(trustedEvidence, identity, predicates, observations, report) {
+  if (!isRecord(trustedEvidence))
+    throwEvaluatorError("predicate_refusal", "base-owned trusted evidence envelope is required");
+  const errors = [];
+  assertExactKeys(trustedEvidence, TRUSTED_EVIDENCE_KEYS, "trustedEvidence", errors);
+  if (trustedEvidence.schema_version !== TRUSTED_EVIDENCE_SCHEMA)
+    errors.push("trustedEvidence schema_version is invalid");
+  if (trustedEvidence.owner !== "base_evaluator") errors.push("trustedEvidence owner is invalid");
+  if (!isRecord(trustedEvidence.identity)) {
+    errors.push("trustedEvidence identity is required");
+  } else {
+    assertExactKeys(
+      trustedEvidence.identity,
+      CORE_IDENTITY_KEYS,
+      "trustedEvidence.identity",
+      errors,
+    );
+    for (const key of CORE_IDENTITY_KEYS) {
+      if (trustedEvidence.identity[key] !== identity[key])
+        errors.push(`trustedEvidence identity ${key} is not bound`);
+    }
+  }
+  for (const [key, value] of [
+    ["predicate_digest", digestJson(predicates)],
+    ["observation_digest", digestJson(observations)],
+    ["source_report_digest", digestJson(report)],
+  ]) {
+    if (!SHA256.test(trustedEvidence[key] ?? "")) errors.push(`trustedEvidence.${key} is invalid`);
+    else if (trustedEvidence[key] !== value) errors.push(`trustedEvidence.${key} is not bound`);
+  }
+  if (!isRecord(trustedEvidence.source)) {
+    errors.push("trustedEvidence source is required");
+  } else {
+    assertExactKeys(
+      trustedEvidence.source,
+      TRUSTED_EVIDENCE_SOURCE_KEYS,
+      "trustedEvidence.source",
+      errors,
+    );
+    if (trustedEvidence.source.kind !== "base_recompute")
+      errors.push("trustedEvidence source kind is invalid");
+    if (!SHA256.test(trustedEvidence.source.evaluator_tree_sha256 ?? ""))
+      errors.push("trustedEvidence evaluator tree is invalid");
+  }
+  assertNoForbiddenKeys(trustedEvidence, errors, "$.trustedEvidence");
+  if (errors.length > 0) throwEvaluatorError("predicate_refusal", errors.join("; "));
+}
 
 function assertTrustedPredicates(predicates) {
   if (!isRecord(predicates))
@@ -202,6 +325,13 @@ function assertTrustedPredicates(predicates) {
   const keys = Object.keys(predicates);
   if (keys.length !== PREDICATE_IDS.length || PREDICATE_IDS.some((id) => !keys.includes(id)))
     throwEvaluatorError("predicate_refusal", "fixed predicate conjunction is incomplete");
+  for (const predicateId of PREDICATE_IDS) {
+    if (typeof predicates[predicateId] !== "boolean")
+      throwEvaluatorError(
+        "predicate_refusal",
+        `trusted predicate ${predicateId} must be a boolean recomputation`,
+      );
+  }
 }
 
 function assertPredicates(predicates, errors) {
@@ -211,12 +341,14 @@ function assertPredicates(predicates, errors) {
   }
   const seen = new Set();
   for (const [index, result] of predicates.entries()) {
+    const expectedPredicateId = PREDICATE_IDS[index];
     if (
       !isRecord(result) ||
+      result.predicate_id !== expectedPredicateId ||
       !PREDICATE_IDS.includes(result.predicate_id) ||
       seen.has(result.predicate_id)
     ) {
-      errors.push("predicate_results contains an unknown or duplicate predicate");
+      errors.push("predicate_results contains an unknown, duplicate, or out-of-order predicate");
       continue;
     }
     assertExactKeys(result, PREDICATE_RESULT_KEYS, `predicate_results[${index}]`, errors);
@@ -227,17 +359,31 @@ function assertPredicates(predicates, errors) {
   if (seen.size !== PREDICATE_IDS.length)
     errors.push("predicate_results is missing a fixed predicate");
 }
-function assertPredicateEvidenceDigests(predicates, observations, errors) {
-  if (!Array.isArray(predicates) || !isRecord(observations)) return;
+export function predicateEvidenceDigest({ predicateId, passed, identity, observations }) {
+  return digestJson({
+    predicate_id: predicateId,
+    passed,
+    core_identity: coreIdentity(identity),
+    observation_preimage: {
+      predicate_id: predicateId,
+      observations: clone(observations),
+    },
+  });
+}
+function assertPredicateEvidenceDigests(predicates, observations, identity, errors) {
+  if (!Array.isArray(predicates) || !isRecord(observations) || !isRecord(identity)) return;
   for (const result of predicates) {
     if (!isRecord(result) || !PREDICATE_IDS.includes(result.predicate_id)) continue;
-    const expected = digestJson({
-      predicate_id: result.predicate_id,
-      passed: true,
+    const expected = predicateEvidenceDigest({
+      predicateId: result.predicate_id,
+      passed: result.passed,
+      identity,
       observations,
     });
     if (result.evidence_digest !== expected)
-      errors.push(`predicate ${result.predicate_id} evidence is not bound to observations`);
+      errors.push(
+        `predicate ${result.predicate_id} evidence is not bound to its identity and observations`,
+      );
   }
 }
 

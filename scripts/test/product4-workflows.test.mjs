@@ -40,6 +40,11 @@ test("M4 keeps the raw producer unprivileged and bound to pull_request C", () =>
   assert.match(source, /tree-digest\.mjs/);
   assert.match(source, /p02-runner\.mjs/);
   assert.match(source, /raw-producer\.mjs/);
+  assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
+  assert.match(source, /--sandbox-receipt/);
+  assert.match(source, /bwrap/);
+  assert.match(source, /setpriv\s+--no-new-privs/);
+  assert.match(source, /sandbox-probe\.json/);
 });
 
 test("M4 isolates base-owned evaluation from the untrusted candidate workspace", () => {
@@ -49,6 +54,7 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.match(source, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(source, /path: candidate/);
   assert.match(source, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
   assert.match(source, /name: product4-raw-\$\{\{ github\.event\.workflow_run\.head_sha \}\}\n/);
   assert.match(source, /name: product4-attestation\n/);
   assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
@@ -70,6 +76,7 @@ test("M4 publisher has no candidate checkout and performs a data-only dry run", 
   assert.match(source, /publisher-runner\.mjs/);
   assert.match(source, /name: product4-attestation\n/);
   assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
+  assert.doesNotMatch(source, /--head-sha "\$\{\{ github\.event\.workflow_run\.head_sha \}\}"/);
   assert.match(source, /name: product4-publication\n/);
   assert.doesNotMatch(source, /product4-publication-\$\{\{/);
   assert.match(source, /live authority/);

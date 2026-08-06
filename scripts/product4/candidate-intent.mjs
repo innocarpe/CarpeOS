@@ -50,6 +50,18 @@ const MAX_CLASSIFICATION_DEPTH = 8;
 const MAX_CLASSIFICATION_KEYS = 64;
 const MAX_CLASSIFICATION_ITEMS = 128;
 const MAX_CLASSIFICATION_STRING = 512;
+const IMMUTABLE_DIGEST_KEYS = Object.freeze([
+  "schema_version",
+  "repository_id",
+  "head_sha",
+  "tree_sha256",
+  "fixture_sha256",
+  "intent_policy_sha256",
+  "context",
+  "intent",
+  "state",
+  "scope_digest",
+]);
 
 /**
  * A deterministic, base-owned Product 4 candidate-intent identity.
@@ -152,16 +164,15 @@ export function assertCandidateIntent(envelope) {
 }
 
 /**
- * Compute the digest over an unsigned canonical envelope. A supplied
- * `classification_digest` is ignored so callers can verify either a signed
- * envelope or an unsigned candidate identity.
+ * Compute the digest over immutable identity and scope fields only. Mutable
+ * evaluator workflow provenance is validated as an envelope field but cannot
+ * alter classification identity.
  */
 export function computeClassificationDigest(envelope) {
   if (!isRecord(envelope)) {
     throwCandidateIntentError("invalid_identity", "digest input must be an object");
   }
-  const unsigned = { ...envelope };
-  delete unsigned.classification_digest;
+  const unsigned = Object.fromEntries(IMMUTABLE_DIGEST_KEYS.map((key) => [key, envelope[key]]));
   try {
     return digestJson(unsigned);
   } catch (error) {
@@ -185,7 +196,8 @@ export function unsignedCandidateIntent(envelope) {
 /**
  * Enforce write-once identity semantics. Re-emitting an identical envelope is
  * idempotent; changing C/tree/classification creates a new identity and cannot
- * repair the previously issued envelope.
+ * repair the previously issued envelope. Evaluator workflow provenance is
+ * validated but deliberately excluded from the immutable identity.
  */
 export function assertCandidateIntentWriteOnce(existing, next) {
   assertCandidateIntent(existing);
@@ -196,10 +208,13 @@ export function assertCandidateIntentWriteOnce(existing, next) {
       "candidate intent is write-once; changed immutable inputs require a new identity",
     );
   }
-  if (canonicalJson(existing) !== canonicalJson(next)) {
+  const immutableKeys = CANDIDATE_INTENT_KEYS.filter((key) => key !== "issuer_workflow_sha");
+  const immutableExisting = Object.fromEntries(immutableKeys.map((key) => [key, existing[key]]));
+  const immutableNext = Object.fromEntries(immutableKeys.map((key) => [key, next[key]]));
+  if (canonicalJson(immutableExisting) !== canonicalJson(immutableNext)) {
     throwCandidateIntentError(
       "identity_conflict",
-      "candidate intent identity is reused with different envelope fields",
+      "candidate intent identity is reused with different immutable envelope fields",
     );
   }
   return existing;
