@@ -757,3 +757,62 @@ test("M4 reconciles lost POST/PATCH without blind duplicate writes", () => {
     /duplicate_refusal/,
   );
 });
+
+test("M4 refuses unsafe repository path traversal and non owner/name forms", () => {
+  for (const repositoryPath of [
+    "../evil",
+    "foo/../bar",
+    "a/b/c",
+    "/owner/repo",
+    "owner//repo",
+    "owner/repo/extra",
+    "owner/.",
+    "owner/..",
+    "..",
+    "owner\\repo",
+  ]) {
+    assert.throws(
+      () => buildExactCheckQuery({ repositoryPath, headSha: identity.head_sha }),
+      /identity_conflict|unsafe|exactly owner\/name/,
+    );
+  }
+  assert.doesNotThrow(() =>
+    buildExactCheckQuery({ repositoryPath: "synthetic/carpeos", headSha: identity.head_sha }),
+  );
+});
+
+test("M4 refuses HTTP error statuses embedded in GitHub wrapper responses", () => {
+  for (const [status, pattern] of [
+    [401, /unauthorized_response/],
+    [403, /unauthorized_response/],
+    [404, /not_found_response/],
+    [409, /conflict_response/],
+    [422, /unprocessable_response/],
+    [500, /malformed_response/],
+  ]) {
+    assert.throws(
+      () =>
+        normalizeCheckRunsResponse(
+          {
+            status,
+            total_count: 0,
+            check_runs: [],
+            headers: { link: "" },
+          },
+          { identity },
+        ),
+      pattern,
+    );
+  }
+  assert.doesNotThrow(() =>
+    normalizeCheckRunsResponse(
+      {
+        status: 200,
+        total_count: 0,
+        check_runs: [],
+        headers: { link: "" },
+      },
+      { identity },
+    ),
+  );
+});

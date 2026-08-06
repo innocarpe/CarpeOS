@@ -524,6 +524,7 @@ function normalizeGitHubPageIfNeeded(response, identity) {
 }
 function unwrapGitHubResponse(response) {
   if (!isRecord(response)) throwApiError("malformed_response", "GitHub response is required");
+  assertHttpSuccessStatus(response);
   if (
     isRecord(response.data) &&
     !Array.isArray(response.check_suites) &&
@@ -537,6 +538,32 @@ function unwrapGitHubResponse(response) {
   )
     return response.body;
   return response;
+}
+
+/**
+ * Fail closed when a transport/wrapper embeds a non-success HTTP status.
+ * Missing status is allowed for already-normalized adapter pages.
+ */
+function assertHttpSuccessStatus(response) {
+  const status =
+    response.status ??
+    response.statusCode ??
+    response.status_code ??
+    (isRecord(response.headers) ? response.headers.status : undefined);
+  if (status === undefined || status === null) return;
+  const numeric = typeof status === "number" ? status : Number(status);
+  if (!Number.isSafeInteger(numeric))
+    throwApiError("malformed_response", "GitHub response status is invalid");
+  if (numeric === 401 || numeric === 403)
+    throwApiError("unauthorized_response", `GitHub response status ${numeric} is not authorized`);
+  if (numeric === 404)
+    throwApiError("not_found_response", "GitHub response status 404 is not found");
+  if (numeric === 409)
+    throwApiError("conflict_response", "GitHub response status 409 is conflicted");
+  if (numeric === 422)
+    throwApiError("unprocessable_response", "GitHub response status 422 is unprocessable");
+  if (numeric < 200 || numeric >= 300)
+    throwApiError("malformed_response", `GitHub response status ${numeric} is not success`);
 }
 
 function markAdapterPage(page, kind) {
@@ -1399,10 +1426,25 @@ function assertPage(page) {
 function normalizeRepositoryPath(repositoryPath) {
   if (typeof repositoryPath !== "string")
     throwApiError("identity_conflict", "repository path is required");
-  const normalized = repositoryPath.replace(/\/+$/, "");
-  if (normalized.length < 3 || normalized.length > 200 || !/^[-_./a-z0-9]+$/i.test(normalized))
+  // Exact owner/name only. Reject traversal, absolute paths, empty segments, and extras.
+  const trimmed = repositoryPath.trim();
+  if (trimmed.length < 3 || trimmed.length > 200)
     throwApiError("identity_conflict", "repository path is invalid");
-  return normalized;
+  if (trimmed.startsWith("/") || trimmed.includes("\\") || trimmed.includes("\0"))
+    throwApiError("identity_conflict", "repository path is unsafe");
+  const segments = trimmed.replace(/\/+$/, "").split("/");
+  if (segments.length !== 2)
+    throwApiError("identity_conflict", "repository path must be exactly owner/name");
+  for (const segment of segments) {
+    if (
+      segment.length === 0 ||
+      segment === "." ||
+      segment === ".." ||
+      !/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(segment)
+    )
+      throwApiError("identity_conflict", "repository path is unsafe");
+  }
+  return `${segments[0]}/${segments[1]}`;
 }
 function assertSha(value, pattern, label) {
   if (typeof value !== "string" || !pattern.test(value))
