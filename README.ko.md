@@ -23,6 +23,11 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 ([변경 기록](CHANGELOG.md) · [v3.2.0 릴리스](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
 [product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
 
+**5.0 드래프트 레인 (저장소 내, opt-in, npm major 아님):** `carpeos v5` 뒤의
+오프라인 드래프트 추출, 기본 LLM 경로는 **DeepSeek Direct**, 항상
+`canonical_effect: "none"`, capture 핫패스에 연결되지 않음.
+[PRD-v5](docs/PRD-v5.md) · [ADR 0016](docs/adr/0016-v5-draft-only-deepseek-primary.md).
+
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
 </p>

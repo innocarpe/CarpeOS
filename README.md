@@ -24,6 +24,10 @@ session dump into “memory.”
 ([notes](CHANGELOG.md) · [v3.2.0 release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
 [product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
 
+**5.0 draft lane (in-tree, opt-in, not the npm major yet):** offline draft extraction
+behind `carpeos v5` with **DeepSeek Direct** as the primary LLM path, always
+`canonical_effect: "none"`, never on the capture hot path. See [PRD-v5](docs/PRD-v5.md)
+and [ADR 0016](docs/adr/0016-v5-draft-only-deepseek-primary.md).
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
 </p>
