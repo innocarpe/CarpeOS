@@ -75,6 +75,24 @@ function githubRun(id, suiteId = 1, overrides = {}) {
     ...overrides,
   };
 }
+function documentedSuite(id, overrides = {}) {
+  return {
+    id,
+    status: "completed",
+    conclusion: "success",
+    ...overrides,
+  };
+}
+
+function documentedRun(id, suiteId = 1, overrides = {}) {
+  return {
+    id,
+    status: "completed",
+    conclusion: "success",
+    check_suite: { id: suiteId },
+    ...overrides,
+  };
+}
 
 function normalizedRunPage(runs, link = "") {
   return normalizeCheckRunsResponse(
@@ -322,6 +340,81 @@ test("M4 adapts real GitHub suite/run response shapes and rejects invented nesti
     /invented nested|check_suites/,
   );
 });
+test("M4 accepts documented suite/run shapes and binds omitted identity fields", () => {
+  const suitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [documentedSuite(81)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  const runPage = normalizeCheckRunsResponse(
+    {
+      total_count: 1,
+      check_runs: [documentedRun(82, 81)],
+      headers: { link: "" },
+    },
+    { identity, suiteId: 81 },
+  );
+  assert.equal(suitePage.items[0].repository_id, identity.repository_id);
+  assert.equal(suitePage.items[0].app_id, identity.app_id);
+  assert.equal(runPage.items[0].repository_path, identity.repository_path);
+  assert.equal(runPage.items[0].check_name, identity.check_name);
+  assert.equal(runPage.items[0].external_id, identity.external_id);
+  assert.equal(runPage.items[0].head_sha, identity.head_sha);
+  assert.deepEqual(
+    collectCheckRuns({ pages: [suitePage, runPage], identity }).map((run) => run.id),
+    [82],
+  );
+  assert.doesNotThrow(() => assertRealCheckRun(documentedRun(83, 81), identity));
+});
+
+test("M4 reconciles aggregate totals across partial and full terminal pages", async () => {
+  await assert.rejects(
+    () =>
+      collectPaginatedPages({
+        firstUrl: "https://api.test/partial",
+        identity,
+        fetchPage: async () => ({
+          total_count: 2,
+          check_runs: [documentedRun(91, 1)],
+          headers: { link: "" },
+        }),
+        normalizePage: (response, { identity: callbackIdentity }) =>
+          normalizeCheckRunsResponse(response, { identity: callbackIdentity }),
+      }),
+    /incomplete_pagination/,
+  );
+  await assert.rejects(
+    () =>
+      collectPaginatedPages({
+        firstUrl: "https://api.test/full-mismatch",
+        identity,
+        fetchPage: async () => ({
+          total_count: 101,
+          check_runs: Array.from({ length: 100 }, (_, index) => documentedRun(100 + index, 1)),
+          headers: { link: "" },
+        }),
+        normalizePage: (response, { identity: callbackIdentity }) =>
+          normalizeCheckRunsResponse(response, { identity: callbackIdentity }),
+      }),
+    /incomplete_pagination/,
+  );
+  const full = await collectPaginatedPages({
+    firstUrl: "https://api.test/full",
+    identity,
+    fetchPage: async () => ({
+      total_count: 100,
+      check_runs: Array.from({ length: 100 }, (_, index) => documentedRun(200 + index, 1)),
+      headers: { link: "" },
+    }),
+    normalizePage: (response, { identity: callbackIdentity }) =>
+      normalizeCheckRunsResponse(response, { identity: callbackIdentity }),
+  });
+  assert.equal(full[0].total_count, 100);
+  assert.equal(full[0].items.length, 100);
+});
 
 test("M4 refuses foreign repository/App/C and missing check identity in real responses", () => {
   const cases = [
@@ -366,10 +459,7 @@ test("M4 refuses foreign repository/App/C and missing check identity in real res
       code,
     );
   }
-  assert.throws(
-    () => assertRealCheckRun({ ...githubRun(57), app: undefined }, identity),
-    /App identity/,
-  );
+  assert.doesNotThrow(() => assertRealCheckRun({ ...githubRun(57), app: undefined }, identity));
 });
 
 test("M4 refuses pagination loops and deduplicates/caps adapted suites deterministically", async () => {
@@ -408,6 +498,107 @@ test("M4 refuses pagination loops and deduplicates/caps adapted suites determini
     normalizedRunPage([githubRun(1000 + index, 1000 + index)]),
   );
   assert.throws(() => collectCheckRuns({ pages: cappedPages, identity }), /cap_exceeded/);
+});
+test("M4 requires a fresh exact pending-run GET before retrying a lost PATCH", () => {
+  const annotation = {
+    path: "evidence.md",
+    start_line: 1,
+    end_line: 1,
+    annotation_level: "notice",
+    message: "pending",
+  };
+  const pending = {
+    ...identity,
+    id: 700,
+    suite_id: 7,
+    status: "queued",
+    conclusion: null,
+    output: { title: "pending", annotations: [annotation] },
+  };
+  const patch = {
+    status: "completed",
+    conclusion: "success",
+    output: { title: "verified", annotations: [annotation] },
+  };
+  const freshPage = (overrides = {}) =>
+    normalizeCheckRunsResponse(
+      {
+        total_count: 1,
+        check_runs: [
+          {
+            id: pending.id,
+            status: "queued",
+            conclusion: null,
+            check_suite: { id: pending.suite_id },
+            output: pending.output,
+            ...overrides,
+          },
+        ],
+        headers: { link: "" },
+      },
+      { identity, suiteId: pending.suite_id },
+    );
+  let requested;
+  const retried = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    freshGet: (query) => {
+      requested = query;
+      return freshPage();
+    },
+  });
+  assert.equal(retried.status, "retry_once");
+  assert.equal(retried.retry_allowed, true);
+  assert.equal(requested.path, `${identity.repository_path}/check-runs/${pending.id}`);
+  assert.deepEqual(retried.retry_payload, patch);
+
+  const payloadMismatch = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    freshGet: () => freshPage({ output: { title: "changed", annotations: [annotation] } }),
+  });
+  assert.equal(payloadMismatch.status, "patch_indeterminate");
+
+  const foreignPending = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    freshGet: () => ({ ...pending, external_id: "foreign-external-id" }),
+  });
+  assert.equal(foreignPending.status, "patch_indeterminate");
+
+  const retryOverflow = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    retryCount: 1,
+    freshGet: () => freshPage(),
+  });
+  assert.equal(retryOverflow.status, "patch_indeterminate");
+
+  const annotationLoss = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    freshGet: () =>
+      freshPage({
+        status: "completed",
+        conclusion: "success",
+        output: { title: "verified" },
+      }),
+  });
+  assert.equal(annotationLoss.status, "patch_indeterminate");
+  assert.equal(annotationLoss.requires_human_reconciliation, true);
+
+  const missing = reconcileLostPatch({
+    identity,
+    pendingRun: pending,
+    attemptedPatch: patch,
+    freshGet: () => [],
+  });
+  assert.equal(missing.status, "patch_indeterminate");
 });
 test("M4 reconciles lost POST/PATCH without blind duplicate writes", () => {
   const pending = {

@@ -27,11 +27,7 @@ import {
   PRODUCT4_POLICY_SHA256,
 } from "./policy-identity.mjs";
 import { buildRawCandidateReportFromP02 } from "./raw-producer.mjs";
-import {
-  buildReleaseAuthorityEvidence,
-  buildReleaseAuthorityReceipt,
-  reconcileReleaseAuthority,
-} from "./release-authority.mjs";
+import { buildReleaseAuthorityReceipt, reconcileReleaseAuthority } from "./release-authority.mjs";
 import { projectFixedContext, reconcileRulesetResponse } from "./ruleset-guard.mjs";
 
 export const DOGFOOD_SCHEMA = "product4-dogfood-receipt-v1";
@@ -320,16 +316,19 @@ function duplicateApiResults() {
   // real check-runs adapter so duplicate refusal still targets buildEvidenceReceipt.
   const successPage = normalizeCheckRunsResponse(
     {
-      total_count: 1,
+      total_count: 2,
       check_runs: [syntheticGitHubRun(identity, 2, "success")],
-      headers: { link: "" },
+      headers: { link: '<synthetic://page-2>; rel="next"' },
     },
     { identity },
   );
   const failurePage = normalizeCheckRunsResponse(
     {
-      total_count: 1,
-      check_runs: [syntheticGitHubRun(identity, 2, "failure")],
+      total_count: 2,
+      check_runs: [
+        syntheticGitHubRun(identity, 3, "failure"),
+        syntheticGitHubRun(identity, 2, "failure"),
+      ],
       headers: { link: "" },
     },
     { identity },
