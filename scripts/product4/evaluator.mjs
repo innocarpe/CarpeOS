@@ -66,6 +66,7 @@ const TRUSTED_EVIDENCE_KEYS = [
   "source",
 ];
 const TRUSTED_EVIDENCE_SOURCE_KEYS = ["kind", "evaluator_tree_sha256"];
+const TRUSTED_EVIDENCE_BRAND = new WeakSet();
 const PREDICATE_RESULT_KEYS = ["predicate_id", "passed", "evidence_digest"];
 const OBSERVATION_KEYS = ["p02", "zero_write", "high_water", "candidate_execution"];
 const REQUIRED_OBSERVATION_KEYS = ["p02", "zero_write", "high_water"];
@@ -92,6 +93,36 @@ export class EvaluatorError extends Error {
     this.code = code;
     this.blockers = blockers;
   }
+}
+/**
+ * @internal Trusted evaluator boundary. The runner must seal its independently
+ * recomputed evidence before passing it to evaluateCandidateEvidence.
+ */
+export function sealTrustedEvidence({
+  trustedEvidence,
+  identity,
+  trustedPredicates,
+  observations,
+  candidateReport,
+}) {
+  assertIdentity(identity);
+  assertTrustedPredicates(trustedPredicates);
+  assertObservations(observations, undefined, {
+    requireCandidateExecutionObservation: true,
+  });
+  assertSafeReport(candidateReport);
+  assertReportIdentity(candidateReport, identity);
+  assertTrustedEvidence(
+    trustedEvidence,
+    identity,
+    trustedPredicates,
+    observations,
+    candidateReport,
+    { requireBrand: false },
+  );
+  const sealed = clone(trustedEvidence);
+  TRUSTED_EVIDENCE_BRAND.add(sealed);
+  return sealed;
 }
 
 export function evaluateCandidateEvidence({
@@ -219,6 +250,11 @@ export function attestationDigest(attestation) {
 
 function assertIdentity(identity) {
   if (!isRecord(identity)) throwEvaluatorError("identity_refusal", "identity is required");
+  if (
+    Object.keys(identity).length !== CORE_IDENTITY_KEYS.length ||
+    CORE_IDENTITY_KEYS.some((key) => !Object.hasOwn(identity, key))
+  )
+    throwEvaluatorError("identity_refusal", "identity shape is not exact");
   if (identity.repository_id !== PRODUCT4_REPOSITORY_ID)
     throwEvaluatorError("identity_refusal", "repository id mismatch");
   if (!SHA1.test(identity.head_sha ?? ""))
@@ -271,9 +307,21 @@ function assertSourceReportBinding(provenance, report) {
       "source report digest is not bound to candidate report",
     );
 }
-function assertTrustedEvidence(trustedEvidence, identity, predicates, observations, report) {
+function assertTrustedEvidence(
+  trustedEvidence,
+  identity,
+  predicates,
+  observations,
+  report,
+  { requireBrand = true } = {},
+) {
   if (!isRecord(trustedEvidence))
     throwEvaluatorError("predicate_refusal", "base-owned trusted evidence envelope is required");
+  if (requireBrand && !TRUSTED_EVIDENCE_BRAND.has(trustedEvidence))
+    throwEvaluatorError(
+      "predicate_refusal",
+      "trusted evidence envelope is not sealed by base evaluator",
+    );
   const errors = [];
   assertExactKeys(trustedEvidence, TRUSTED_EVIDENCE_KEYS, "trustedEvidence", errors);
   if (trustedEvidence.schema_version !== TRUSTED_EVIDENCE_SCHEMA)

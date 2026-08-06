@@ -67,7 +67,7 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.match(source, /evaluator-runner\.mjs/);
   assert.match(
     evaluatorRunner(),
-    /const evaluation = evaluateCandidateEvidence\(\{[\s\S]*\n {4}trustedEvidence,\n {2}\}\);/,
+    /const sealedTrustedEvidence = sealTrustedEvidence\(\{[\s\S]*\n {2}\}\);\n {2}const evaluation = evaluateCandidateEvidence\(\{[\s\S]*\n {4}trustedEvidence: sealedTrustedEvidence,\n {2}\}\);/,
   );
   assert.match(source, /--candidate-root/);
   assert.match(source, /cache-dependency-path: candidate\/pnpm-lock\.yaml/);
