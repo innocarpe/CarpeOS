@@ -782,6 +782,8 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
       // A runner may not have every conventional runtime directory.
     }
   }
+  // Apply rlimits inside the sandbox after setpriv. Host-side ulimit before
+  // `sudo bwrap` is reset by sudo and is not visible on /proc/self/limits.
   bwrapArgs.push(
     "--",
     "setpriv",
@@ -789,27 +791,19 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "--inh-caps=-all",
     "--ambient-caps=-all",
     "--",
+    "/bin/bash",
+    "-ceu",
+    'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
+    "product4-p02-sandbox-limits",
     process.execPath,
     "/cli/apps/carpeos-cli/dist/index.js",
     ...args,
   );
-  const result = spawnSync(
-    "/bin/bash",
-    [
-      "-ceu",
-      'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
-      "product4-p02-sandbox",
-      "sudo",
-      "-n",
-      "bwrap",
-      ...bwrapArgs,
-    ],
-    {
-      cwd: workspaceReal,
-      encoding: "buffer",
-      timeout: 120_000,
-    },
-  );
+  const result = spawnSync("sudo", ["-n", "bwrap", ...bwrapArgs], {
+    cwd: workspaceReal,
+    encoding: "buffer",
+    timeout: 120_000,
+  });
   if (result.error)
     throwRunnerError(
       "sandbox_unavailable",

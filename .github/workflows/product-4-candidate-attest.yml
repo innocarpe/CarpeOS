@@ -141,10 +141,12 @@ jobs:
             --ambient-caps=-all
             --
           )
-          ulimit -u 64
-          ulimit -v 1048576
-          ulimit -f 102400
+          # rlimits must be set inside the namespace (after setpriv). Host ulimit
+          # before sudo bwrap is reset by sudo and is not observed by the probe.
           "${sandbox[@]}" /bin/bash -ceu '
+            ulimit -u 64
+            ulimit -v 1048576
+            ulimit -f 102400
             rm -rf /work/*
             cp -aL /candidate/. /work/
             chmod -R u+rwX /work

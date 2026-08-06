@@ -118,13 +118,16 @@ jobs:
             --inh-caps=-all
             --ambient-caps=-all
             --
+            # Apply rlimits inside the sandbox. Host `ulimit` before `sudo bwrap`
+            # is reset by sudo, so the probe would observe unlimited RLIMIT_AS.
+            /bin/bash
+            -ceu
+            'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"'
+            product4-sandbox-limits
             "$node_path"
             /candidate/scripts/product4/sandbox-probe.mjs
             /output/sandbox-probe.json
           )
-          ulimit -u 64
-          ulimit -v 1048576
-          ulimit -f 102400
           "${sandbox[@]}"
           tree_sha256="$(node scripts/product4/tree-digest.mjs "$CARPEOS_SANDBOX_SOURCE" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
