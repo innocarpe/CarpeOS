@@ -10,11 +10,12 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **V6-P2** Hold materialize | draft Observation + `agentic_v1` hold; human promote | materialize + CLI list-held/materialize; golden-12 green | **complete** (hold-first) |
 | **V6-P3** Narrow auto-promote | allowlist + E5 + precision ≥ 0.90 | precision suite offline; `carpeos agentic precision` | **complete** (offline suite) |
 | **npm 6.1.0** | P3 ship | precision suite + CLI; npm+tag+local activate | **complete** |
-| **V6-P4** Link / graph density | provenance edges → meaning_unit graph uplift | graph metrics test | pending |
+| **V6-P4** Link / graph density | provenance edges → meaning_unit graph uplift | graph metrics test + `carpeos agentic graph-metrics` | **in progress** (this branch) |
 | **V6-P5** Draft Claims | decision/fact_candidate drafts; accept = 0 auto | Claim fixtures | pending |
 | **V6-P6** GraphRAG ranking | typed promoted units in ranking path | offline query set | pending |
-| **npm 6.0.0** | major surface + activation | hold-first cut + major-release-surface | **in cut** (see CHANGELOG / release receipt) |
-| **npm 6.1.x** | P3 narrow auto-promote | precision suite receipt | pending |
+| **npm 6.0.0** | major surface + activation | hold-first cut + major-release-surface | **complete** |
+| **npm 6.1.0** | P3 narrow auto-promote | precision suite receipt | **complete** |
+| **npm 6.2.0** | P4 link / graph density | structure edges + density metrics | pending cut |
 
 ## Hard fences
 
