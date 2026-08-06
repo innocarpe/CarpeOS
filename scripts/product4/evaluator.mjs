@@ -49,7 +49,7 @@ const ATTESTATION_KEYS = [
 const PREDICATE_RESULT_KEYS = ["predicate_id", "passed", "evidence_digest"];
 const OBSERVATION_KEYS = ["p02", "zero_write", "high_water", "candidate_execution"];
 const REQUIRED_OBSERVATION_KEYS = ["p02", "zero_write", "high_water"];
-const P02_KEYS = ["diagnosis", "outcome", "analog_available", "state_transition"];
+const P02_OBSERVATION_KEYS = ["diagnosis", "outcome", "analog_available", "state_transition"];
 const MUTATION_KEYS = [
   "canonical_events",
   "review_rows",
@@ -260,7 +260,12 @@ function assertObservations(
     );
     if (!isRecord(observations.p02)) collectedErrors.push("p02 observation is required");
     else {
-      assertExactKeys(observations.p02, P02_KEYS, "observations.p02", collectedErrors);
+      assertExactKeys(
+        observations.p02,
+        P02_OBSERVATION_KEYS,
+        "observations.p02",
+        collectedErrors,
+      );
       if (
         observations.p02.diagnosis !== "no_analog" ||
         observations.p02.outcome !== "blocked_no_apply" ||
