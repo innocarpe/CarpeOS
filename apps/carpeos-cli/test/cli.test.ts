@@ -252,6 +252,93 @@ describe("carpeos CLI", () => {
     expect(payload.canonical_effect).toBe("none");
   });
 
+  it("reports V5 readiness and all-200 eval offline", async () => {
+    const context = makeContext();
+    const readiness = await runCliJson(["v5", "readiness"], context);
+    expect(readiness.status).toBe(0);
+    expect(readiness.stdout).toMatchObject({
+      ok: true,
+      command: "v5.readiness",
+      canonical_effect: "none",
+    });
+    const readinessBody = readiness.stdout.readiness as {
+      ready?: boolean;
+      m8_status?: string;
+    };
+    expect(readinessBody.ready).toBe(true);
+    expect(readinessBody.m8_status).toBe("deferred");
+    const m7 = readiness.stdout.m7_all200 as { pass?: boolean; case_count?: number };
+    expect(m7.pass).toBe(true);
+    expect(m7.case_count).toBe(200);
+
+    const all200 = await runCliJson(["v5", "eval-all200"], context);
+    expect(all200.status).toBe(0);
+    expect(all200.stdout.ok).toBe(true);
+    expect(all200.stdout.command).toBe("v5.eval-all200");
+    const receipt = all200.stdout.receipt as { pass?: boolean; case_count?: number };
+    expect(receipt.pass).toBe(true);
+    expect(receipt.case_count).toBe(200);
+  });
+
+  it("reports V5 M8 decision as draft_lane_shippable with m8 deferred", async () => {
+    const context = makeContext();
+    const m8 = await runCliJson(["v5", "m8"], context);
+    expect(m8.status).toBe(0);
+    expect(m8.stdout.ok).toBe(true);
+    expect(m8.stdout.command).toBe("v5.m8");
+    const decision = m8.stdout.decision as {
+      draft_lane_shippable?: boolean;
+      m8_complete?: boolean;
+      m8?: { status?: string };
+    };
+    expect(decision.draft_lane_shippable).toBe(true);
+    expect(decision.m8_complete).toBe(false);
+  });
+
+  it("runs V5 draft offline from a synthetic envelope (no network)", async () => {
+    const context = makeContext();
+    const inner = Buffer.from(
+      JSON.stringify({
+        schema: "carpeos.redact-record/v1",
+        ordinal: 0,
+        kind: "document",
+        field: "document.title",
+        media: "text",
+        visibility: "visible",
+        erasure: "present",
+        value_b64: Buffer.from("X", "utf8").toString("base64"),
+      }),
+      "utf8",
+    );
+    const envelopePath = join(context.cwd, "envelope-title-x.json");
+    writeFileSync(
+      envelopePath,
+      JSON.stringify({
+        schema: "carpeos.redact-envelope/v1",
+        records_b64: inner.toString("base64"),
+      }),
+      "utf8",
+    );
+
+    const draft = await runCliJson(
+      ["v5", "draft", "--envelope", envelopePath, "--pack-id", "pack-cli-e2e"],
+      context,
+    );
+    expect(draft.status).toBe(0);
+    expect(draft.stdout).toMatchObject({
+      ok: true,
+      command: "v5.draft",
+      stage: "complete",
+      provider_network_used: false,
+      canonical_effect: "none",
+    });
+    expect(draft.stdout.pack_digest).toEqual(expect.stringMatching(/^sha256:/));
+    expect(["draft", "no_candidate"]).toContain(draft.stdout.draft_status);
+    // Body-free: operator CLI must not dump redaction values or provider bodies
+    expect(draft.rawStdout).not.toContain("value_b64");
+    expect(draft.rawStdout).not.toMatch(/DEEPSEEK|sk-/i);
+  });
+
   it("initializes, identifies a project, captures without plaintext output, and replays", () => {
     const context = makeContext();
     const initialized = runJson(["init"], context);
