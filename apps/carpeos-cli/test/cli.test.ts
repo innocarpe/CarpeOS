@@ -220,6 +220,36 @@ describe("carpeos CLI", () => {
     expect(adjudicateTopic.stdout).toContain("defaults to current");
     expect(adjudicateTopic.stdout.match(/^ {2}--limit <n>/gm) ?? []).toHaveLength(1);
     expect(adjudicateTopic.stdout.match(/^ {2}--trust-zone <id>/gm) ?? []).toHaveLength(1);
+
+    const v5Help = await captureHelp(["help", "v5"]);
+    expect(v5Help.status).toBe(0);
+    expect(v5Help.stdout).toContain("DeepSeek Direct");
+    expect(v5Help.stdout).toContain("eval-all200");
+  });
+
+  it("reports V5 draft-lane status without enabling network", async () => {
+    const previous = process.stdout.write.bind(process.stdout);
+    const chunks: Buffer[] = [];
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runCli(["v5", "status"]);
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = previous;
+    }
+    const payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+      ok?: boolean;
+      primary_provider?: string;
+      capture_hot_path_wired?: boolean;
+      canonical_effect?: string;
+    };
+    expect(payload.ok).toBe(true);
+    expect(payload.primary_provider).toBe("deepseek_direct");
+    expect(payload.capture_hot_path_wired).toBe(false);
+    expect(payload.canonical_effect).toBe("none");
   });
 
   it("initializes, identifies a project, captures without plaintext output, and replays", () => {

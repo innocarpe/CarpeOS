@@ -45,6 +45,15 @@ import {
   hashText,
   runSyncCycle,
 } from "./cycle.js";
+import {
+  createDraftPipelineDeps,
+  decideM8,
+  ProviderBoundary,
+  runAll200Evaluation,
+  runDraftPipeline,
+  v5DraftLaneReadiness,
+  verifyV5OffReleasePath,
+} from "@carpeos/v5";
 import { packageName, packageVersion } from "./package-version.js";
 
 type JsonObject = Record<string, unknown>;
@@ -115,6 +124,8 @@ export async function runCli(
         return await runMemory(rest, env);
       case "okf":
         return runOkf(rest, env);
+      case "v5":
+        return await runV5(rest, env);
       case "setup":
       case "doctor":
         throw new CliUsageError(
@@ -1357,6 +1368,162 @@ function runVersion(argv: readonly string[]): number {
   return 0;
 }
 
+/**
+ * V5 draft-only operator surface (opt-in). Never touches capture hot path or canonical write APIs.
+ * Subcommands: status | readiness | eval-all200 | draft
+ */
+async function runV5(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
+  void env;
+  const [subcommand, ...rest] = argv;
+  if (subcommand === undefined || isHelpToken(subcommand)) {
+    throw new CliUsageError(
+      "v5 requires a subcommand (status|readiness|eval-all200|draft). See: carpeos help v5",
+    );
+  }
+
+  switch (subcommand) {
+    case "status": {
+      if (rest.length > 0) {
+        throw new CliUsageError(`unexpected argument for v5 status: ${rest[0]}`);
+      }
+      const provider = new ProviderBoundary();
+      const route = provider.defaultExtractRoute();
+      writeJson(process.stdout, {
+        ok: true,
+        command: "v5.status",
+        opt_in: true,
+        draft_only: true,
+        canonical_effect: "none",
+        network_disabled_by_default: true,
+        primary_provider: route.provider_id,
+        primary_model: route.model_id,
+        primary_profile: route.profile_id,
+        openrouter_required: false,
+        capture_hot_path_wired: false,
+        m8_status: "deferred",
+      });
+      return 0;
+    }
+    case "readiness": {
+      if (rest.length > 0) {
+        throw new CliUsageError(`unexpected argument for v5 readiness: ${rest[0]}`);
+      }
+      const provider = new ProviderBoundary();
+      const deepseek_primary = provider.defaultExtractRoute().provider_id === "deepseek_direct";
+      const v5_off = verifyV5OffReleasePath({
+        v5_enabled: false,
+        provider_network_used: false,
+        canonical_writes: 0,
+        telemetry_db_only: true,
+      });
+      const m8 = decideM8({
+        opt_in: true,
+        v5_off_release_path_verified: v5_off.pass,
+        four_zero_seam: null,
+      });
+      const all200 = runAll200Evaluation();
+      const readiness = v5DraftLaneReadiness({
+        m0_pass: true,
+        pipeline_offline_pass: true,
+        deepseek_primary,
+        telemetry_local_store_pass: true,
+        v5_off_path_pass: v5_off.pass,
+        m8,
+      });
+      writeJson(process.stdout, {
+        ok: readiness.ready && all200.pass,
+        command: "v5.readiness",
+        readiness,
+        m7_all200: {
+          pass: all200.pass,
+          case_count: all200.case_count,
+          quality_rate: all200.gates.quality_rate,
+        },
+        m8,
+        canonical_effect: "none",
+      });
+      return readiness.ready && all200.pass ? 0 : 1;
+    }
+    case "eval-all200": {
+      if (rest.length > 0) {
+        throw new CliUsageError(`unexpected argument for v5 eval-all200: ${rest[0]}`);
+      }
+      const receipt = runAll200Evaluation();
+      writeJson(process.stdout, {
+        ok: receipt.pass,
+        command: "v5.eval-all200",
+        receipt,
+      });
+      return receipt.pass ? 0 : 1;
+    }
+    case "draft": {
+      const parsed = parseArgs({
+        args: rest,
+        allowPositionals: false,
+        strict: true,
+        options: {
+          envelope: { type: "string" },
+          "pack-id": { type: "string" },
+          "allow-network": { type: "boolean", default: false },
+        },
+      });
+      const envelopePath = parsed.values.envelope;
+      if (typeof envelopePath !== "string" || envelopePath.length === 0) {
+        throw new CliUsageError(
+          "v5 draft requires --envelope <path-to-raw-outer-json-or-b64-file>",
+        );
+      }
+      const packId =
+        typeof parsed.values["pack-id"] === "string" && parsed.values["pack-id"].length > 0
+          ? parsed.values["pack-id"]
+          : "pack-cli-draft";
+      const allowNetwork = parsed.values["allow-network"] === true;
+      const rawText = readFileSync(resolve(envelopePath), "utf8").trim();
+      let rawOuter: Uint8Array;
+      try {
+        // Prefer JSON outer object bytes; if single base64 line, decode that.
+        if (rawText.startsWith("{")) {
+          rawOuter = Buffer.from(rawText, "utf8");
+        } else {
+          rawOuter = Buffer.from(rawText, "base64");
+        }
+      } catch {
+        throw new CliUsageError("v5 draft: could not read envelope as JSON object or base64");
+      }
+
+      const provider = new ProviderBoundary({
+        kill: {
+          network_disabled: !allowNetwork,
+        },
+      });
+      const deps = createDraftPipelineDeps({ provider, v5_enabled: true });
+      const result = await runDraftPipeline(
+        rawOuter,
+        {
+          pack_id: packId,
+          prefer_deepseek_direct: true,
+        },
+        deps,
+      );
+      writeJson(process.stdout, {
+        ok: result.ok,
+        command: "v5.draft",
+        stage: result.stage,
+        errors: result.errors,
+        provider_network_used: result.provider_network_used,
+        pack_digest: result.pack?.pack_digest ?? null,
+        draft_status: result.draft?.status ?? null,
+        proposal_id: result.draft?.proposal_id ?? null,
+        canonical_effect: result.canonical_effect,
+        // Body-free: do not dump redaction values / provider bodies
+      });
+      return result.ok ? 0 : 1;
+    }
+    default:
+      throw new CliUsageError(`unknown v5 subcommand: ${subcommand}\nRun: carpeos help v5`);
+  }
+}
+
 /** Root help text for humans and agents. Keep in sync with real commands. */
 export function formatRootHelp(): string {
   return `carpeos — local knowledge OS CLI (capture, memory, sync)
@@ -1383,6 +1550,7 @@ COMMANDS
   retrieval            Rebuild local retrieval index or run embed jobs
   memory               Search / get / context-pack over local memory
   okf                  Export OKF v0.2 (export|rebuild; explicit zones; held off; no canonical mutation)
+  v5                   Opt-in draft-only lane (status|readiness|eval-all200|draft); DeepSeek primary; not capture
   help                 Show this help or help for a command
 
 COMMON OPTIONS (most store commands)
@@ -1425,6 +1593,30 @@ v1 readiness: https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/v1
 
 export function formatCommandHelp(command: string): string {
   switch (command) {
+    case "v5":
+      return `carpeos v5 — opt-in draft-only lane (DeepSeek Direct primary)
+
+USAGE
+  carpeos v5 status
+  carpeos v5 readiness
+  carpeos v5 eval-all200
+  carpeos v5 draft --envelope <path> [--pack-id <id>] [--allow-network]
+
+SUBCOMMANDS
+  status         Print primary provider/model and fence summary (JSON)
+  readiness      Draft-lane readiness + M7 all-200 summary + M8 deferred status
+  eval-all200    Run frozen 200-case offline evaluation ledger
+  draft          Run redact→pack→extract→reduce pipeline on a synthetic envelope file
+                 Network stays off unless --allow-network (requires DEEPSEEK_API_KEY)
+
+HARD FENCES
+  - Does not write CanonicalEvents, outbox, sequences, or retrieval authority
+  - Does not run inside capture-hook
+  - canonical_effect is always "none"
+  - OpenRouter is not required
+
+See: docs/PRD-v5.md, docs/maintainers/v5-milestones.md, docs/adr/0016-v5-draft-only-deepseek-primary.md
+`;
     case "version":
       return `carpeos version — print the installed package version
 
