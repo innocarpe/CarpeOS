@@ -225,6 +225,44 @@ describe("carpeos CLI", () => {
     expect(v5Help.status).toBe(0);
     expect(v5Help.stdout).toContain("DeepSeek Direct");
     expect(v5Help.stdout).toContain("eval-all200");
+
+    const agenticHelp = await captureHelp(["help", "agentic"]);
+    expect(agenticHelp.status).toBe(0);
+    expect(agenticHelp.stdout).toContain("deepseek-v4-flash");
+    expect(agenticHelp.stdout).toContain("golden");
+  });
+
+  it("reports agentic status offline and runs golden-12", async () => {
+    const context = makeContext();
+    const goldenPath = resolve(packageRoot, "../../fixtures/agentic/v1/golden-12/manifest.json");
+    const status = await runCliJson(["agentic", "status", "--home", context.home], context);
+    expect(status.status).toBe(0);
+    expect(status.stdout).toMatchObject({
+      ok: true,
+      command: "agentic.status",
+      capture_llm: false,
+      auto_acceptance_decision: false,
+      network_disabled_by_default: true,
+    });
+    expect(status.stdout.model_id).toBe("deepseek-v4-flash");
+
+    const golden = await runCliJson(
+      ["agentic", "golden", "--home", context.home, "--path", goldenPath],
+      context,
+    );
+    expect(golden.status).toBe(0);
+    expect(golden.stdout).toMatchObject({
+      ok: true,
+      command: "agentic.golden",
+    });
+    const report = golden.stdout.report as {
+      pass?: boolean;
+      case_count?: number;
+      network_used?: boolean;
+    };
+    expect(report.pass).toBe(true);
+    expect(report.case_count).toBe(12);
+    expect(report.network_used).toBe(false);
   });
 
   it("reports V5 draft-lane status without enabling network", async () => {

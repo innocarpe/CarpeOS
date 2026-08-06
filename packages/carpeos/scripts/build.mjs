@@ -23,6 +23,7 @@ const alias = {
   "@carpeos/obsidian-projection": join(repoRoot, "packages/obsidian-projection/src/index.ts"),
   "@carpeos/okf-projection": join(repoRoot, "packages/okf-projection/src/index.ts"),
   "@carpeos/v5": join(repoRoot, "packages/v5/src/index.ts"),
+  "@carpeos/agentic": join(repoRoot, "packages/agentic/src/index.ts"),
 };
 
 const common = {
