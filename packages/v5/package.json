@@ -1,0 +1,25 @@
+{
+  "name": "@carpeos/v5",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CarpeOS 5.0 offline draft-only contracts: redaction, EvidencePack, reducer, provider fakes, telemetry admission, evaluation.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run",
+    "m0:recompute": "node scripts/m0-recompute.mjs"
+  }
+}
