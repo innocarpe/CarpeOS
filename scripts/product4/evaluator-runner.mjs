@@ -1168,13 +1168,16 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
       evaluator_tree_sha256: evaluatorTreeSha256,
     },
   };
-  const sealedTrustedEvidence = sealTrustedEvidence({
-    trustedEvidence,
-    identity,
-    trustedPredicates,
-    observations,
-    candidateReport: rawReport,
-  });
+  const sealedTrustedEvidence = sealTrustedEvidence(
+    {
+      trustedEvidence,
+      identity,
+      trustedPredicates,
+      observations,
+      candidateReport: rawReport,
+    },
+    sealTrustedEvidence,
+  );
   const evaluation = evaluateCandidateEvidence({
     identity,
     candidateReport: rawReport,

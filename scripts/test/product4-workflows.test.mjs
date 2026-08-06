@@ -163,9 +163,10 @@ test("M4 attestation binds both dispatch replay and workflow_run lineage", () =>
 
   assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
   assert.match(source, /evaluator-runner\.mjs/);
+  // Capability-gated seal: sealTrustedEvidence(input, sealTrustedEvidence) then evaluate.
   assert.match(
     evaluatorRunner(),
-    /const sealedTrustedEvidence = sealTrustedEvidence\(\{[\s\S]*\n {2}\}\);\n {2}const evaluation = evaluateCandidateEvidence\(\{[\s\S]*\n {4}trustedEvidence: sealedTrustedEvidence,\n {2}\}\);/,
+    /const sealedTrustedEvidence = sealTrustedEvidence\(\s*\{[\s\S]*?\},\s*sealTrustedEvidence,\s*\);\n {2}const evaluation = evaluateCandidateEvidence\(\{[\s\S]*\n {4}trustedEvidence: sealedTrustedEvidence,\n {2}\}\);/,
   );
   assert.match(source, /--candidate-root/);
   assert.match(source, /cache-dependency-path: candidate\/pnpm-lock\.yaml/);

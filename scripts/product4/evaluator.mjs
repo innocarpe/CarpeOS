@@ -67,6 +67,7 @@ const TRUSTED_EVIDENCE_KEYS = [
 ];
 const TRUSTED_EVIDENCE_SOURCE_KEYS = ["kind", "evaluator_tree_sha256"];
 const TRUSTED_EVIDENCE_BRAND = new WeakSet();
+const TRUSTED_EVIDENCE_SEAL_CAPABILITY = new WeakSet();
 const PREDICATE_RESULT_KEYS = ["predicate_id", "passed", "evidence_digest"];
 const OBSERVATION_KEYS = ["p02", "zero_write", "high_water", "candidate_execution"];
 const REQUIRED_OBSERVATION_KEYS = ["p02", "zero_write", "high_water"];
@@ -96,15 +97,18 @@ export class EvaluatorError extends Error {
 }
 /**
  * @internal Trusted evaluator boundary. The runner must seal its independently
- * recomputed evidence before passing it to evaluateCandidateEvidence.
+ * recomputed evidence before passing it to evaluateCandidateEvidence. The
+ * second argument is the module-initialized capability and is intentionally
+ * not part of the JSON envelope.
  */
-export function sealTrustedEvidence({
-  trustedEvidence,
-  identity,
-  trustedPredicates,
-  observations,
-  candidateReport,
-}) {
+export function sealTrustedEvidence(input, capability) {
+  if (!TRUSTED_EVIDENCE_SEAL_CAPABILITY.has(capability))
+    throwEvaluatorError(
+      "seal_capability_refusal",
+      "internal trusted-evidence seal capability is required",
+    );
+  const { trustedEvidence, identity, trustedPredicates, observations, candidateReport } =
+    input ?? {};
   assertIdentity(identity);
   assertTrustedPredicates(trustedPredicates);
   assertObservations(observations, undefined, {
@@ -124,6 +128,7 @@ export function sealTrustedEvidence({
   TRUSTED_EVIDENCE_BRAND.add(sealed);
   return sealed;
 }
+TRUSTED_EVIDENCE_SEAL_CAPABILITY.add(sealTrustedEvidence);
 
 export function evaluateCandidateEvidence({
   identity,
