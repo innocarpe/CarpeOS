@@ -6,9 +6,11 @@
  * P1a: durable job store + lease state machine + stage digests.
  */
 
+export * from "./admit.js";
 export * from "./digest.js";
 export * from "./gate.js";
 export * from "./jobs.js";
+export * from "./pack.js";
 export type { SqlDatabase, SqlStatement } from "./sql.js";
 export * from "./types.js";
 export * from "./verify.js";
