@@ -25,6 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@carpeos/agentic": "workspace:*",
     "@carpeos/capture": "workspace:*",
     "@carpeos/local-store": "workspace:*",
     "@carpeos/okf-projection": "workspace:*",

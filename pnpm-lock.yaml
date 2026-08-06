@@ -28,6 +28,9 @@ importers:
 
   apps/carpeos-cli:
     dependencies:
+      '@carpeos/agentic':
+        specifier: workspace:*
+        version: link:../../packages/agentic
       '@carpeos/capture':
         specifier: workspace:*
         version: link:../../packages/capture

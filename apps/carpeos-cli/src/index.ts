@@ -1,10 +1,23 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  AGENTIC_FLASH_MODEL_ID,
+  AGENTIC_PLANE,
+  AGENTIC_POLICY_VERSION,
+  countAgenticJobs,
+  evaluateGoldenManifest,
+  listAgenticProposals,
+  loadGoldenManifest,
+  migrateAgenticJobs,
+  migrateAgenticProposals,
+  runAgenticProposalPipeline,
+} from "@carpeos/agentic";
 import { ADJUDICATION_POLICY_VERSION, isIdempotencyKey } from "@carpeos/capture";
 import {
   IdempotencyConflictError,
@@ -37,22 +50,6 @@ import {
   SyncHttpTransport,
 } from "@carpeos/sync-client";
 import {
-  HookInputError,
-  isSupportedProvider,
-  normalizeHookEnvelope,
-  normalizeProviderId,
-  supportedProviderHelpList,
-} from "./adapters.js";
-
-import {
-  CycleFailure,
-  type CyclePreflight,
-  type CycleSyncResult,
-  hashPath,
-  hashText,
-  runSyncCycle,
-} from "./cycle.js";
-import {
   buildFinalV5Decision,
   createDraftPipelineDeps,
   decideM8,
@@ -62,6 +59,21 @@ import {
   v5DraftLaneReadiness,
   verifyV5OffReleasePath,
 } from "@carpeos/v5";
+import {
+  HookInputError,
+  isSupportedProvider,
+  normalizeHookEnvelope,
+  normalizeProviderId,
+  supportedProviderHelpList,
+} from "./adapters.js";
+import {
+  CycleFailure,
+  type CyclePreflight,
+  type CycleSyncResult,
+  hashPath,
+  hashText,
+  runSyncCycle,
+} from "./cycle.js";
 import { packageName, packageVersion } from "./package-version.js";
 
 type JsonObject = Record<string, unknown>;
@@ -134,6 +146,8 @@ export async function runCli(
         return runOkf(rest, env);
       case "v5":
         return await runV5(rest, env);
+      case "agentic":
+        return runAgentic(rest, env);
       case "setup":
       case "doctor":
         throw new CliUsageError(
@@ -1378,6 +1392,210 @@ function runVersion(argv: readonly string[]): number {
 }
 
 /**
+ * Product 6 agentic operator surface (post-capture brain). Never runs inside capture.
+ * Subcommands: status | run | golden
+ */
+function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const [subcommand, ...rest] = argv;
+  if (subcommand === undefined || isHelpToken(subcommand)) {
+    throw new CliUsageError(
+      "agentic requires a subcommand (status|run|golden). See: carpeos help agentic",
+    );
+  }
+
+  switch (subcommand) {
+    case "status": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const agenticEnabled = env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off";
+      const db = openAgenticDb(runtimeDir);
+      try {
+        const jobs = countAgenticJobs(db, options.trustZone);
+        const proposals = listAgenticProposals(db, {
+          ...(options.trustZone !== undefined ? { trust_zone_id: options.trustZone } : {}),
+          limit: 200,
+        });
+        const byGate = { hold: 0, promote: 0, reject: 0 };
+        for (const p of proposals) {
+          byGate[p.gate.decision] += 1;
+        }
+        writeJson(process.stdout, {
+          ok: true,
+          command: "agentic.status",
+          plane: AGENTIC_PLANE,
+          policy_version: AGENTIC_POLICY_VERSION,
+          model_id: AGENTIC_FLASH_MODEL_ID,
+          agentic_enabled: agenticEnabled,
+          network_disabled_by_default: true,
+          capture_llm: false,
+          auto_acceptance_decision: false,
+          jobs,
+          proposals: {
+            listed: proposals.length,
+            by_gate: byGate,
+          },
+          agentic_db: agenticDbPath(runtimeDir),
+        });
+        return 0;
+      } finally {
+        db.close();
+      }
+    }
+    case "run": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+          once: { type: "boolean", default: false },
+          "allow-network": { type: "boolean", default: false },
+          text: { type: "string" },
+          "source-event-id": { type: "string" },
+          "hook-event": { type: "string" },
+          golden: { type: "boolean", default: false },
+          "golden-path": { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const agenticEnabled = env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off";
+      const allowNetwork = parsed.values["allow-network"] === true;
+      if (allowNetwork) {
+        throw new CliUsageError(
+          "agentic run --allow-network is reserved for operator Flash runs; this CLI build keeps network off by default. Use package tests/fake path or set an explicit live runner later.",
+        );
+      }
+      const db = openAgenticDb(runtimeDir);
+      try {
+        if (parsed.values.golden === true || parsed.values["golden-path"] !== undefined) {
+          const goldenPath =
+            parsed.values["golden-path"] ??
+            resolve(process.cwd(), "fixtures/agentic/v1/golden-12/manifest.json");
+          const manifest = loadGoldenManifest(goldenPath);
+          const report = evaluateGoldenManifest(db, manifest, {
+            ...(options.trustZone !== undefined ? { trust_zone_id: options.trustZone } : {}),
+            agentic_enabled: agenticEnabled,
+          });
+          writeJson(process.stdout, {
+            ok: report.pass,
+            command: "agentic.run.golden",
+            report,
+            agentic_enabled: agenticEnabled,
+            network_used: report.network_used,
+            canonical_effect: "none",
+          });
+          return report.pass ? 0 : 1;
+        }
+
+        const text = parsed.values.text;
+        if (text === undefined || text.trim().length === 0) {
+          throw new CliUsageError(
+            "agentic run requires --text <signal> or --golden (offline corpus). Network stays off unless a future live path is enabled.",
+          );
+        }
+        const trust_zone_id = options.trustZone ?? "tz_local_default";
+        const result = runAgenticProposalPipeline(db, {
+          trust_zone_id,
+          source_event_id: parsed.values["source-event-id"] ?? `evt_cli_${Date.now()}`,
+          hook_event_name: parsed.values["hook-event"] ?? "SessionEnd",
+          signal_text: text,
+          agentic_enabled: agenticEnabled,
+          mode: "fake",
+          allow_network: false,
+          allow_auto_promote: false,
+        });
+        writeJson(process.stdout, {
+          ok: result.ok,
+          command: "agentic.run",
+          once: parsed.values.once === true,
+          result,
+          model_id: AGENTIC_FLASH_MODEL_ID,
+          network_used: false,
+          canonical_effect: "none",
+        });
+        return result.ok ? 0 : 1;
+      } finally {
+        db.close();
+      }
+    }
+    case "golden": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          path: { type: "string" },
+          "trust-zone": { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const goldenPath =
+        parsed.values.path ?? resolve(process.cwd(), "fixtures/agentic/v1/golden-12/manifest.json");
+      const db = openAgenticDb(runtimeDir);
+      try {
+        const report = evaluateGoldenManifest(db, loadGoldenManifest(goldenPath), {
+          ...(options.trustZone !== undefined ? { trust_zone_id: options.trustZone } : {}),
+          agentic_enabled: env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off",
+        });
+        writeJson(process.stdout, {
+          ok: report.pass,
+          command: "agentic.golden",
+          report,
+          path: goldenPath,
+        });
+        return report.pass ? 0 : 1;
+      } finally {
+        db.close();
+      }
+    }
+    default:
+      throw new CliUsageError(
+        `unknown agentic subcommand: ${subcommand}\nRun: carpeos help agentic`,
+      );
+  }
+}
+
+function agenticDbPath(runtimeDir: string): string {
+  return join(runtimeDir, "agentic", "agentic.sqlite");
+}
+
+function openAgenticDb(runtimeDir: string): DatabaseSync {
+  const path = agenticDbPath(runtimeDir);
+  mkdirSync(join(runtimeDir, "agentic"), { recursive: true, mode: 0o700 });
+  const db = new DatabaseSync(path);
+  migrateAgenticJobs(db);
+  migrateAgenticProposals(db);
+  return db;
+}
+
+/**
  * V5 draft-only operator surface (opt-in). Never touches capture hot path or canonical write APIs.
  * Subcommands: status | readiness | eval-all200 | draft | m8
  */
@@ -1577,6 +1795,7 @@ COMMANDS
   memory               Search / get / context-pack over local memory
   okf                  Export OKF v0.2 (export|rebuild; explicit zones; held off; no canonical mutation)
   v5                   Opt-in draft-only lane (status|readiness|eval-all200|draft); DeepSeek primary; not capture
+  agentic              Product 6 post-capture brain (status|run|golden); Flash-only; not capture
   help                 Show this help or help for a command
 
 COMMON OPTIONS (most store commands)
@@ -1619,6 +1838,29 @@ v1 readiness: https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/v1
 
 export function formatCommandHelp(command: string): string {
   switch (command) {
+    case "agentic":
+      return `carpeos agentic — Product 6 post-capture Agentic Layer (ADR 0017)
+
+USAGE
+  carpeos agentic status [--home <path>] [--trust-zone <id>]
+  carpeos agentic run --once --text <signal> [--hook-event SessionEnd]
+  carpeos agentic run --once --golden [--golden-path <manifest.json>]
+  carpeos agentic golden [--path <manifest.json>] [--home <path>]
+
+SUBCOMMANDS
+  status   Job + proposal counts; plane fences (Flash-only, no capture LLM)
+  run      Offline proposal pipeline (fake stages). --golden runs golden-12 corpus
+  golden   Evaluate fixtures/agentic/v1/golden-12 (or --path) offline
+
+HARD FENCES
+  - Never runs inside capture-hook; no LLM in capture
+  - Real model id only: deepseek-v4-flash (live path operator-gated; default network off)
+  - No automatic AcceptanceDecision
+  - Kill switch: CARPEOS_AGENTIC=0|off
+  - Sidecar DB: <home>/agentic/agentic.sqlite
+
+See: docs/adr/0017-agentic-layer-write-time-knowledge.md, docs/maintainers/v6-milestones.md
+`;
     case "v5":
       return `carpeos v5 — opt-in draft-only lane (DeepSeek Direct primary)
 
