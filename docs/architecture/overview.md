@@ -1,10 +1,10 @@
 # CarpeOS Architecture Overview
 
-Status: current-main architecture audit after **Product 4.0.0** package ship
-(`@innocarpe/carpeos@4.0.0`). Local canonical + adjudication + retrieval remain
-the operator loop. Product 4 adds a **governed evidence / trust plane** (scripts +
-dispatch-only workflows) without making evaluators or publishers autonomous
-authority. Hosted deployment is still not claimed.
+Status: current-main architecture audit after **Product 5.0.1** package ship
+(`@innocarpe/carpeos@5.0.1`) with **Product 6 Agentic Layer** as the next major
+plane (ADR 0017; not yet implemented on npm). Local canonical + adjudication +
+retrieval remain the operator loop. Product 4 trust/evidence and Product 5 draft
+cortex remain as shipped. Hosted deployment is still not claimed.
 
 CarpeOS keeps private knowledge in a local canonical store and derives
 rebuildable, non-authoritative read models from it. The canonical boundary is not
@@ -24,7 +24,8 @@ a graph, vector index, MCP response, export, or provider payload.
 | Product 3.2 B1 apply, writer, receipt, Supersession construction, and sync convergence | Deferred | Not part of 3.2 or 4.0 package claim |
 | Product 4 trust/evidence plane (P4_0, evaluator, raw producer, publisher schemas, observed sandbox) | **Shipped** on npm `@innocarpe/carpeos@4.0.0` | Fail-closed without independent live authority; synthetic fixtures are not live authority |
 | Product 4 live trust-plane workflows | In tree; **workflow_dispatch-only** until ownership activation | Not every-PR; not self-granted authority |
-| Product 5 draft lane (`carpeos v5`) | **Shipped on npm** `@innocarpe/carpeos@5.0.0` as opt-in major | `canonical_effect: "none"`; not capture hot path; M8 authority seam deferred |
+| Product 5 draft lane (`carpeos v5`) | **Shipped on npm** through `@innocarpe/carpeos@5.0.1` | `canonical_effect: "none"`; not capture hot path; M8 authority seam deferred |
+| Product 6 Agentic Layer (`@carpeos/agentic`) | **Planned** (ADR 0017 / PRD-v6); prep docs + scaffold | Post-capture Flash-only brain; `agentic_v1` gate; no capture LLM; no auto AcceptanceDecision |
 
 Source evidence: [local store](../../packages/local-store/src/store.ts),
 [retrieval](../../packages/retrieval/src/query.ts),
@@ -90,6 +91,25 @@ Product 5 is an **opt-in draft lane** (`carpeos v5`) for offline redaction, Evid
 proposal reduce, and DeepSeek Direct–primary extract. Every V5 record keeps
 `canonical_effect: "none"`. Capture hooks never call the draft pipeline. See
 [product-5.0.0.md](../maintainers/product-5.0.0.md) and [PRD-v5](../PRD-v5.md).
+
+## Product 6.0 boundary (target)
+
+Product 6 adds a post-capture **Agentic Layer** that forms grounded, typed,
+graph-linked knowledge under `agentic_v1` without putting LLM on the capture hot
+path. Real model id is frozen to **`deepseek-v4-flash` only**. V5 supplies cortex
+primitives; agentic owns jobs, verify, gate, and materialization bridge. See
+[agentic-layer.md](agentic-layer.md), [ADR 0017](../adr/0017-agentic-layer-write-time-knowledge.md),
+[PRD-v6](../PRD-v6.md), and [product-6.0.0.md](../maintainers/product-6.0.0.md).
+
+```text
+provider hook
+  -> local capture (Evidence only; fail-open)
+  -> [optional] adj_v3 noise prefilter
+  -> agentic jobs (Flash multi-stage; async)
+  -> agentic_v1 gate (hold-first; narrow auto-promote later)
+  -> Observation / draft Claim + provenance
+  -> rebuildable retrieval + graph projections
+```
 
 ## Synthetic example
 
