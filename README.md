@@ -23,9 +23,6 @@ session dump into “memory.”
 **Latest package:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
 ([CHANGELOG](CHANGELOG.md) · [`v5.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0)).
 
-Optional **draft lane** (`carpeos v5`): offline LLM-assisted extraction, always
-`canonical_effect: "none"`, never on the capture hot path.
-See [PRD-v5](docs/PRD-v5.md) · [ADR 0016](docs/adr/0016-v5-draft-only-deepseek-primary.md).
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
 </p>
