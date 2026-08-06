@@ -213,6 +213,156 @@ function assertSandboxWorkspaceBoundary({ workspaceRoot, cliRoot }) {
       );
   }
 }
+
+/**
+ * Bind every executed root to exact C identity. Candidate must be a clean git
+ * checkout of C. Workspace/CLI may be dirty sandboxed builds, but must still
+ * resolve to the same HEAD as C and must not overlap trusted/home/output roots.
+ */
+export function assertExecutableRootBinding({
+  candidateRoot,
+  workspaceRoot,
+  cliRoot,
+  home,
+  expectedHeadSha,
+  expectedTreeSha256,
+  trustedRoot = TRUSTED_EVALUATOR_ROOT,
+}) {
+  assertSha(expectedHeadSha, SHA1, "expectedHeadSha");
+  assertSha(expectedTreeSha256, SHA256, "expectedTreeSha256");
+  const candidateReal = assertRegularDirectory(candidateRoot, "candidate");
+  const workspaceReal = assertRegularDirectory(workspaceRoot, "workspace");
+  const cliReal = assertRegularDirectory(cliRoot, "CLI");
+  const homeReal = assertRegularDirectory(home, "home");
+  let trustedReal;
+  try {
+    trustedReal = realpathSync(resolve(trustedRoot));
+  } catch (error) {
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      `trusted evaluator root must exist: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const labeled = [
+    ["candidate", candidateReal],
+    ["workspace", workspaceReal],
+    ["CLI", cliReal],
+    ["home", homeReal],
+    ["trusted", trustedReal],
+  ];
+  for (let left = 0; left < labeled.length; left += 1) {
+    for (let right = left + 1; right < labeled.length; right += 1) {
+      const [leftLabel, leftRoot] = labeled[left];
+      const [rightLabel, rightRoot] = labeled[right];
+      // Workspace and CLI may intentionally share one sandboxed build tree.
+      if (
+        (leftLabel === "workspace" && rightLabel === "CLI") ||
+        (leftLabel === "CLI" && rightLabel === "workspace")
+      ) {
+        continue;
+      }
+      if (pathWithin(leftRoot, rightRoot) || pathWithin(rightRoot, leftRoot))
+        throwRunnerError(
+          "candidate_workspace_boundary",
+          `${leftLabel} root overlaps ${rightLabel} root`,
+        );
+    }
+  }
+
+  const candidateHead = gitHeadSha({ repoRoot: candidateReal });
+  const candidateTree = gitTreeSha256({ repoRoot: candidateReal });
+  if (candidateHead !== expectedHeadSha)
+    throwRunnerError("head_moved", "candidate checkout HEAD is not the expected C");
+  if (candidateTree !== expectedTreeSha256)
+    throwRunnerError("tree_mismatch", "candidate checkout tree is not the expected C tree");
+  assertCleanGitWorktree(candidateReal, "candidate");
+
+  const workspaceHead = gitHeadSha({ repoRoot: workspaceReal });
+  const cliHead = gitHeadSha({ repoRoot: cliReal });
+  if (workspaceHead !== expectedHeadSha)
+    throwRunnerError("head_moved", "workspace root HEAD is not the expected C");
+  if (cliHead !== expectedHeadSha)
+    throwRunnerError("head_moved", "CLI root HEAD is not the expected C");
+
+  assertCliEntrypoint(cliReal);
+  if (workspaceReal !== cliReal) assertCliEntrypoint(workspaceReal);
+
+  return {
+    candidate_root: candidateReal,
+    workspace_root: workspaceReal,
+    cli_root: cliReal,
+    home_root: homeReal,
+  };
+}
+
+function assertRegularDirectory(root, label) {
+  if (typeof root !== "string" || root.length === 0)
+    throwRunnerError("candidate_workspace_boundary", `${label} root is required`);
+  const resolved = resolve(root);
+  let stats;
+  try {
+    stats = lstatSync(resolved);
+  } catch (error) {
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      `${label} root must exist: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (stats.isSymbolicLink())
+    throwRunnerError("candidate_workspace_boundary", `${label} root must not be a symlink`);
+  if (!stats.isDirectory())
+    throwRunnerError("candidate_workspace_boundary", `${label} root must be a directory`);
+  try {
+    return realpathSync(resolved);
+  } catch (error) {
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      `${label} root cannot be resolved: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function assertCleanGitWorktree(repoRoot, label) {
+  const result = spawnSync("git", ["status", "--porcelain", "--untracked-files=all"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+  });
+  if (result.error)
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      `${label} git status failed: ${result.error.message}`,
+    );
+  if (result.status !== 0)
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      `${label} git status failed: ${result.stderr?.trim() || "non-zero exit"}`,
+    );
+  if ((result.stdout ?? "").trim().length > 0)
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      `${label} root must be a clean checkout of C (dirty or untracked content)`,
+    );
+}
+
+function assertCliEntrypoint(cliRoot) {
+  const entry = resolve(cliRoot, "apps/carpeos-cli/dist/index.js");
+  let stats;
+  try {
+    stats = lstatSync(entry);
+  } catch {
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      "CLI root must contain apps/carpeos-cli/dist/index.js",
+    );
+  }
+  if (stats.isSymbolicLink() || !stats.isFile())
+    throwRunnerError(
+      "candidate_workspace_boundary",
+      "CLI entrypoint must be a regular non-symlink file",
+    );
+}
 export function observeCandidateExecution({
   candidateRoot,
   trustedRoot = TRUSTED_EVALUATOR_ROOT,
@@ -809,7 +959,7 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     trustedPredicates: callerTrustedPredicates,
     workspaceRoot = candidateRoot,
     cliRoot = candidateRoot,
-    evaluatedAt = new Date().toISOString(),
+    evaluatedAt,
   },
   protocolEvidence,
 ) {
@@ -821,7 +971,12 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
   assertSha(expectedBaseSha, SHA1, "expectedBaseSha");
   assertSha(expectedTreeSha256, SHA256, "expectedTreeSha256");
   assertSha(evaluatorWorkflowSha, SHA1, "evaluatorWorkflowSha");
-  if (!TIMESTAMP.test(evaluatedAt)) throwRunnerError("invalid_timestamp", "evaluatedAt is invalid");
+  // Reuse the immutable raw-producer timestamp. Never invent a new wall-clock stamp
+  // that would rewrap provenance or diverge from the source report identity.
+  const resolvedEvaluatedAt = resolveEvaluatedAt({
+    evaluatedAt,
+    rawReport,
+  });
   if (rawReport.head_sha !== expectedHeadSha)
     throwRunnerError("head_moved", "raw report head is not the workflow C");
   if (rawReport.base_sha !== expectedBaseSha)
@@ -846,6 +1001,14 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
   assertCandidateWorkspaceBoundary({ candidateRoot });
   assertSandboxWorkspaceBoundary({ workspaceRoot, cliRoot });
   assertRuntimeHomeBoundary({ home, candidateRoot });
+  assertExecutableRootBinding({
+    candidateRoot,
+    workspaceRoot,
+    cliRoot,
+    home,
+    expectedHeadSha,
+    expectedTreeSha256,
+  });
   if (sandboxReceipt !== undefined)
     throwRunnerError(
       "sandbox_receipt_forged",
@@ -918,9 +1081,9 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     );
 
   const classifiedState = classifyCandidateState({
-    state: createCandidateState({ intentEnvelope: intent, observedAt: evaluatedAt }),
+    state: createCandidateState({ intentEnvelope: intent, observedAt: resolvedEvaluatedAt }),
     intentEnvelope: intent,
-    observedAt: evaluatedAt,
+    observedAt: resolvedEvaluatedAt,
   });
   assertIntentStateBinding({
     intent,
@@ -950,7 +1113,7 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     baseSha: expectedBaseSha,
     treeSha256: expectedTreeSha256,
     workflowSha: rawReport.producer.workflow_sha,
-    evaluatedAt,
+    evaluatedAt: resolvedEvaluatedAt,
   });
   if (digestJson(expectedRawReport) !== digestJson(rawReport))
     throwRunnerError("raw_mismatch", "trusted replay does not match untrusted raw observations");
@@ -976,7 +1139,7 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
   const provenance = {
     base_sha: expectedBaseSha,
     evaluator_workflow_sha: evaluatorWorkflowSha,
-    evaluated_at: evaluatedAt,
+    evaluated_at: resolvedEvaluatedAt,
   };
   let evaluatorTreeSha256;
   try {
@@ -1038,10 +1201,32 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     p02_receipt_digest: digestJson(p02Receipt),
     predicate_digest: digestJson(trustedPredicates),
     blockers: evaluation.blockers ?? [],
-    evaluated_at: evaluatedAt,
+    evaluated_at: resolvedEvaluatedAt,
   };
   assertEvaluatorResult(artifact);
   return artifact;
+}
+
+function resolveEvaluatedAt({ evaluatedAt, rawReport }) {
+  const rawTimestamp =
+    typeof rawReport?.evaluated_at === "string" ? rawReport.evaluated_at : undefined;
+  if (rawTimestamp !== undefined && !TIMESTAMP.test(rawTimestamp))
+    throwRunnerError("invalid_timestamp", "raw report evaluated_at is invalid");
+  if (evaluatedAt !== undefined) {
+    if (typeof evaluatedAt !== "string" || !TIMESTAMP.test(evaluatedAt))
+      throwRunnerError("invalid_timestamp", "evaluatedAt is invalid");
+    if (rawTimestamp !== undefined && evaluatedAt !== rawTimestamp)
+      throwRunnerError(
+        "invalid_timestamp",
+        "evaluatedAt must reuse the immutable raw report timestamp",
+      );
+    return evaluatedAt;
+  }
+  if (rawTimestamp !== undefined) return rawTimestamp;
+  throwRunnerError(
+    "invalid_timestamp",
+    "evaluatedAt is required when the raw report has no immutable evaluated_at",
+  );
 }
 
 export function assertEvaluatorResult(result) {
@@ -1298,19 +1483,29 @@ function trustedZeroWrite(receipt) {
   return phases.every((phase) => digestJson(phase) === baselineDigest);
 }
 
-function trustedStrictAttestation(rawReport) {
+/**
+ * Deterministic P02 requires byte-identical command evidence under distinct
+ * replay IDs. Distinct command_ids prove two runs; equal digests prove replay.
+ */
+export function trustedStrictAttestation(rawReport) {
   const commands = rawReport?.observations?.commands;
   if (!Array.isArray(commands) || commands.length !== 2) return false;
-  const ids = commands.map((command) => command?.command_id).sort();
-  if (ids[0] !== "p02_replay_a" || ids[1] !== "p02_replay_b") return false;
-  const evidence = commands.map((command) =>
-    digestJson({
-      invocation_digest: command?.invocation_digest,
-      stdout_sha256: command?.stdout_sha256,
-      stderr_sha256: command?.stderr_sha256,
-    }),
+  const byId = new Map(
+    commands
+      .filter((command) => isRecord(command) && typeof command.command_id === "string")
+      .map((command) => [command.command_id, command]),
   );
-  return evidence[0] === evidence[1];
+  const runA = byId.get("p02_replay_a");
+  const runB = byId.get("p02_replay_b");
+  if (!isRecord(runA) || !isRecord(runB)) return false;
+  const evidence = (command) =>
+    digestJson({
+      invocation_digest: command.invocation_digest,
+      exit_code: command.exit_code,
+      stdout_sha256: command.stdout_sha256,
+      stderr_sha256: command.stderr_sha256,
+    });
+  return evidence(runA) === evidence(runB);
 }
 
 export function assertStrictReplayEvidence(rawReport) {
@@ -1551,7 +1746,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       expectedBaseSha: args["--base-sha"],
       expectedTreeSha256: args["--tree-sha256"],
       evaluatorWorkflowSha: args["--workflow-sha"],
-      evaluatedAt: args["--evaluated-at"] ?? new Date().toISOString(),
+      evaluatedAt: args["--evaluated-at"],
     });
     writeEvaluatorResult(args["--output"], result);
   } catch (error) {

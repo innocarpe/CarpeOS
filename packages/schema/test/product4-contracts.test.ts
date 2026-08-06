@@ -43,6 +43,7 @@ const candidateReport = {
     event: "pull_request",
     trust_level: "unprivileged",
   },
+  evaluated_at: "2026-01-02T00:00:00Z",
   observations: {
     commands: [
       {

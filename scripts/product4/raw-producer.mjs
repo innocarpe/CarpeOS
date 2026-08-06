@@ -92,6 +92,8 @@ export function buildRawCandidateReport(input) {
       p02: { ...input.p02 },
       zero_write: { ...input.zero_write },
     },
+    // Immutable production timestamp reused by evaluator provenance (never reinvented).
+    evaluated_at: input.evaluated_at,
   };
   assertRawCandidateReport(report);
   return report;
@@ -113,6 +115,7 @@ export function assertRawCandidateReport(report) {
     "external_id",
     "producer",
     "observations",
+    "evaluated_at",
   ];
   assertExactKeys(report, keys, "report", errors);
   if (report.schema_version !== RAW_REPORT_SCHEMA) errors.push("schema_version is invalid");
@@ -127,6 +130,7 @@ export function assertRawCandidateReport(report) {
   if (report.context !== PRODUCT4_CONTEXT) errors.push("context is not frozen");
   if (report.external_id !== `carpeos-4.0.0:${report.head_sha}:${MAINTENANCE_STUDY_FIXTURE_SHA256}`)
     errors.push("external_id is not C-bound");
+  if (!TIMESTAMP.test(report.evaluated_at ?? "")) errors.push("evaluated_at is invalid");
   if (!isRecord(report.producer)) errors.push("producer is required");
   else {
     if (!SHA1.test(report.producer.workflow_sha ?? "")) errors.push("producer workflow is invalid");
