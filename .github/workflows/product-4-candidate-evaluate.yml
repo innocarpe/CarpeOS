@@ -135,7 +135,7 @@ jobs:
           import { buildP02SandboxReceipt } from "./scripts/product4/p02-runner.mjs";
 
           const receipt = buildP02SandboxReceipt({
-            candidateRoot: process.env.GITHUB_WORKSPACE,
+            candidateRoot: process.env.CARPEOS_SANDBOX_SOURCE,
             headSha: process.env.HEAD_SHA,
             baseSha: process.env.BASE_SHA,
             treeSha256: process.env.TREE_SHA256,
