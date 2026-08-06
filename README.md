@@ -20,14 +20,12 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest release:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([notes](CHANGELOG.md) · [v5.0.0 tag](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0) ·
-[product 5.0 DoD](docs/maintainers/product-5.0.0.md)). Prior major: [4.0.0 receipt](docs/maintainers/product-4.0.0.md).
+**Latest package:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [`v5.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0)).
 
-**5.0 draft lane (in-tree, opt-in, not the npm major yet):** offline draft extraction
-behind `carpeos v5` with **DeepSeek Direct** as the primary LLM path, always
-`canonical_effect: "none"`, never on the capture hot path. See [PRD-v5](docs/PRD-v5.md)
-and [ADR 0016](docs/adr/0016-v5-draft-only-deepseek-primary.md).
+Optional **draft lane** (`carpeos v5`): offline LLM-assisted extraction, always
+`canonical_effect: "none"`, never on the capture hot path.
+See [PRD-v5](docs/PRD-v5.md) · [ADR 0016](docs/adr/0016-v5-draft-only-deepseek-primary.md).
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
 </p>
@@ -111,13 +109,9 @@ policy version. Re-adjudication appends history rather than rewriting it.
 Neither adjudication nor held review automatically creates a Claim or an
 `AcceptanceDecision`.
 
-Product **4.0.0** is the current public major
-([`@innocarpe/carpeos@4.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos) /
-[v4.0.0](https://github.com/innocarpe/CarpeOS/releases/tag/v4.0.0)): Product 4
-trust/evidence plane (evaluator, sealed evidence, dispatch-only workflows) on the
-package, with independent live release authority still out of band. Product **3.2.0**
-remains the adjudication foundation inside that package — synthetic, evidence-only
-evaluators and the preview-only B0 policy reconciliation:
+Adjudication foundation is **`adj_v3`** (landed in 3.2, still the default in
+current packages). Synthetic evidence-only evaluators and the preview-only B0
+policy reconciliation remain available:
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -290,12 +284,9 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@3.2.0`. Changelog: [CHANGELOG.md](CHANGELOG.md).
-Product milestones: [1.0 DoD](docs/maintainers/product-1.0.0.md) (pipeline) ·
-[2.0 DoD](docs/maintainers/product-2.0.0.md) (adjudication) ·
-[3.0 DoD](docs/maintainers/product-3.0.0.md) (retrieval-first graph) ·
-[3.1 DoD](docs/maintainers/product-3.1.0.md) (OKF v0.2 export) ·
-[3.2 DoD](docs/maintainers/product-3.2.0.md) (B0 reconciliation preview).
+`npm i -g @innocarpe/carpeos@5.0.0`. See [CHANGELOG.md](CHANGELOG.md).
+Milestone DoDs (maintainers): [`docs/maintainers/`](docs/maintainers/) ·
+product index: [docs/PRD.md](docs/PRD.md).
 
 ### Developers (git checkout)
 
@@ -355,20 +346,15 @@ Advanced/manual hook templates remain under [`adapters/`](adapters/). Full notes
 [MCP](docs/guides/mcp-server.md) ·
 [product smoke](docs/guides/mcp-context-pack-smoke.md).
 
-### For agents installing this repo
+### For agents working in this repo
 
-Keep install **idempotent** and **out of the git tree** for private data.
-
-1. Prefer `npm i -g @innocarpe/carpeos` + `carpeos setup plan` then
-   `carpeos setup run --apply` (or `install.sh`).
-2. Install capture hooks: `carpeos setup hooks install --apply`.
-3. If working from source: `node scripts/install-local.mjs run --apply` from the checkout.
-4. Never commit `~/.carpeos`, credentials, or real session data.
-5. Do not invent alternate install paths; setup registers MCP and (optionally) hooks.
-6. Releases use SemVer + `vX.Y.Z` tags only — see
-   [versioning](docs/maintainers/versioning-and-releases.md) and skill
-   `skills/carpeos-release/SKILL.md` (`./scripts/install-release-skill.sh`).
-   Follow SemVer; do not invent tags outside the release skill.
+Read **[`AGENTS.md`](AGENTS.md)** first (public/private boundary, PR labels, release
+skill, install rules). Keep installs idempotent; never commit `~/.carpeos`, credentials,
+or real session data. Prefer `carpeos setup` / `scripts/install-local.mjs` — do not invent
+alternate install paths. Releases: SemVer + `vX.Y.Z` only
+([versioning](docs/maintainers/versioning-and-releases.md),
+[major release surface](docs/maintainers/major-release-surface.md),
+`skills/carpeos-release/SKILL.md`).
 
 | Guide | Link |
 | --- | --- |
@@ -394,34 +380,27 @@ Keep install **idempotent** and **out of the git tree** for private data.
 
 ---
 
-## Product line (1.0 → 2.0 → 3.0 → 3.1 → 3.2)
+## Product line (majors)
 
-| Package / product | Meaning | Status |
-| --- | --- | --- |
-| **1.0.0** | Local **pipeline + contract** freeze (hooks → evidence → extract shell → search) | **Shipped** — infrastructure baseline; not “finished knowledge OS” |
-| **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
-| **3.0.0** | Retrieval-first graph/hybrid recall with cross-repository partitions and worktree facets | **Shipped** on npm / `v3.0.0` |
-| **3.1.0** | Additive **OKF v0.2 export projection** | **Shipped** as `@innocarpe/carpeos@3.1.0` / `v3.1.0` — export only, not an import path |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **Shipped** as `@innocarpe/carpeos@3.2.0` / `v3.2.0`; retained inside later packages. B0 is preview-only and B1 apply/writer/receipt is deferred |
-| **4.0.0** | Product 4 governed evidence / trust plane (`P4_0`, base-owned evaluator, sealed evidence, publisher schemas, dispatch-only sandbox workflows) | **Shipped** as `@innocarpe/carpeos@4.0.0` / `v4.0.0`; live independent authority residual; B1 apply still deferred |
-| **5.0.0** | Opt-in Product 5 draft lane (`carpeos v5`, DeepSeek Direct primary, `canonical_effect: "none"`) | **Shipped on npm** as `@innocarpe/carpeos@5.0.0` / `v5.0.0`; not capture hot path; M8 release-authority seam still deferred |
+Current npm package is **`@innocarpe/carpeos@5.0.0`** (`v5.0.0`): operator loop through
+adjudication + retrieval, plus Product 4 trust/evidence plane and opt-in Product 5 draft
+lane. Full major/minor thesis and DoD index:
 
-Current npm latest is **5.0.0** (draft lane). Product **4.0.0** remains the trust/evidence
-foundation inside that package. Hosted graph adapters and other roadmap work remain unshipped.
-Details: [product 5.0 DoD](docs/maintainers/product-5.0.0.md) ·
-[product 4.0 receipt](docs/maintainers/product-4.0.0.md) ·
-[PRD-v5](docs/PRD-v5.md) · [PRD-v4](docs/PRD-v4.md) ·
-[major release surface](docs/maintainers/major-release-surface.md).
+- [docs/PRD.md](docs/PRD.md) — one PRD per major
+- [docs/maintainers/](docs/maintainers/) — `product-N.0.0.md` receipts (e.g.
+  [5.0.0](docs/maintainers/product-5.0.0.md), [4.0.0](docs/maintainers/product-4.0.0.md),
+  [3.2.0](docs/maintainers/product-3.2.0.md))
+
+Honest residuals (do not invent green): live Product 4 release authority out of band;
+B1 apply deferred; hosted graph/edge not claimed; V5 never on capture hot path.
 
 ---
 
 ## What works today
 
-**Public release:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [product 5.0 DoD](docs/maintainers/product-5.0.0.md) ·
-[product 4.0 receipt](docs/maintainers/product-4.0.0.md)).
-Package publication and local installation do not imply a hosted deployment or live
-Product 4 release authority.
+**Public package:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v5.0.0` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
+live Product 4 release authority.
 
 Default local loop (CI-gated):
 
@@ -444,18 +423,13 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
-| **3.2.0** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; `adj_v3` and evaluators; B0 `reconcile-policy` preview-only with B1 apply/writer/receipt deferred |
-| **4.0.0 Product 4 trust/evidence plane** | **Shipped** — `@innocarpe/carpeos@4.0.0` / `v4.0.0`; live authority residual; dispatch-only trust workflows |
-| **5.0.0 Product 5 draft lane** | **Shipped on npm** — `@innocarpe/carpeos@5.0.0` / `v5.0.0`; opt-in `carpeos v5`; not capture hot path |
-| `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
+| Product 3.x (adj_v3, OKF export, graph/hybrid recall, B0 preview) | **Shipped** — see [product-3.2.0](docs/maintainers/product-3.2.0.md) |
+| Product 4 trust/evidence plane | **Shipped** in package — [product-4.0.0](docs/maintainers/product-4.0.0.md); live authority residual |
+| Product 5 draft lane (`carpeos v5`) | **Shipped** opt-in — [product-5.0.0](docs/maintainers/product-5.0.0.md); not capture hot path |
+| `carpeos setup` / one-stop install | Shipped (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |
 | Hosted embeddings / multi-tenant SaaS | Not goals of this repo |
-| **3.0.0 product freeze** | **Shipped** — `v3.0.0` |
-| **3.1.0 public release** | **Shipped** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
-| **3.2.0 public release** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0` |
-| **4.0.0 public release** | **Shipped** — `@innocarpe/carpeos@4.0.0` / `v4.0.0` |
-| **5.0.0 public release** | **Shipped on npm** — `@innocarpe/carpeos@5.0.0` / `v5.0.0` (draft lane; GitHub Release may lag registry verify) |
 
 **NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, hosted graph
 adapters/services, private vault adoption, or hosted MCP is proven by this

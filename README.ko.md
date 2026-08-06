@@ -19,14 +19,13 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
 
-**최신 릴리스:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([변경 기록](CHANGELOG.md) · [v5.0.0 태그](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0) ·
-[product 5.0 DoD](docs/maintainers/product-5.0.0.md)). 이전 major: [4.0.0 영수증](docs/maintainers/product-4.0.0.md).
+**최신 패키지:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [`v5.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0)).
 
-**5.0 드래프트 레인 (저장소 내, opt-in, npm major 아님):** `carpeos v5` 뒤의
-오프라인 드래프트 추출, 기본 LLM 경로는 **DeepSeek Direct**, 항상
-`canonical_effect: "none"`, capture 핫패스에 연결되지 않음.
+선택 **draft lane** (`carpeos v5`): 오프라인 LLM 추출, 항상
+`canonical_effect: "none"`, capture hot path에 없음.
 [PRD-v5](docs/PRD-v5.md) · [ADR 0016](docs/adr/0016-v5-draft-only-deepseek-primary.md).
+
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
@@ -106,13 +105,7 @@ held 리뷰는 policy-aware, terminal, append-only입니다.
 필요합니다. 재판정은 기존 이력을 덮어쓰지 않고 추가합니다. 판정과 held 리뷰는
 Claim이나 `AcceptanceDecision`을 자동 생성하지 않습니다.
 
-현재 공개 major는 Product **4.0.0**
-([`@innocarpe/carpeos@4.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos) /
-[v4.0.0](https://github.com/innocarpe/CarpeOS/releases/tag/v4.0.0))입니다. Product 4
-trust/evidence plane이 패키지에 포함되며, 독립 live release authority는 여전히 대역 외입니다.
-그 안의 adjudication 기반은 Product **3.2.0** 계약(B0 preview 등)을 유지합니다.
-여기에는 synthetic evidence-only adjudication/knowledge-form evaluator, synthetic retrieval
-evaluator, preview-only B0 policy reconciliation이 포함됩니다.
+판정 기반은 **`adj_v3`**(3.2에 도입, 현재 패키지 기본)입니다. synthetic evidence-only evaluator와 preview-only B0 reconciliation은 그대로 사용할 수 있습니다.
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -346,21 +339,15 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 [one-stop install](docs/guides/one-stop-install.md) ·
 [MCP](docs/guides/mcp-server.md).
 
-### 에이전트가 이 저장소를 설치할 때
+### 에이전트가 이 저장소에서 작업할 때
 
-설치는 **idempotent** 하게, private 데이터는 **git 밖**에 둡니다.
-
-1. 우선 `npm i -g @innocarpe/carpeos` + `carpeos setup plan` 후
-   `carpeos setup run --apply` (또는 `install.sh`).
-2. 캡처 훅: `carpeos setup hooks install --apply`.
-3. 소스 작업이면 checkout에서 `node scripts/install-local.mjs run --apply`.
-4. `~/.carpeos`, credential, 실제 세션 데이터를 커밋하지 말 것.
-5. 설치 경로를 새로 만들지 말 것. setup이 MCP(및 선택적 훅)를 등록함.
-6. 릴리스는 SemVer + `vX.Y.Z` 태그만 —
-   [versioning](docs/maintainers/versioning-and-releases.md),
-   스킬 `skills/carpeos-release/SKILL.md`
-   (`./scripts/install-release-skill.sh`).
-   SemVer를 따르고, release skill 밖의 태그를 만들지 말 것.
+먼저 **[`AGENTS.md`](AGENTS.md)** 를 읽으세요 (공개/사적 경계, PR 라벨, 릴리스 스킬,
+설치 규칙). 설치는 멱등으로 두고 `~/.carpeos`·자격 증명·실세션 데이터를 커밋하지 마세요.
+`carpeos setup` / `scripts/install-local.mjs` 를 쓰고 임의 설치 경로를 만들지 마세요.
+릴리스는 SemVer + `vX.Y.Z` 만
+([versioning](docs/maintainers/versioning-and-releases.md),
+[major release surface](docs/maintainers/major-release-surface.md),
+`skills/carpeos-release/SKILL.md`).
 
 | 가이드 | 링크 |
 | --- | --- |
@@ -383,36 +370,27 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 
 ---
 
-## 제품 라인 (1.0 → 2.0 → 3.0 → 3.1 → 3.2)
+## 제품 라인 (majors)
 
-| 패키지 / 제품 | 의미 | 상태 |
-| --- | --- | --- |
-| **1.0.0** | 로컬 **파이프라인 + 계약** freeze | **출시** — 인프라 기준선. “완성된 지식 OS” 아님 |
-| **2.0.0** | **판정된 의미**가 기본 제품 계약 (`adj_v1`, promoted-only 검색, held 리뷰, doctor, smoke) | **출시** (npm / `v2.0.0`) — 운영 가능한 MVP. 인간 수준 판단 아님 |
-| **3.0.0** | 교차 저장소 partition과 worktree facet을 갖춘 retrieval-first 그래프/하이브리드 회상 | **출시** (npm / `v3.0.0`) |
-| **3.1.0** | 추가된 **OKF v0.2 export projection** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0`; export만 지원하고 import 경로는 아님 |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held 리뷰, evidence-only quality evaluator, retrieval evaluator, B0 reconciliation preview | **출시** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; 이후 패키지에 유지. B0는 preview-only이고 B1 apply/writer/receipt는 deferred |
-| **4.0.0** | Product 4 governed evidence / trust plane (`P4_0`, base-owned evaluator, sealed evidence, publisher schemas, dispatch-only sandbox workflows) | **출시** — `@innocarpe/carpeos@4.0.0` / `v4.0.0`; live authority residual; B1 apply는 여전히 deferred |
-| **5.0.0** | Opt-in Product 5 draft lane (`carpeos v5`, DeepSeek Direct primary, `canonical_effect: "none"`) | **npm 출시** — `@innocarpe/carpeos@5.0.0` / `v5.0.0`; capture hot path 아님; M8 authority seam deferred |
+현재 npm 패키지는 **`@innocarpe/carpeos@5.0.0`** (`v5.0.0`)입니다. adjudication + retrieval
+운영 루프, Product 4 trust/evidence plane, opt-in Product 5 draft lane이 포함됩니다.
+전체 major/minor thesis·DoD:
 
-현재 npm latest는 **5.0.0**(draft lane)입니다. Product **4.0.0** trust/evidence 기반은 그
-패키지 안에 유지됩니다. hosted graph adapter 등은 미출시입니다.
-상세: [product 5.0 DoD](docs/maintainers/product-5.0.0.md) ·
-[product 4.0 영수증](docs/maintainers/product-4.0.0.md) ·
-[PRD-v5](docs/PRD-v5.md) · [PRD-v4](docs/PRD-v4.md) ·
-[major release surface](docs/maintainers/major-release-surface.md).
+- [docs/PRD.md](docs/PRD.md)
+- [docs/maintainers/](docs/maintainers/) (`product-N.0.0.md`, 예:
+  [5.0.0](docs/maintainers/product-5.0.0.md), [4.0.0](docs/maintainers/product-4.0.0.md),
+  [3.2.0](docs/maintainers/product-3.2.0.md))
 
-용량·팩 경제·장기 구조는
-[memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md) 아래로 이어집니다.
+잔여(초록 발명 금지): live Product 4 release authority 대역 외, B1 apply deferred,
+hosted graph/edge 미주장, V5는 capture hot path에 없음.
 
 ---
 
 ## 지금 구현된 것
 
-**공개 릴리스:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [product 5.0 DoD](docs/maintainers/product-5.0.0.md) ·
-[product 4.0 영수증](docs/maintainers/product-4.0.0.md)).
-패키지 공개와 로컬 설치는 호스티드 배포나 live Product 4 release authority를 뜻하지 않습니다.
+**공개 패키지:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v5.0.0` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
+release authority를 뜻하지 **않습니다**.
 
 기본 로컬 루프 (CI 게이트):
 
@@ -435,18 +413,13 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | Retrieval-first 그래프/하이브리드 회상 | **출시** — indexed graph traversal, 교차 저장소 partition, worktree facet |
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
 | OKF v0.2 export projection | **3.1에 출시** — 로컬 export만, import 경로 없음 |
-| **3.2.0** | **출시** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; `adj_v3`와 evaluator; B0 preview-only; B1 deferred |
-| **4.0.0 Product 4 trust/evidence plane** | **출시** — `@innocarpe/carpeos@4.0.0` / `v4.0.0`; live authority residual; dispatch-only trust workflows |
-| **5.0.0 Product 5 draft lane** | **npm 출시** — `@innocarpe/carpeos@5.0.0` / `v5.0.0`; opt-in `carpeos v5`; capture hot path 아님 |
-| `carpeos setup` / one-stop install | npm `@innocarpe/carpeos` |
+| Product 3.x (adj_v3, OKF export, graph/hybrid recall, B0 preview) | **출시** — [product-3.2.0](docs/maintainers/product-3.2.0.md) |
+| Product 4 trust/evidence plane | **패키지에 출시** — [product-4.0.0](docs/maintainers/product-4.0.0.md); live authority residual |
+| Product 5 draft lane (`carpeos v5`) | **opt-in 출시** — [product-5.0.0](docs/maintainers/product-5.0.0.md); capture hot path 아님 |
+| `carpeos setup` / one-stop install | 출시 (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
 | Hosted embeddings / multi-tenant SaaS | 이 저장소 목표 아님 |
-| **3.0.0 product freeze** | **출시** — `v3.0.0` |
-| **3.1.0 public release** | **출시** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
-| **3.2.0 public release** | **출시** — `@innocarpe/carpeos@3.2.0` / `v3.2.0` |
-| **4.0.0 public release** | **출시** — `@innocarpe/carpeos@4.0.0` / `v4.0.0` |
-| **5.0.0 public release** | **npm 출시** — `@innocarpe/carpeos@5.0.0` / `v5.0.0` (draft lane; GitHub Release는 registry verify 지연 가능) |
 
 **NOT DEPLOYED:** hosted Worker, D1/R2 production, hosted graph adapter/service,
 private vault, hosted MCP 는 이 저장소가 증명하지 않습니다. npm 게시는 SemVer 태그 + CI

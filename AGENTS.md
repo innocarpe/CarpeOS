@@ -21,12 +21,36 @@ Use fictional, generic, synthetic examples only.
 
 ## Documentation Rules
 
-- `README.md` is the canonical English README.
+- `README.md` is the canonical English README: agents and humans should learn
+  **what the product is, how it works, how to install, and what is shipped**.
+  Keep the **hero clean** (no contradictory status lines or DoD link farms).
+  Keep substantive sections (why, who, capabilities, install paths, status,
+  repo boundary). Do **not** gut those for line-count vanity.
+- Full product-line archaeology (every historical major row) and long agent
+  install essays belong in `docs/PRD.md` / `docs/maintainers/` / this file —
+  not as a second changelog under the hero.
 - `README.ko.md` should track the same substance in Korean.
 - Planned features must be described as planned.
 - Do not document commands as working unless they have been verified.
 - Do not claim adapters, MCP tools, sync, projections, or hosted deployment are
   complete until implementation and tests exist.
+- After every **MAJOR** package cut, complete
+  `docs/maintainers/major-release-surface.md` and run
+  `node scripts/check-major-release-surface.mjs` (README needs the current
+  `@innocarpe/carpeos@X.Y.Z` / `vX.Y.Z` pin, cleanly).
+
+## Agent install (idempotent)
+
+Keep private data **out of the git tree**.
+
+1. Prefer `npm i -g @innocarpe/carpeos` then `carpeos setup plan` /
+   `carpeos setup run --apply` (or `scripts/install.sh`).
+2. Capture hooks: `carpeos setup hooks install --apply`.
+3. From a checkout: `node scripts/install-local.mjs run --apply`.
+4. Never commit `~/.carpeos`, credentials, or real session data.
+5. Do not invent alternate install paths; setup registers MCP and optional hooks.
+6. Releases: SemVer + `vX.Y.Z` only — `skills/carpeos-release/SKILL.md` and
+   `./scripts/install-release-skill.sh`.
 
 ## Architecture Rules
 
