@@ -8,6 +8,7 @@
 
 export * from "./admit.js";
 export * from "./digest.js";
+export * from "./flash.js";
 export * from "./gate.js";
 export * from "./golden.js";
 export * from "./jobs.js";
@@ -15,6 +16,7 @@ export * from "./materialize.js";
 export * from "./pack.js";
 export * from "./pipeline.js";
 export * from "./proposals.js";
+export * from "./runner.js";
 export type { SqlDatabase, SqlStatement } from "./sql.js";
 export * from "./stages.js";
 export * from "./types.js";

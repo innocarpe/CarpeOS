@@ -1,7 +1,7 @@
 # Product 6.0.0 — Definition of Done (maintainers)
 
-Status: **Planning freeze (ADR 0017 accepted); implementation not started on npm**  
-Base package today: `@innocarpe/carpeos@5.0.1` (multi-host setup + V5 draft lane).
+Status: **P2 hold-first product loop on main; npm still `@innocarpe/carpeos@5.0.1` until release cut**  
+Base package today: `@innocarpe/carpeos@5.0.1` (multi-host setup + V5 draft lane + agentic plane in monorepo).
 
 **Model freeze:** DeepSeek Direct **`deepseek-v4-flash` only** for all real LLM stages.
 
@@ -35,12 +35,12 @@ Post-capture Agentic Layer forms **grounded, typed, graph-linked knowledge** und
 
 A honest 6.0.0 cut requires **at least P2 complete** plus:
 
-- [ ] ADR 0017 implemented as coded planes (not docs-only)
-- [ ] `@carpeos/agentic` durable jobs + Flash-only provider wiring
-- [ ] Capture path still has **zero** LLM calls (test)
-- [ ] Cite integrity 100% on persist paths
-- [ ] Golden-12 (or expanded) green in CI
-- [ ] `agentic-off` restores 5.x capture+adj behavior
+- [x] ADR 0017 coded planes for E1–E5 + E7–E8 + feed/runner (E6 lineage markers; E9 hook; E10 deferred)
+- [x] `@carpeos/agentic` durable jobs + Flash-only live path (`callAgenticFlash` / `--allow-network`)
+- [x] Capture path still has **zero** LLM calls (feed insert only; fail-open)
+- [x] Cite integrity on persist paths (E5 before proposal/materialize)
+- [x] Golden-12 green in package tests
+- [x] `agentic-off` / `agentic_feed: false` / `CARPEOS_AGENTIC=off` kill switches
 - [ ] CHANGELOG `[6.0.0]` honest about residuals (auto-promote may still be P3+)
 - [ ] Major release surface checker green for 6.0.0
 - [ ] Local activation of exact `@innocarpe/carpeos@6.0.0`

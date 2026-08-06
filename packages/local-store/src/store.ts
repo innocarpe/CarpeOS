@@ -83,6 +83,11 @@ export type CaptureRequestOptions = {
   extract?: boolean;
   /** Optional policy overrides for post-capture extraction. */
   extractionPolicy?: Partial<MeaningfulUnitPolicyConfig>;
+  /**
+   * When false, skip Product 6 agentic capture feed insert.
+   * Default: insert when CARPEOS_AGENTIC is not off (no LLM in capture).
+   */
+  agentic_feed?: boolean;
 };
 
 export type ExtractionResult =
@@ -517,6 +522,8 @@ export const LOCAL_STORE_MIGRATION_IDS = [
   "004_knowledge_disposition_reviews",
   "005_knowledge_dispositions_policy_key",
   "006_capture_worktree_identity",
+  /** Post-capture agentic feed (no LLM; runner drains asynchronously). */
+  "007_agentic_capture_feed",
 ] as const;
 
 export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
@@ -528,6 +535,20 @@ const DISPOSITION_REVIEW_MIGRATION_ID: LocalStoreMigrationId = "004_knowledge_di
 const WORKTREE_IDENTITY_MIGRATION_ID: LocalStoreMigrationId = "006_capture_worktree_identity";
 const DISPOSITION_POLICY_KEY_MIGRATION_ID: LocalStoreMigrationId =
   "005_knowledge_dispositions_policy_key";
+const AGENTIC_CAPTURE_FEED_MIGRATION_ID: LocalStoreMigrationId = "007_agentic_capture_feed";
+
+/** Durable post-capture feed row for Product 6 agentic runner (no LLM in capture). */
+export type AgenticCaptureFeedRow = {
+  source_event_id: string;
+  artifact_id: string;
+  trust_zone_id: string;
+  hook_event_name: string;
+  protected_value_id: string;
+  state: "pending" | "done" | "skipped";
+  created_at: string;
+  finished_at: string | null;
+  skip_reason: string | null;
+};
 
 export type ProtectedValueTransferExport = {
   protected_value_id: string;
@@ -925,9 +946,25 @@ export class LocalCaptureStore {
   /**
    * Capture then optionally extract Observation (default on for product loop).
    * Extraction runs after the capture transaction so evidence always lands.
+   * Agentic feed insert is also post-commit (never inside capture txn; fail-open).
    */
   captureHook(envelope: CaptureEnvelope, options: CaptureRequestOptions = {}): CaptureResult {
     const capture = this.captureHookWrite(envelope, options);
+    // Post-capture agentic feed: no LLM, no network, no await. Outside txn for concurrency safety.
+    if (capture.status === "captured" && options.agentic_feed !== false && isAgenticFeedEnabled()) {
+      try {
+        this.insertAgenticCaptureFeed({
+          source_event_id: capture.event.event_id,
+          artifact_id: capture.event.payload.artifact_id,
+          trust_zone_id: this.trustZone.trust_zone_id,
+          hook_event_name: envelope.hook_event_name,
+          protected_value_id: capture.protected_value_id,
+          created_at: this.clock.now().toISOString(),
+        });
+      } catch {
+        // ignore — capture remains authoritative
+      }
+    }
     if (options.extract !== true) {
       return capture;
     }
@@ -4040,7 +4077,170 @@ export class LocalCaptureStore {
           .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
           .run(WORKTREE_IDENTITY_MIGRATION_ID, this.clock.now().toISOString());
       }
+
+      const agenticFeedExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(AGENTIC_CAPTURE_FEED_MIGRATION_ID);
+      if (agenticFeedExisting === undefined) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS agentic_capture_feed (
+            source_event_id TEXT PRIMARY KEY,
+            artifact_id TEXT NOT NULL,
+            trust_zone_id TEXT NOT NULL,
+            hook_event_name TEXT NOT NULL,
+            protected_value_id TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('pending', 'done', 'skipped')),
+            created_at TEXT NOT NULL,
+            finished_at TEXT,
+            skip_reason TEXT
+          );
+          CREATE INDEX IF NOT EXISTS idx_agentic_capture_feed_zone_state
+            ON agentic_capture_feed (trust_zone_id, state, created_at);
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(AGENTIC_CAPTURE_FEED_MIGRATION_ID, this.clock.now().toISOString());
+      }
     });
+  }
+
+  /**
+   * List pending agentic capture-feed rows for the active trust zone.
+   * No LLM. Used by Product 6 runner only.
+   */
+  listAgenticCaptureFeed(
+    input: { limit?: number; state?: AgenticCaptureFeedRow["state"] } = {},
+  ): AgenticCaptureFeedRow[] {
+    const limit = input.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("listAgenticCaptureFeed limit must be a positive integer");
+    }
+    const state = input.state ?? "pending";
+    const rows = this.db
+      .prepare(
+        `
+          SELECT source_event_id, artifact_id, trust_zone_id, hook_event_name,
+                 protected_value_id, state, created_at, finished_at, skip_reason
+          FROM agentic_capture_feed
+          WHERE trust_zone_id = ? AND state = ?
+          ORDER BY created_at ASC, source_event_id ASC
+          LIMIT ?
+        `,
+      )
+      .all(this.trustZone.trust_zone_id, state, limit) as Array<{
+      source_event_id: string;
+      artifact_id: string;
+      trust_zone_id: string;
+      hook_event_name: string;
+      protected_value_id: string;
+      state: AgenticCaptureFeedRow["state"];
+      created_at: string;
+      finished_at: string | null;
+      skip_reason: string | null;
+    }>;
+    return rows.map((r) => ({
+      source_event_id: r.source_event_id,
+      artifact_id: r.artifact_id,
+      trust_zone_id: r.trust_zone_id,
+      hook_event_name: r.hook_event_name,
+      protected_value_id: r.protected_value_id,
+      state: r.state,
+      created_at: r.created_at,
+      finished_at: r.finished_at,
+      skip_reason: r.skip_reason,
+    }));
+  }
+
+  /** Mark feed row terminal (done or skipped). Idempotent. */
+  finishAgenticCaptureFeed(input: {
+    source_event_id: string;
+    state: "done" | "skipped";
+    skip_reason?: string | null;
+  }): boolean {
+    const now = this.clock.now().toISOString();
+    const result = this.db
+      .prepare(
+        `
+          UPDATE agentic_capture_feed
+          SET state = ?, finished_at = ?, skip_reason = ?
+          WHERE source_event_id = ? AND trust_zone_id = ? AND state = 'pending'
+        `,
+      )
+      .run(
+        input.state,
+        now,
+        input.skip_reason ?? null,
+        input.source_event_id,
+        this.trustZone.trust_zone_id,
+      ) as { changes?: number };
+    return Number(result.changes ?? 0) > 0;
+  }
+
+  /**
+   * Best-effort plaintext signal for agentic packing from a protected capture envelope.
+   * Local-only decrypt; never network. Returns empty string on failure.
+   */
+  readCaptureSignalText(sourceEventId: string): string {
+    try {
+      const row = this.db
+        .prepare(
+          `
+            SELECT protected_value_id FROM canonical_events
+            WHERE event_id = ? AND trust_zone_id = ? AND event_type = 'EvidenceArtifact'
+          `,
+        )
+        .get(sourceEventId, this.trustZone.trust_zone_id) as
+        | { protected_value_id: string }
+        | undefined;
+      if (row === undefined) return "";
+      const plain = this.decryptProtectedValue(row.protected_value_id);
+      const text = Buffer.from(plain).toString("utf8");
+      const env = JSON.parse(text) as { payload?: unknown; hook_event_name?: string };
+      return extractSignalTextFromCapturePayload(env.payload);
+    } catch {
+      return "";
+    }
+  }
+
+  private insertAgenticCaptureFeed(input: {
+    source_event_id: string;
+    artifact_id: string;
+    trust_zone_id: string;
+    hook_event_name: string;
+    protected_value_id: string;
+    created_at: string;
+  }): void {
+    // Defensive for concurrent first-open races: ensure table exists.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS agentic_capture_feed (
+        source_event_id TEXT PRIMARY KEY,
+        artifact_id TEXT NOT NULL,
+        trust_zone_id TEXT NOT NULL,
+        hook_event_name TEXT NOT NULL,
+        protected_value_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'done', 'skipped')),
+        created_at TEXT NOT NULL,
+        finished_at TEXT,
+        skip_reason TEXT
+      );
+    `);
+    this.db
+      .prepare(
+        `
+          INSERT OR IGNORE INTO agentic_capture_feed (
+            source_event_id, artifact_id, trust_zone_id, hook_event_name,
+            protected_value_id, state, created_at, finished_at, skip_reason
+          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, NULL)
+        `,
+      )
+      .run(
+        input.source_event_id,
+        input.artifact_id,
+        input.trust_zone_id,
+        input.hook_event_name,
+        input.protected_value_id,
+        input.created_at,
+      );
   }
 
   private upsertProject(basisKind: string): void {
@@ -4574,4 +4774,27 @@ function isThenable(value: unknown): boolean {
     "then" in value &&
     typeof (value as { then?: unknown }).then === "function"
   );
+}
+
+/** Env kill switch for post-capture agentic feed (default on). */
+export function isAgenticFeedEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env.CARPEOS_AGENTIC ?? "").trim().toLowerCase();
+  return v !== "0" && v !== "off" && v !== "false" && v !== "disabled";
+}
+
+/** Pull human-readable signal text from a capture envelope payload (local only). */
+export function extractSignalTextFromCapturePayload(payload: unknown): string {
+  if (payload === null || payload === undefined) return "";
+  if (typeof payload === "string") return payload.trim();
+  if (typeof payload !== "object" || Array.isArray(payload)) return "";
+  const obj = payload as Record<string, unknown>;
+  for (const key of ["transcript", "text", "message", "content", "body", "summary"]) {
+    const v = obj[key];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  try {
+    return JSON.stringify(obj);
+  } catch {
+    return "";
+  }
 }

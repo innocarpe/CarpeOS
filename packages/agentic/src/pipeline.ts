@@ -29,6 +29,10 @@ export type AgenticPipelineInput = {
   now?: Date;
   /** Optional agentic-off kill switch. */
   agentic_enabled?: boolean;
+  /** Pre-fetched Flash JSON for triage (live path). */
+  flash_triage_text?: string | null;
+  /** Pre-fetched Flash JSON for extract (live path). */
+  flash_extract_text?: string | null;
 };
 
 export type AgenticPipelineResult = {
@@ -124,6 +128,9 @@ export function runAgenticProposalPipeline(
     source_event_id: input.source_event_id,
     ...(input.mode !== undefined ? { mode: input.mode } : {}),
     ...(input.allow_network !== undefined ? { allow_network: input.allow_network } : {}),
+    ...(input.flash_triage_text !== undefined && input.flash_triage_text !== null
+      ? { flash_response_text: input.flash_triage_text }
+      : {}),
   });
   base.triage_decision = triage.decision;
   base.network_used = base.network_used || triage.network_used;
@@ -150,6 +157,9 @@ export function runAgenticProposalPipeline(
     source_event_id: input.source_event_id,
     ...(input.mode !== undefined ? { mode: input.mode } : {}),
     ...(input.allow_network !== undefined ? { allow_network: input.allow_network } : {}),
+    ...(input.flash_extract_text !== undefined && input.flash_extract_text !== null
+      ? { flash_response_text: input.flash_extract_text }
+      : {}),
     hint_kind: input.hint_kind ?? null,
   });
   base.network_used = base.network_used || extract.network_used;
