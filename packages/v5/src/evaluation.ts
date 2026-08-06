@@ -94,12 +94,12 @@ export function evaluateGates(
   const reviewer_rate = attempted.filter((c) => c.reviewer_pass).length / denominator;
   const baseline_rate = attempted.filter((c) => c.baseline_pass).length / denominator;
   const novel_rate = attempted.filter((c) => c.novel).length / denominator;
-  const identity_drift_rate =
-    attempted.filter((c) => !c.identity_stable).length / denominator;
+  const identity_drift_rate = attempted.filter((c) => !c.identity_stable).length / denominator;
   const total_cost_units = attempted.reduce((n, c) => n + c.cost_units, 0);
 
   const latencies = attempted.map((c) => c.latency_ms).sort((a, b) => a - b);
-  const p95_latency_ms = latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))]!;
+  const p95_latency_ms =
+    latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))]!;
 
   if (!noneligible_zero) blockers.push("noneligible cases claimed quality_pass");
   if (quality_rate < thresholds.min_quality_rate) blockers.push("quality_rate below threshold");

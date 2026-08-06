@@ -8,7 +8,11 @@ import {
   reconcileAttempt,
   rollbackV5,
 } from "../src/attempts.js";
-import { buildEvidencePack, buildProfileBinding, serializeEvidencePackView } from "../src/evidence-pack.js";
+import {
+  buildEvidencePack,
+  buildProfileBinding,
+  serializeEvidencePackView,
+} from "../src/evidence-pack.js";
 import { ProviderBoundary } from "../src/provider.js";
 import type { RedactOk } from "../src/redaction.js";
 
@@ -93,7 +97,11 @@ describe("attempts / review / rollback sidecar", () => {
     });
     const d1 = dispatchAttempt(state, "a1", "2026-08-06T00:00:00.000Z");
     expect("status" in d1 && d1.status === "dispatched").toBe(true);
-    finishAttempt(state, "a1", { status: "succeeded", at: "2026-08-06T00:00:01.000Z", result: null });
+    finishAttempt(state, "a1", {
+      status: "succeeded",
+      at: "2026-08-06T00:00:01.000Z",
+      result: null,
+    });
     reconcileAttempt(state, "a1", "2026-08-06T00:00:02.000Z");
     rollbackV5(state, "reviewer-1", "2026-08-06T00:01:00.000Z");
     expect(isV5Off(state)).toBe(true);

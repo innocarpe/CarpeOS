@@ -85,11 +85,7 @@ export type RedactVectorInput = {
 const ENVELOPE_SCHEMA = "carpeos.redact-envelope/v1";
 const RECORD_SCHEMA = "carpeos.redact-record/v1";
 
-const ALLOWED_FIELDS = new Set([
-  "document.title",
-  "document.body",
-  "message.subject",
-]);
+const ALLOWED_FIELDS = new Set(["document.title", "document.body", "message.subject"]);
 
 const UNSUPPORTED_BUT_KNOWN_FIELDS = new Set(["document.author"]);
 
@@ -139,12 +135,13 @@ function decodeBase64Loose(text: string): Uint8Array | null {
 function parseJsonObjectStrict(
   text: string,
   baseOffset: number,
-):
-  | { ok: true; value: Record<string, unknown> }
-  | { ok: false; byte_offset: number } {
+): { ok: true; value: Record<string, unknown> } | { ok: false; byte_offset: number } {
   // Fast structural check
   let i = 0;
-  while (i < text.length && (text[i] === " " || text[i] === "\t" || text[i] === "\n" || text[i] === "\r")) {
+  while (
+    i < text.length &&
+    (text[i] === " " || text[i] === "\t" || text[i] === "\n" || text[i] === "\r")
+  ) {
     i++;
   }
   if (text[i] !== "{") {
@@ -187,16 +184,16 @@ function findDuplicateKeyOffset(text: string): number | null {
   // Scan top-level object keys only (records are flat).
   let depth = 0;
   let inString = false;
-  let escape = false;
+  let escaped = false;
   let i = 0;
   const seen = new Set<string>();
   while (i < text.length) {
     const ch = text[i]!;
     if (inString) {
-      if (escape) {
-        escape = false;
+      if (escaped) {
+        escaped = false;
       } else if (ch === "\\") {
-        escape = true;
+        escaped = true;
       } else if (ch === '"') {
         inString = false;
       }
@@ -305,7 +302,11 @@ function detectPolicy(text: string): RedactErrorCode | null {
       /* not JSON */
     }
   }
-  if (/\{?\s*tool_calls\s*\}?/.test(text) || /"tool_calls"\s*:/.test(text) || text.includes("{tool_calls}")) {
+  if (
+    /\{?\s*tool_calls\s*\}?/.test(text) ||
+    /"tool_calls"\s*:/.test(text) ||
+    text.includes("{tool_calls}")
+  ) {
     return "redact_tool_payload";
   }
   if (/ignore\s+previous\s+instructions/i.test(text)) {

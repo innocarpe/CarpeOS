@@ -153,7 +153,11 @@ export function finishAttempt(
   attempt.status = outcome.status;
   attempt.finished_at = outcome.at;
   attempt.result = outcome.result ?? null;
-  if (outcome.status === "timeout" || outcome.status === "failed" || outcome.status === "ambiguous") {
+  if (
+    outcome.status === "timeout" ||
+    outcome.status === "failed" ||
+    outcome.status === "ambiguous"
+  ) {
     state.incidents.push({
       schema: "carpeos.v5-incident/v1",
       incident_id: `inc_${attempt_id}_${outcome.status}`,

@@ -126,10 +126,7 @@ export function createTelemetryRuntime(public_spki_der_b64: string): TelemetryRu
   };
 }
 
-export function verifySnapshot(
-  snapshot: SignedSnapshot,
-  public_spki_der_b64: string,
-): boolean {
+export function verifySnapshot(snapshot: SignedSnapshot, public_spki_der_b64: string): boolean {
   const unsigned = {
     schema: snapshot.schema,
     account_id: snapshot.account_id,
@@ -264,9 +261,7 @@ export function admitTelemetry(input: {
   };
 }
 
-function shed(
-  reason: Extract<AdmissionResult, { http_status: 202 }>["reason"],
-): AdmissionResult {
+function shed(reason: Extract<AdmissionResult, { http_status: 202 }>["reason"]): AdmissionResult {
   return {
     http_status: 202,
     kind: "shed",
