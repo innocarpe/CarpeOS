@@ -6,8 +6,7 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "../..");
 const ci = () => readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8");
 
-const MAIN_ONLY =
-  /github\.event_name\s*==\s*'push'\s*&&\s*github\.ref\s*==\s*'refs\/heads\/main'/;
+const MAIN_ONLY = /github\.event_name\s*==\s*'push'\s*&&\s*github\.ref\s*==\s*'refs\/heads\/main'/;
 
 test("CI workflow keeps PR lean and main-full lanes", () => {
   const source = ci();
