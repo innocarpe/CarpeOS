@@ -20,6 +20,8 @@ export type AgenticRunnerReport = {
   feed_skipped: number;
   pipelines: AgenticPipelineResult[];
   materializations: number;
+  /** P5 draft Claim materializations (never AcceptanceDecision). */
+  draft_claims: number;
   /** P4 structure edge proposals across pipelines. */
   structure_edge_count: number;
   /** P4 E9 projection hook fired. */
@@ -63,6 +65,7 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     feed_skipped: 0,
     pipelines: [],
     materializations: 0,
+    draft_claims: 0,
     structure_edge_count: 0,
     project_invoked: false,
     network_used: false,
@@ -216,9 +219,19 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           allow_promote_materialize: input.allow_auto_promote === true,
           subject_ref: input.store.projectId,
         });
-        if (mat.ok && mat.observation_event_id !== null) {
-          report.materializations += 1;
-          observationIds.push(mat.observation_event_id);
+        if (mat.ok) {
+          if (mat.observation_event_id !== null) {
+            report.materializations += 1;
+            observationIds.push(mat.observation_event_id);
+          }
+          if (mat.claim_event_id !== null) {
+            report.draft_claims += 1;
+            // Claim is a meaning_unit for E9 graph density.
+            observationIds.push(mat.claim_event_id);
+            if (mat.observation_event_id === null) {
+              report.materializations += 1;
+            }
+          }
         }
       }
     }

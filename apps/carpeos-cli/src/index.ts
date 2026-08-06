@@ -16,6 +16,7 @@ import {
   evaluateAutoPromotePrecisionFromPath,
   evaluateGoldenManifest,
   getAgenticProposal,
+  listAgenticDraftClaimProposals,
   listAgenticHeldProposals,
   listAgenticProposals,
   loadGoldenManifest,
@@ -1407,7 +1408,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|materialize|precision|graph-metrics). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics). See: carpeos help agentic",
     );
   }
 
@@ -1625,6 +1626,52 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             gate: p.gate.decision,
             reason_codes: p.gate.reason_codes,
             materialized_event_id: p.materialized_event_id,
+            materialized_claim_event_id: p.materialized_claim_event_id,
+          })),
+        });
+        return 0;
+      } finally {
+        db.close();
+      }
+    }
+    case "list-claims": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          limit: { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const db = openAgenticDb(runtimeDir);
+      try {
+        const limit = Number(parsed.values.limit ?? "50");
+        const claims = listAgenticDraftClaimProposals(db, {
+          ...(options.trustZone !== undefined ? { trust_zone_id: options.trustZone } : {}),
+          limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50,
+        });
+        writeJson(process.stdout, {
+          ok: true,
+          command: "agentic.list-claims",
+          policy_version: AGENTIC_POLICY_VERSION,
+          count: claims.length,
+          auto_acceptance_decision: false,
+          proposals: claims.map((p) => ({
+            proposal_id: p.proposal_id,
+            source_event_id: p.source_event_id,
+            kind: p.candidate.kind,
+            statement: p.candidate.statement,
+            gate: p.gate.decision,
+            materialized_event_id: p.materialized_event_id,
+            materialized_claim_event_id: p.materialized_claim_event_id,
           })),
         });
         return 0;
@@ -2077,6 +2124,7 @@ USAGE
   carpeos agentic run --once --golden [--golden-path <manifest.json>]
   carpeos agentic golden [--path <manifest.json>]
   carpeos agentic list-held [--limit N]
+  carpeos agentic list-claims [--limit N]
   carpeos agentic materialize --proposal-id <id> --artifact-id <id> [--allow-promote]
   carpeos agentic precision [--path <golden-manifest.json>]
   carpeos agentic graph-metrics [--home <path>] [--rebuild]
@@ -2086,7 +2134,8 @@ SUBCOMMANDS
   run          Drain capture feed → stages → optional materialize (default product path)
   golden       Evaluate fixtures/agentic/v1/golden-12 offline
   list-held    List agentic_v1 hold proposals for human review
-  materialize  Materialize one proposal to draft Observation + disposition
+  list-claims  List proposals that materialized draft Claims (P5; accept still human)
+  materialize  Materialize one proposal to draft Observation and/or draft Claim
   precision    P3 offline auto-promote precision suite (must ≥ 0.90; zero must_not leaks)
   graph-metrics  P4 meaning graph density (rebuild graph_v2; projection only)
 

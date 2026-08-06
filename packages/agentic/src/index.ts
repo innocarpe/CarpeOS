@@ -7,6 +7,7 @@
  */
 
 export * from "./admit.js";
+export * from "./claims.js";
 export * from "./digest.js";
 export * from "./flash.js";
 export * from "./gate.js";

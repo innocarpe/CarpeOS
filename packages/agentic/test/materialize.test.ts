@@ -81,8 +81,11 @@ describe("materializeAgenticProposal", () => {
     });
     expect(mat.ok).toBe(true);
     expect(mat.disposition).toBe("hold");
-    expect(mat.canonical_effect).toBe("observation");
+    // P5: decision kinds dual-write draft Claim + Observation.
+    expect(mat.canonical_effect).toBe("observation_and_draft_claim");
     expect(mat.observation_event_id).toMatch(/^evt_/);
+    expect(mat.claim_event_id).toMatch(/^evt_/);
+    expect(mat.claim_type).toBe("decision");
     expect(mat.policy_version).toBe(AGENTIC_POLICY_VERSION);
 
     const history = store.listDispositionHistory(captured.event.event_id);
