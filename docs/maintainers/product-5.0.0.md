@@ -1,6 +1,7 @@
 # Product 5.0.0 — Definition of Done (maintainers)
 
-Status: **Draft-lane complete; package base is `@innocarpe/carpeos@4.0.0` on `main`; ready for npm `5.0.0` cut when maintainer authorizes (prefer after public `v4.0.0` tag/npm)**  
+Status: **Draft-lane published on npm as `@innocarpe/carpeos@5.0.0`** (tag `v5.0.0`).  
+Package base includes Product 4 trust/evidence plane (`4.0.0` prior major).  
 M8 **release seam** remains deferred (install-smoke only; no invented release-authority acceptance).
 
 Primary path: **DeepSeek Direct** (`deepseek-v4-flash`). OpenRouter not required.

@@ -1,8 +1,9 @@
-# Product 4.0.0 — remaining checklist (post-#234 / preflight)
+# Product 4.0.0 — remaining checklist (historical pre-ship notes)
 
-**Updated:** 2026-08-06  
-**Purpose:** Parallel handoff while isolation / residual sandbox PRs finish.  
-**Not a release approval.** Release remains fail-closed without human authority.
+**Updated:** 2026-08-06 (post-ship note)  
+**Status:** Package plane **shipped** as `@innocarpe/carpeos@4.0.0` / `v4.0.0`.  
+See [product-4.0.0.md](../maintainers/product-4.0.0.md). Below is retained as
+historical pre-ship handoff; do not treat “package still 3.2.0” rows as current.
 
 ## Already on `main` (code plane)
 
@@ -13,7 +14,8 @@
 | GitHub path/HTTP adversarial residual | #235 |
 | Local parallel preflight gate | #239 (`make preflight` / `pnpm preflight`) |
 
-Package identity remains **`3.2.0`** (`packages/carpeos`). G008 readiness stays **Defer** unless a new ready receipt exists.
+~~Package identity was 3.2.0 during this handoff.~~ **Now 4.0.0 on npm.** Live
+independent authority may still **defer**; package cut does not invent ready authority.
 
 ## Open / in flight
 

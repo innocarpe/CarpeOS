@@ -18,9 +18,11 @@ Do not invent alternate version schemes, ad-hoc `npm publish`, or untagged relea
 Canonical policy (read when unsure):
 
 - `docs/maintainers/versioning-and-releases.md`
+- `docs/maintainers/major-release-surface.md` (**required for every MAJOR**)
 - `CHANGELOG.md`
 - `scripts/release.mjs`
 - `.github/workflows/release.yml`
+- checker: `node scripts/check-major-release-surface.mjs`
 
 ## When to use
 
@@ -37,6 +39,7 @@ Trigger on: release, version bump, npm publish, git tag, GitHub Release,
 6. **No private data** in changelog or release notes (paths, tokens, real projects).
 7. **Pre-1.0 (`0.y.z`):** breaking CLI/MCP/setup changes → **MINOR** + `### Breaking` in changelog (not a quiet patch).
 8. **Completion requires local activation:** npm and GitHub publication are not a complete public release until the exact published version is installed and exercised in the maintainer's real local environment; record the commands and results in the release receipt.
+9. **MAJOR is not complete without the docs surface:** for `X.0.0` (or any product thesis major), update and verify the checklist in `docs/maintainers/major-release-surface.md` (README EN/KO, package README, PRD index + `PRD-vX`, `product-X.0.0.md`, architecture overview, versioning banner). Run `node scripts/check-major-release-surface.mjs`. Do not report “major complete” after tag/npm alone if that surface is stale.
 
 ## Bump choice
 
@@ -141,6 +144,26 @@ Record the actual commands and results in the release receipt. Any failure block
 older, report **published; local activation incomplete**, not a completed release.
 
 Report the exact version, npm URL, release URL, and release-receipt outcome to the user.
+
+### 7. Major docs surface (MAJOR only — or when version table/status would lie)
+
+If this cut is a **major** (`X.0.0`) or advances a major product thesis:
+
+1. Open/update `docs/maintainers/product-X.Y.Z.md` receipt (honest residuals).
+2. Update `docs/PRD-vX.md` status line and `docs/PRD.md` index row.
+3. Update `README.md` + `README.ko.md` Latest release / What works today / version table.
+4. Update `packages/carpeos/README.md` install pin.
+5. Update `docs/architecture/overview.md` current-main boundary.
+6. Update `docs/maintainers/versioning-and-releases.md` current public release banner.
+7. Clear stale “tag/npm missing” claims in follow-on docs (e.g. v5 milestones).
+8. Run:
+
+```bash
+node scripts/check-major-release-surface.mjs
+```
+
+Same-window docs PR is required before claiming the major complete. SSOT:
+`docs/maintainers/major-release-surface.md`.
 
 ## Emergency manual publish (user must request)
 

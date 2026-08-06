@@ -7,7 +7,7 @@ knowledge, and retrieve it for humans and agents.
 
 ```sh
 # npm — current public release
-npm install -g @innocarpe/carpeos@3.2.0
+npm install -g @innocarpe/carpeos@5.0.0
 
 # one-liner (curl)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
@@ -15,8 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-The current public release is `3.2.0`, published on npm and verified through
-global activation. Versions follow
+The current public release is `5.0.0`, published on npm. Activate with the exact
+version pin and `carpeos setup doctor`. Versions follow
 [SemVer](https://semver.org/). See the repo
 [CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md) and
 [versioning policy](https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/versioning-and-releases.md).
