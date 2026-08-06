@@ -1,10 +1,10 @@
 name: CI
 
 # Lanes (docs/maintainers/ci-policy.md / skills/carpeos-ci):
-# - PR lean: format/lint/build/typecheck/test/public-boundary via `pnpm check`
-# - Main full: same job continues with evals, smokes, and e2e (no second monorepo rebuild)
-# - Path filter: skip full monorepo work when only docs/meta surfaces change
-#   (job still reports Checks=success so required status checks stay green)
+# - PR lean (parallel): quality | boundary | build → typecheck ∥ test
+# - Main full: smokes/evals after lean green (path-filtered)
+# - Aggregate job name "Checks" stays required-check safe
+# - Docs/meta-only PRs: path filter → Checks success without monorepo work
 on:
   pull_request:
   push:
@@ -13,26 +13,28 @@ on:
 
 permissions:
   contents: read
-  # paths-filter needs pull-request metadata on fork PRs
   pull-requests: read
 
+env:
+  NODE_VERSION: "22.22.0"
+  PNPM_VERSION: "11.16.0"
+
 jobs:
-  checks:
-    name: Checks
+  changes:
+    name: Path filter
     runs-on: ubuntu-latest
+    outputs:
+      ci: ${{ steps.filter.outputs.ci }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          # Need history so path filter can diff PR base…head / push before…after.
           fetch-depth: 0
 
       - name: Detect CI-relevant path changes
         id: filter
         uses: dorny/paths-filter@v3
         with:
-          # Run full Checks when any of these change. Everything else (README,
-          # most of docs/, root governance markdown, …) skips the monorepo work.
           filters: |
             ci:
               - 'apps/**'
@@ -55,80 +57,205 @@ jobs:
               - 'Makefile'
               - '**/*.{ts,tsx,js,mjs,cjs,cts,mts}'
 
-      - name: Skip full Checks (no CI-relevant paths)
-        if: steps.filter.outputs.ci != 'true'
-        run: |
-          echo "No apps/packages/scripts/schemas/… changes detected."
-          echo "Skipping pnpm install + pnpm check (and main-full extras)."
-          echo "Gitleaks still runs via secret-scan.yml."
+  quality:
+    name: Format & lint
+    needs: changes
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        if: steps.filter.outputs.ci == 'true'
-        uses: pnpm/action-setup@v6
+      - name: Setup Node + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+  boundary:
+    name: Public boundary
+    needs: changes
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Public boundary
+        run: pnpm public-boundary
+
+  build:
+    name: Build
+    needs: changes
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Build monorepo
+        run: pnpm build
+
+      - name: Upload build outputs
+        uses: actions/upload-artifact@v4
         with:
-          version: 11.16.0
+          name: monorepo-dist
+          path: |
+            packages/*/dist
+            apps/*/dist
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
 
-      - name: Set up Node.js
-        if: steps.filter.outputs.ci == 'true'
-        uses: actions/setup-node@v7
+  typecheck:
+    name: Typecheck
+    needs: [changes, build]
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v4
         with:
-          node-version: 22.22.0
-          cache: pnpm
+          name: monorepo-dist
+          path: .
 
-      - name: Install dependencies
-        if: steps.filter.outputs.ci == 'true'
-        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
 
-      # --- PR lean (and main when code-relevant) ---
-      - name: Run checks
-        if: steps.filter.outputs.ci == 'true'
-        run: pnpm check
+  test:
+    name: Test
+    needs: [changes, build]
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
 
-      # --- Main full only: deeper integration (packages already built by pnpm check) ---
+      - name: Setup Node + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: monorepo-dist
+          path: .
+
+      - name: Test
+        run: pnpm test
+
+  main-full:
+    name: Main full
+    needs: [changes, build, test]
+    if: >-
+      needs.changes.outputs.ci == 'true' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: monorepo-dist
+          path: .
+
       - name: Evaluate capture adjudication
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/capture eval:adjudication:built
 
       - name: Evaluate capture knowledge form
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/capture eval:knowledge-form:built
 
       - name: Evaluate retrieval
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/retrieval eval:retrieval
 
       - name: Run synthetic knowledge dogfood smoke
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:dogfood
 
       - name: Run MCP smoke (G5)
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:mcp
 
       - name: Run product loop smoke (1.0)
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:product
 
       - name: Run knowledge adjudication smoke (2.0 MVP)
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:knowledge
 
       - name: Run sync worker G008 E2E
-        if: >-
-          steps.filter.outputs.ci == 'true' &&
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/sync-worker test:e2e
+
+  # Required status check name stays "Checks" (branch protection).
+  checks:
+    name: Checks
+    needs:
+      - changes
+      - quality
+      - boundary
+      - build
+      - typecheck
+      - test
+      - main-full
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate PR lean / main-full results
+        run: |
+          set -euo pipefail
+
+          changes_result="${{ needs.changes.result }}"
+          if [ "$changes_result" != "success" ]; then
+            echo "Path filter job failed: $changes_result"
+            exit 1
+          fi
+
+          ci="${{ needs.changes.outputs.ci }}"
+          if [ "$ci" != "true" ]; then
+            echo "No CI-relevant paths — monorepo jobs skipped; Checks green."
+            echo "Gitleaks still runs via secret-scan.yml."
+            exit 0
+          fi
+
+          require_success() {
+            local name="$1"
+            local result="$2"
+            if [ "$result" != "success" ]; then
+              echo "Required job failed: $name result=$result"
+              exit 1
+            fi
+            echo "ok $name"
+          }
+
+          require_success "quality" "${{ needs.quality.result }}"
+          require_success "boundary" "${{ needs.boundary.result }}"
+          require_success "build" "${{ needs.build.result }}"
+          require_success "typecheck" "${{ needs.typecheck.result }}"
+          require_success "test" "${{ needs.test.result }}"
+
+          # main-full is only required on push to main; skipped elsewhere is OK.
+          main_full_result="${{ needs.main-full.result }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            require_success "main-full" "$main_full_result"
+          else
+            echo "main-full not required on this event (result=$main_full_result)"
+          fi
+
+          echo "All required CI jobs green."

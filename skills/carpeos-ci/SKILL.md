@@ -77,13 +77,16 @@ Trigger on any of:
 
 ### PR lean (default merge gate)
 
-- format, lint, build, typecheck, unit/contract tests, public-boundary  
-  (commonly one step: `pnpm check` **if** it does not include smokes/e2e)
-- **Path-filtered:** full monorepo work only when CI-relevant paths change
-  (see `ci.yml` `dorny/paths-filter`); docs/README-only PRs still report
-  job `Checks` as success so required checks do not block. Do **not** use
-  bare `paths-ignore` that skips the whole workflow.
-- secret scan (`secret-scan.yml`) — every PR (not path-skipped)
+- **Parallel GHA jobs** (not one serial `pnpm check`):
+  - `quality` — format + lint
+  - `boundary` — public-boundary
+  - `build` → artifact → `typecheck` ∥ `test`
+  - aggregate job **`Checks`** (required status name)
+- Shared setup: `.github/actions/setup-node-pnpm` (`cache: pnpm`)
+- **Path-filtered:** monorepo jobs only when CI-relevant paths change
+  (`dorny/paths-filter`); docs-only → aggregate Checks success
+- Local twin remains `make preflight` / `pnpm check` (sequential OK locally)
+- secret scan (`secret-scan.yml`) — every PR
 
 ### Main full
 
