@@ -39,7 +39,7 @@ A honest 6.0.0 cut requires **at least P2 complete** plus:
 
 - [x] ADR 0017 coded planes for E1–E5 + E7–E8 + feed/runner (E6 lineage markers; E9 hook)
 - [x] P3–P6 shipped (precision, links, draft Claims, GraphRAG) through 6.4.0
-- [ ] E10 reconcile + human accept/promote + feed backfill (6.5.0 path)
+- [x] E10 reconcile + human accept/promote + feed backfill (6.5.0 path)
 - [x] `@carpeos/agentic` durable jobs + Flash-only live path (`callAgenticFlash` / `--allow-network`)
 - [x] Capture path still has **zero** LLM calls (feed insert only; fail-open)
 - [x] Cite integrity on persist paths (E5 before proposal/materialize)

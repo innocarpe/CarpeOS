@@ -12,12 +12,23 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- (none yet — fold entries here before the next release)
+
+## [6.5.0] - 2026-08-07
+
+### Added
+
 - **Complete Agentic topology residuals (E10 + human review + backfill)**:
   - E10 deterministic reconcile (dedupe/contradict proposals; human hold path only)
   - Human `promote-held` for agentic_v1 held Observations
   - Human `accept-claim` → `AcceptanceDecision` only with `--human-confirmed` + human actor
   - Historical `backfill` of EvidenceArtifact → agentic capture feed (no LLM)
   - Still never auto-creates AcceptanceDecision from runner/LLM paths
+
+### Notes
+
+- Completes ADR 0017 E0–E10 operator surface under hard fences.
+- Hosted graph/vector and free-form related edges remain non-goals.
 
 ## [6.4.0] - 2026-08-07
 
