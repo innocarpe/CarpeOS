@@ -521,12 +521,7 @@ export function reconcileReleaseAuthority({
   };
 }
 
-export function simulateReleaseBypass({
-  receipt,
-  releaseGate,
-  expectedRequest,
-  ...options
-} = {}) {
+export function simulateReleaseBypass({ receipt, releaseGate, expectedRequest, ...options } = {}) {
   const verificationAt = resolveVerificationAt(options, expectedRequest);
   assertReleaseAuthorityReceipt(receipt, { expectedRequest, verificationAt });
   if (!isRecord(releaseGate)) {
