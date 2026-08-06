@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../../..");
 const FIX = path.join(ROOT, "fixtures/v5/m0");
 const OUT = path.join(ROOT, "artifacts/v5/m0");
+const CHECK_ONLY = process.argv.includes("--check-only");
 
 function jcs(x) {
   if (x === null) return "null";
@@ -63,6 +64,9 @@ function runtimeInfo() {
 }
 
 function writeReceipt(name, body) {
+  if (CHECK_ONLY) {
+    return null;
+  }
   fs.mkdirSync(OUT, { recursive: true });
   const file = path.join(OUT, name);
   fs.writeFileSync(file, JSON.stringify(body, null, 2) + "\n");
@@ -336,4 +340,10 @@ if (!summary.m0_pass) {
   console.error("M0 BLOCKED: one or more computations failed to reproduce expected values");
   process.exit(2);
 }
-console.log("M0 computation receipts written under artifacts/v5/m0/");
+if (CHECK_ONLY) {
+  console.log(
+    "M0 check-only: all contracts recomputed and matched expected values (no receipt write)",
+  );
+} else {
+  console.log("M0 computation receipts written under artifacts/v5/m0/");
+}
