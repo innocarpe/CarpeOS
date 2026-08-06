@@ -19,6 +19,7 @@ import {
   evaluateCandidateEvidence,
   PREDICATE_IDS,
   TRUSTED_EVIDENCE_SCHEMA,
+  sealTrustedEvidence,
 } from "./evaluator.mjs";
 import {
   assertExactCheckQuery,
@@ -57,11 +58,6 @@ const PRODUCT4_SCOPE_MARKERS = [
   "packages/local-store/",
   "scripts/product4/",
 ];
-const PRODUCT4_REQUIRED_SCOPE = [
-  "apps/carpeos-cli/src/index.ts",
-  "scripts/product4/policy-identity.mjs",
-  "scripts/product4/p02-runner.mjs",
-];
 const CANDIDATE_CREDENTIAL_ENV = [
   "ACTIONS_RUNTIME_TOKEN",
   "AWS_ACCESS_KEY_ID",
@@ -71,6 +67,7 @@ const CANDIDATE_CREDENTIAL_ENV = [
   "NODE_AUTH_TOKEN",
   "NPM_TOKEN",
   "NPM_CONFIG_TOKEN",
+  "CARPEOS_PRODUCT4_GITHUB_READ_TOKEN",
 ];
 export const BASE_PROTOCOL_EVIDENCE_SCHEMA = "product4-base-owned-protocol-evidence-v1";
 const BASE_PROTOCOL_EVIDENCE_BRAND = Symbol("product4.baseOwnedProtocolEvidence");
@@ -101,19 +98,18 @@ export function classifyImmutableCandidateScope({ baseSha, headSha, treeSha256, 
     paths: normalizedPaths,
   };
   const scopeDigest = digestJson(scope);
-  const hasRequiredScope = PRODUCT4_REQUIRED_SCOPE.every((path) => normalizedPaths.includes(path));
   const hasCandidateSurface = normalizedPaths.some((path) => hasCandidateSurfacePath(path));
   const hasOnlyNonCandidateSurface =
-    normalizedPaths.length === 0 || normalizedPaths.every((path) => !hasCandidateSurfacePath(path));
+    normalizedPaths.length > 0 && normalizedPaths.every((path) => !hasCandidateSurfacePath(path));
   const hasInvalidPath =
     !Array.isArray(scopePaths) ||
     scopePaths.some((path) => typeof path !== "string" || normalizeScopePath(path) === null);
   const state =
-    !validIdentity || hasInvalidPath
+    !validIdentity || hasInvalidPath || normalizedPaths.length === 0
       ? "classification_pending"
       : hasOnlyNonCandidateSurface
         ? "not_applicable"
-        : hasCandidateSurface && hasRequiredScope
+        : hasCandidateSurface
           ? "pending_evidence"
           : "classification_pending";
   const classification = {
@@ -555,7 +551,13 @@ function buildDuplicateObservation(input, identity) {
 function buildLostResponseObservation(input, identity) {
   assertExactObjectKeys(input, ["identity", "post", "patch"]);
   assertExactObjectKeys(input.post, ["matches"]);
-  assertExactObjectKeys(input.patch, ["matches", "pendingRun", "attemptedPatch", "retryCount"]);
+  assertExactObjectKeys(input.patch, [
+    "matches",
+    "pendingRun",
+    "attemptedPatch",
+    "retryCount",
+    "freshRun",
+  ]);
   const apiIdentity = assertApiIdentity(input.identity, identity);
   let postResult;
   let patchResult;
@@ -567,6 +569,7 @@ function buildLostResponseObservation(input, identity) {
       pendingRun: input.patch.pendingRun,
       attemptedPatch: input.patch.attemptedPatch,
       retryCount: input.patch.retryCount,
+      freshRun: input.patch.freshRun,
     });
   } catch (error) {
     throwRunnerError(
@@ -686,29 +689,105 @@ function errorMessage(error) {
 
 export function evaluateRawCandidate(input) {
   if (!isRecord(input)) throwRunnerError("invalid_input", "evaluator input is required");
-  for (const key of ["baseOwnedProtocolEvidence", "trustedProtocolEvidence", "protocolInputs"]) {
-    if (Object.hasOwn(input, key) && input[key] !== undefined)
-      throwRunnerError(
-        "protocol_evidence_forged",
-        `${key} is not accepted on the public evaluator path`,
-      );
-  }
+  rejectCallerEvidence(input, "public evaluator path");
   return evaluateRawCandidateFromBaseOwnedEvidence(input, undefined);
 }
 
 /**
- * @internal Trusted evaluator boundary. Only base-owned module receipts may cross this path.
+ * @internal Trusted evaluator boundary. The provider is base-owned and must return
+ * independently recomputed module receipts; candidate input never crosses this boundary.
  */
-export function evaluateRawCandidateWithBaseOwnedProtocolInputs(input) {
-  if (!isRecord(input) || !isRecord(input.protocolInputs))
-    throwRunnerError("protocol_evidence_missing", "base-owned protocol inputs are required");
-  const { protocolInputs, ...runnerInput } = input;
-  const evidence = buildBaseOwnedProtocolEvidence({
-    ...protocolInputs,
-    headSha: runnerInput.expectedHeadSha,
-    treeSha256: runnerInput.expectedTreeSha256,
-  });
-  return evaluateRawCandidateFromBaseOwnedEvidence(runnerInput, evidence);
+export function evaluateRawCandidateWithBaseOwnedProvider(
+  input,
+  { protocolProvider = defaultBaseOwnedProtocolProvider } = {},
+) {
+  if (!isRecord(input)) throwRunnerError("invalid_input", "evaluator input is required");
+  rejectCallerEvidence(input, "base evaluator provider path");
+  if (typeof protocolProvider !== "function")
+    throwRunnerError("protocol_evidence_missing", "base-owned protocol provider is required");
+  let protocolInputs;
+  try {
+    protocolInputs = protocolProvider({
+      headSha: input.expectedHeadSha,
+      treeSha256: input.expectedTreeSha256,
+      baseSha: input.expectedBaseSha,
+      repositoryId: PRODUCT4_REPOSITORY_ID,
+      fixtureSha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+      policySha256: PRODUCT4_POLICY_SHA256,
+      context: PRODUCT4_CONTEXT,
+    });
+  } catch (error) {
+    if (error instanceof EvaluatorRunnerError) throw error;
+    throwRunnerError(
+      "protocol_evidence_missing",
+      `base-owned protocol provider failed: ${errorMessage(error)}`,
+    );
+  }
+  if (protocolInputs !== undefined && typeof protocolInputs?.then === "function")
+    throwRunnerError("protocol_evidence_missing", "base-owned protocol provider must be synchronous");
+  if (!isRecord(protocolInputs))
+    throwRunnerError("protocol_evidence_missing", "base-owned protocol evidence is unavailable");
+  let evidence;
+  try {
+    evidence = buildBaseOwnedProtocolEvidence({
+      ...protocolInputs,
+      headSha: input.expectedHeadSha,
+      treeSha256: input.expectedTreeSha256,
+    });
+  } catch (error) {
+    if (error instanceof EvaluatorRunnerError) throw error;
+    throwRunnerError(
+      "protocol_evidence_missing",
+      `base-owned protocol evidence could not be produced: ${errorMessage(error)}`,
+    );
+  }
+  return evaluateRawCandidateFromBaseOwnedEvidence(input, evidence);
+}
+
+/**
+ * @internal Compatibility name retained for trusted tests. It no longer accepts
+ * caller-supplied protocolInputs; use an injected provider callback instead.
+ */
+export function evaluateRawCandidateWithBaseOwnedProtocolInputs(input, options) {
+  if (!isRecord(input) || Object.hasOwn(input, "protocolInputs"))
+    throwRunnerError(
+      Object.hasOwn(input ?? {}, "protocolInputs")
+        ? "protocol_evidence_forged"
+        : "protocol_evidence_missing",
+      "caller-supplied protocol inputs are not accepted",
+    );
+  return evaluateRawCandidateWithBaseOwnedProvider(input, options);
+}
+
+function defaultBaseOwnedProtocolProvider() {
+  const token = process.env.CARPEOS_PRODUCT4_GITHUB_READ_TOKEN;
+  if (typeof token !== "string" || token.length === 0)
+    throwRunnerError(
+      "protocol_evidence_missing",
+      "trusted read-only GitHub API token is unavailable",
+    );
+  throwRunnerError(
+    "protocol_evidence_missing",
+    "base-owned protocol provider has no independent protocol receipts",
+  );
+}
+
+function rejectCallerEvidence(input, pathLabel) {
+  for (const key of [
+    "baseOwnedProtocolEvidence",
+    "trustedProtocolEvidence",
+    "protocolInputs",
+    "trustedPredicates",
+    "trustedEvidence",
+    "protocolProvider",
+    "baseOwnedProvider",
+  ]) {
+    if (Object.hasOwn(input, key) && input[key] !== undefined)
+      throwRunnerError(
+        key === "trustedPredicates" ? "predicate_refusal" : "protocol_evidence_forged",
+        `${key} is not accepted on the ${pathLabel}`,
+      );
+  }
 }
 
 function evaluateRawCandidateFromBaseOwnedEvidence(
@@ -919,6 +998,13 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
       evaluator_tree_sha256: evaluatorTreeSha256,
     },
   };
+  const sealedTrustedEvidence = sealTrustedEvidence({
+    trustedEvidence,
+    identity,
+    trustedPredicates,
+    observations,
+    candidateReport: rawReport,
+  });
   const evaluation = evaluateCandidateEvidence({
     identity,
     candidateReport: rawReport,
@@ -928,7 +1014,7 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     issuerWorkflowSha: evaluatorWorkflowSha,
     candidateReportedSuccess: undefined,
     requireCandidateExecutionObservation: true,
-    trustedEvidence,
+    trustedEvidence: sealedTrustedEvidence,
   });
   const artifact = {
     schema_version: EVALUATOR_RESULT_SCHEMA,
@@ -1445,7 +1531,7 @@ function parseArgs(argv) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const args = parseArgs(process.argv.slice(2));
-    const result = evaluateRawCandidate({
+    const result = evaluateRawCandidateWithBaseOwnedProvider({
       rawReport: JSON.parse(readFileSync(resolve(args["--raw-report"]), "utf8")),
       candidateRoot: resolve(args["--candidate-root"]),
       sandboxReceiptPath: resolve(args["--sandbox-receipt"]),

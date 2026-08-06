@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, symlinkSync } from "node:fs";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { buildCandidateIntent } from "../product4/candidate-intent.mjs";
@@ -10,6 +12,7 @@ import {
   assertEvaluatorAttestation,
   attestationDigest,
   evaluateCandidateEvidence,
+  sealTrustedEvidence,
   PREDICATE_IDS,
 } from "../product4/evaluator.mjs";
 import {
@@ -18,6 +21,7 @@ import {
   buildBaseOwnedProtocolEvidence,
   classifyImmutableCandidateScope,
   evaluateRawCandidate,
+  evaluateRawCandidateWithBaseOwnedProvider,
   evaluateRawCandidateWithBaseOwnedProtocolInputs,
   observeCandidateExecution,
   writeEvaluatorResult,
@@ -26,6 +30,7 @@ import {
   buildEvidenceIdentity,
   buildExactCheckQuery,
   normalizeCheckRunsResponse,
+  normalizeCheckSuitesResponse,
 } from "../product4/github-evidence-api.mjs";
 import { buildP02SandboxReceipt, sandboxProbeDigest } from "../product4/p02-runner.mjs";
 import {
@@ -208,6 +213,14 @@ function protocolEvidenceInputs() {
     { total_count: 1, check_runs: [run], headers: { link: "" } },
     { identity: normalizedApiIdentity },
   );
+  const suitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [suite],
+      headers: { link: "" },
+    },
+    { identity: normalizedApiIdentity },
+  );
   const duplicateRun = { ...run, conclusion: "failure" };
   const duplicatePage = normalizeCheckRunsResponse(
     { total_count: 1, check_runs: [duplicateRun], headers: { link: "" } },
@@ -215,6 +228,7 @@ function protocolEvidenceInputs() {
   );
   const pendingRun = {
     id: 7,
+    suite_id: 1,
     repository_id: normalizedApiIdentity.repository_id,
     repository_path: normalizedApiIdentity.repository_path,
     head_sha: normalizedApiIdentity.head_sha,
@@ -243,7 +257,7 @@ function protocolEvidenceInputs() {
     loop: { receipt: buildSixCommandLoopReceipt({ steps }) },
     exact_c_api: {
       query,
-      pages: [page],
+      pages: [suitePage, page],
       identity: apiIdentity,
       observedAt: "2026-01-02T00:00:00Z",
     },
@@ -259,6 +273,7 @@ function protocolEvidenceInputs() {
         pendingRun,
         attemptedPatch: { status: "completed", conclusion: "success" },
         retryCount: 0,
+        freshRun: pendingRun,
       },
     },
     negative_cases: {
@@ -315,6 +330,15 @@ function trustedEvidence(overrides = {}) {
     ...overrides,
   };
 }
+function sealedTrustedEvidence(overrides = {}) {
+  return sealTrustedEvidence({
+    trustedEvidence: trustedEvidence(overrides),
+    identity,
+    trustedPredicates: allPredicates(),
+    observations,
+    candidateReport,
+  });
+}
 
 function evaluate(overrides = {}) {
   return evaluateCandidateEvidence({
@@ -324,7 +348,7 @@ function evaluate(overrides = {}) {
     observations,
     provenance,
     issuerWorkflowSha: provenance.evaluator_workflow_sha,
-    trustedEvidence: trustedEvidence(),
+    trustedEvidence: sealedTrustedEvidence(),
     candidateReportedSuccess: true,
     requireCandidateExecutionObservation: true,
     ...overrides,
@@ -391,11 +415,7 @@ test("M4 classifies immutable base-to-C scope and keeps ambiguous scope pending"
   };
   const candidate = classifyImmutableCandidateScope({
     ...identityInput,
-    scopePaths: [
-      "apps/carpeos-cli/src/index.ts",
-      "scripts/product4/policy-identity.mjs",
-      "scripts/product4/p02-runner.mjs",
-    ],
+    scopePaths: ["scripts/product4/p02-runner.mjs", "scripts/product4/raw-producer.mjs"],
   });
   assert.equal(candidate.intent, true);
   assert.equal(candidate.state, "pending_evidence");
@@ -404,8 +424,8 @@ test("M4 classifies immutable base-to-C scope and keeps ambiguous scope pending"
 
   const pending = classifyImmutableCandidateScope({ ...identityInput, scopePaths: [] });
   assert.equal(pending.intent, false);
-  assert.equal(pending.state, "not_applicable");
-  assert.equal(pending.classification.candidate, false);
+  assert.equal(pending.state, "classification_pending");
+  assert.equal(pending.classification.candidate, undefined);
 
   const nonCandidate = classifyImmutableCandidateScope({
     ...identityInput,
@@ -444,6 +464,18 @@ test("M4 refuses missing and forged sandbox evidence before candidate execution"
     treeSha256: identity.tree_sha256,
     probeSha256: sandboxProbeDigest(),
   });
+  assert.equal(
+    observeCandidateExecution({
+      candidateRoot: candidate,
+      trustedRoot: trusted,
+      sandboxReceipt: valid,
+      environment: { CARPEOS_PRODUCT4_GITHUB_READ_TOKEN: "trusted-only" },
+      expectedHeadSha: headSha,
+      expectedBaseSha: "c".repeat(40),
+      expectedTreeSha256: identity.tree_sha256,
+    }).unprivileged,
+    false,
+  );
   const forged = { ...valid, network: "enabled" };
   assert.throws(
     () =>
@@ -543,6 +575,85 @@ test("M4 internal protocol provider refuses missing or synthetic module inputs",
       }),
     /protocol_evidence_forged/,
   );
+  let seen;
+  assert.throws(
+    () =>
+      evaluateRawCandidateWithBaseOwnedProvider(
+        {
+          expectedHeadSha: headSha,
+          expectedBaseSha: "c".repeat(40),
+          expectedTreeSha256: identity.tree_sha256,
+          rawReport: "candidate-controlled",
+        },
+        {
+          protocolProvider: (request) => {
+            seen = request;
+            return {};
+          },
+        },
+      ),
+    /protocol_evidence_forged/,
+  );
+  assert.deepEqual(seen, {
+    headSha,
+    treeSha256: identity.tree_sha256,
+    baseSha: "c".repeat(40),
+    repositoryId: identity.repository_id,
+    fixtureSha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+    policySha256: PRODUCT4_POLICY_SHA256,
+    context: PRODUCT4_CONTEXT,
+  });
+  assert.throws(
+    () =>
+      evaluateRawCandidateWithBaseOwnedProvider(
+        {
+          expectedHeadSha: headSha,
+          expectedBaseSha: "c".repeat(40),
+          expectedTreeSha256: identity.tree_sha256,
+        },
+        {
+          protocolProvider: () => {
+            throw new Error("offline");
+          },
+        },
+      ),
+    /protocol_evidence_missing/,
+  );
+});
+test("M4 production evaluator CLI fails closed without base-owned protocol evidence", () => {
+  const root = mkdtempSync(join(tmpdir(), "product4-evaluator-cli-"));
+  const rawReportPath = join(root, "raw-report.json");
+  writeFileSync(rawReportPath, "{}\n", "utf8");
+  const env = { ...process.env };
+  delete env.CARPEOS_PRODUCT4_GITHUB_READ_TOKEN;
+  const result = spawnSync(
+    process.execPath,
+    [
+      resolve(dirname(fileURLToPath(import.meta.url)), "../product4/evaluator-runner.mjs"),
+      "--raw-report",
+      rawReportPath,
+      "--candidate-root",
+      root,
+      "--home",
+      root,
+      "--head-sha",
+      headSha,
+      "--base-sha",
+      "c".repeat(40),
+      "--tree-sha256",
+      identity.tree_sha256,
+      "--workflow-sha",
+      "d".repeat(40),
+      "--sandbox-receipt",
+      join(root, "sandbox-receipt.json"),
+      "--output",
+      join(root, "attestation.json"),
+    ],
+    { encoding: "utf8", env },
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /protocol_evidence_missing/);
+  assert.equal(result.stdout, "");
 });
 
 test("M4 rejects caller-supplied all-true trusted predicates", () => {
@@ -564,17 +675,15 @@ test("M4 rejects direct caller all-true predicates and identity/provenance rewra
   assert.equal(arbitrary.status, "refused");
   assert.match(arbitrary.blockers.join("; "), /trusted evidence envelope|identity/);
 
-  const identityRewrap = evaluate({
-    trustedEvidence: trustedEvidence({
-      identity: { ...identity, head_sha: "f".repeat(40) },
-    }),
-  });
+  const identityEnvelope = sealedTrustedEvidence();
+  identityEnvelope.identity.head_sha = "f".repeat(40);
+  const identityRewrap = evaluate({ trustedEvidence: identityEnvelope });
   assert.equal(identityRewrap.status, "refused");
   assert.match(identityRewrap.blockers.join("; "), /trustedEvidence identity head_sha/);
 
-  const provenanceRewrap = evaluate({
-    trustedEvidence: trustedEvidence({ source_report_digest: "f".repeat(64) }),
-  });
+  const provenanceEnvelope = sealedTrustedEvidence();
+  provenanceEnvelope.source_report_digest = "f".repeat(64);
+  const provenanceRewrap = evaluate({ trustedEvidence: provenanceEnvelope });
   assert.equal(provenanceRewrap.status, "refused");
   assert.match(provenanceRewrap.blockers.join("; "), /trustedEvidence.source_report_digest/);
 });
