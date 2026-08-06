@@ -78,6 +78,8 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
   read-only provider/token; synthetic fixtures are not live authority.
 - Independent release authority, human approval, and live settings receipts remain
   **out of band**; this package cut does not invent them.
+- Refuse self-asserted release-authority evidence and require builder-origin binding
+  for GitHub evidence adapter pages (fail closed).
 - Residual stricter sandbox residual work (if any) may follow in 4.0.1 / 4.1.0
   without blocking this major.
 

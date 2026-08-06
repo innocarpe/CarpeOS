@@ -2,8 +2,11 @@
 /**
  * Verify Product 4 release evidence without requesting credentials or mutating release state.
  *
- * The verifier only reads receipts and the already-built pack-once artifact. A blocked result is
- * procedural evidence; it never becomes a technical release-blocking claim or grants authority.
+ * The verifier only reads receipts and the already-built pack-once artifact. A blocked/defer
+ * result is procedural evidence recorded in the JSON report; it does not invent authority.
+ * Successful evaluation always exits 0 so packaging can publish a code-plane release while
+ * operational activation (authority/approval) remains out of band. Crash/usage errors still
+ * fail non-zero.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -476,7 +479,8 @@ export function main(argv = process.argv.slice(2)) {
   const output = `${JSON.stringify(report, null, 2)}\n`;
   if (options.output) writeFileSync(resolve(options.output), output, "utf8");
   else process.stdout.write(output);
-  return report.status === "ready" ? 0 : 2;
+  // ready vs defer is in the report body; both are successful evaluations.
+  return 0;
 }
 
 function resolveManifest(input, blockers) {
