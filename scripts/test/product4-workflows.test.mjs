@@ -49,6 +49,12 @@ test("M4 keeps the raw producer unprivileged and dispatch-only until activation"
   assert.match(source, /setpriv[\s\S]*--no-new-privs/);
   assert.match(source, /sandbox-probe\.mjs/);
   assert.match(source, /assertSandboxProbeObservation/);
+  assert.match(source, /observedProbe/);
+  assert.match(source, /PRODUCT4_CANDIDATE_ROOT/);
+  assert.match(source, /PRODUCT4_CLI_ROOT/);
+  assert.match(source, /fixtureSha256: process\.env\.PRODUCT4_FIXTURE_SHA256/);
+  assert.doesNotMatch(source, /sandboxProbeDigest\s*\(\s*\)/);
+  assert.doesNotMatch(source, /probeSha256\s*:/);
   assert.match(source, /--setenv CI true/);
   assert.match(source, /sandbox-probe\.json/);
   assert.match(source, /sandbox-probe\.mjs/);
@@ -117,7 +123,7 @@ test("M4 keeps the raw producer unprivileged and dispatch-only until activation"
   assert.doesNotMatch(source, /--bind "\$HOME"/);
   assert.doesNotMatch(source, /env:[\s\S]{0,160}github\.token/);
   assert.match(source, /--workspace-root "\$CARPEOS_SANDBOX_WORK"/);
-  assert.match(source, /--cli-root "\$CARPEOS_SANDBOX_WORK"/);
+  assert.match(source, /--cli-root "\$CARPEOS_CLI_ROOT"/);
   assert.match(source, /--candidate-root "\$CARPEOS_CANDIDATE_ROOT"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_WORK"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_OUT"/);
@@ -174,6 +180,9 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   // Claim-only static probe JSON must not return.
   assert.doesNotMatch(source, /JSON\.stringify\(\{backend:"bubblewrap",network:"disabled"/);
   assert.match(source, /sandbox-probe\.mjs/);
+  assert.match(source, /observedProbe/);
+  assert.match(source, /PRODUCT4_CLI_ROOT/);
+  assert.doesNotMatch(source, /probeSha256\s*:/);
   assert.match(source, /assertSandboxProbeObservation/);
   assert.match(source, /--setenv PATH "\$tool_root\/bin:\/usr\/local\/bin:\/usr\/bin:\/bin"/);
   assert.match(source, /--ro-bind "\$tool_root" "\$tool_root"/);

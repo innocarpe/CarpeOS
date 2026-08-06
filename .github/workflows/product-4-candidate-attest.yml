@@ -33,6 +33,7 @@ jobs:
             echo "CARPEOS_HOME=/tmp/carpeos-product4-evaluator-${GITHUB_RUN_ID}"
             echo "CARPEOS_CANDIDATE_ROOT=/tmp/carpeos-product4-candidate-${GITHUB_RUN_ID}"
             echo "CARPEOS_SANDBOX_WORK=/tmp/product4-sandbox-work-${GITHUB_RUN_ID}"
+            echo "CARPEOS_CLI_ROOT=/tmp/product4-sandbox-cli-${GITHUB_RUN_ID}"
             echo "CARPEOS_SANDBOX_OUT=/tmp/product4-sandbox-out-${GITHUB_RUN_ID}"
           } >> "$GITHUB_ENV"
       - name: Check out trusted evaluator base
@@ -76,8 +77,8 @@ jobs:
           # Rename into place (do not mkdir destination first or mv nests).
           rm -rf "$CARPEOS_CANDIDATE_ROOT"
           mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
-          mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
-          chmod 0777 "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
+          mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_CLI_ROOT" "$CARPEOS_SANDBOX_OUT"
+          chmod 0777 "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_CLI_ROOT" "$CARPEOS_SANDBOX_OUT"
 
       - name: Populate the offline package store without candidate lifecycle
         run: pnpm --dir "$CARPEOS_CANDIDATE_ROOT" fetch --frozen-lockfile
@@ -98,6 +99,24 @@ jobs:
       - name: Execute candidate build and CLI in a bounded bubblewrap sandbox
         run: |
           set -euo pipefail
+          tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
+          head_sha="${PRODUCT4_HEAD_SHA:-${{ github.event.workflow_run.head_sha }}}"
+          base_sha="${PRODUCT4_BASE_SHA}"
+          fixture_sha256="$(node --input-type=module -e 'import { MAINTENANCE_STUDY_FIXTURE_SHA256 } from "./scripts/product4/policy-identity.mjs"; process.stdout.write(MAINTENANCE_STUDY_FIXTURE_SHA256)')"
+          policy_sha256="$(node --input-type=module -e 'import { PRODUCT4_POLICY_SHA256 } from "./scripts/product4/policy-identity.mjs"; process.stdout.write(PRODUCT4_POLICY_SHA256)')"
+          context="$(node --input-type=module -e 'import { PRODUCT4_CONTEXT } from "./scripts/product4/policy-identity.mjs"; process.stdout.write(PRODUCT4_CONTEXT)')"
+          {
+            echo "PRODUCT4_HEAD_SHA=$head_sha"
+            echo "PRODUCT4_TREE_SHA256=$tree_sha256"
+            echo "PRODUCT4_FIXTURE_SHA256=$fixture_sha256"
+            echo "PRODUCT4_POLICY_SHA256=$policy_sha256"
+            echo "PRODUCT4_CONTEXT=$context"
+          } >> "$GITHUB_ENV"
+          export PRODUCT4_HEAD_SHA="$head_sha"
+          export PRODUCT4_TREE_SHA256="$tree_sha256"
+          export PRODUCT4_FIXTURE_SHA256="$fixture_sha256"
+          export PRODUCT4_POLICY_SHA256="$policy_sha256"
+          export PRODUCT4_CONTEXT="$context"
           # setup-pnpm install prefix is not bindable under `sudo bwrap` on GHA.
           # Stage node+pnpm and a disposable store under /var/tmp.
           tool_root="/var/tmp/product4-host-tools-${GITHUB_RUN_ID}"
@@ -132,9 +151,15 @@ jobs:
             --unshare-net
             --clearenv
             --ro-bind "$CARPEOS_CANDIDATE_ROOT" /candidate
+            --ro-bind "$CARPEOS_CANDIDATE_ROOT" "$CARPEOS_CANDIDATE_ROOT"
             --bind "$CARPEOS_SANDBOX_WORK" /work
+            --bind "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_WORK"
+            --bind "$CARPEOS_CLI_ROOT" /cli
+            --bind "$CARPEOS_CLI_ROOT" "$CARPEOS_CLI_ROOT"
             --bind "$CARPEOS_HOME" /home
+            --bind "$CARPEOS_HOME" "$CARPEOS_HOME"
             --bind "$CARPEOS_SANDBOX_OUT" /output
+            --bind "$CARPEOS_SANDBOX_OUT" "$CARPEOS_SANDBOX_OUT"
             --tmpfs /tmp
             --proc /proc
             --dev /dev
@@ -143,6 +168,17 @@ jobs:
             --setenv HOME /home
             --setenv CARPEOS_HOME /home
             --setenv CARPEOS_TRUST_ZONE tz_synthetic
+            --setenv PRODUCT4_HEAD_SHA "$PRODUCT4_HEAD_SHA"
+            --setenv PRODUCT4_BASE_SHA "$PRODUCT4_BASE_SHA"
+            --setenv PRODUCT4_TREE_SHA256 "$PRODUCT4_TREE_SHA256"
+            --setenv PRODUCT4_FIXTURE_SHA256 "$PRODUCT4_FIXTURE_SHA256"
+            --setenv PRODUCT4_POLICY_SHA256 "$PRODUCT4_POLICY_SHA256"
+            --setenv PRODUCT4_CONTEXT "$PRODUCT4_CONTEXT"
+            --setenv PRODUCT4_CANDIDATE_ROOT "$CARPEOS_CANDIDATE_ROOT"
+            --setenv PRODUCT4_WORKSPACE_ROOT "$CARPEOS_SANDBOX_WORK"
+            --setenv PRODUCT4_CLI_ROOT "$CARPEOS_CLI_ROOT"
+            --setenv PRODUCT4_HOME_ROOT "$CARPEOS_HOME"
+            --setenv PRODUCT4_OUTPUT_ROOT "$CARPEOS_SANDBOX_OUT"
             --setenv NODE_NO_WARNINGS 1
             --setenv NO_COLOR 1
             --setenv TZ UTC
@@ -174,43 +210,52 @@ jobs:
             pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir /pnpm-store --config.confirmModulesPurge=false
             pnpm --filter "@carpeos/cli..." build
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
+            rm -rf /cli/*
+            cp -RL --no-preserve=ownership /work/. /cli/
             ulimit -u 64
             ulimit -v 1048576
             ulimit -f 102400
             node scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
+          sudo -n chmod -R a-w "$CARPEOS_CLI_ROOT"
           # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
           # the unprivileged host job can validate and seal the receipt.
-          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT" "$CARPEOS_CLI_ROOT"
 
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail
           tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
-          export HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-          export BASE_SHA="$PRODUCT4_BASE_SHA"
-          export TREE_SHA256="$tree_sha256"
           export PROBE_PATH="$CARPEOS_SANDBOX_OUT/sandbox-probe.json"
           export CANDIDATE_ROOT="$CARPEOS_CANDIDATE_ROOT"
+          export WORKSPACE_ROOT="$CARPEOS_SANDBOX_WORK"
+          export CLI_ROOT="$CARPEOS_CLI_ROOT"
+          export HOME_ROOT="$CARPEOS_HOME"
+          export OUTPUT_ROOT="$CARPEOS_SANDBOX_OUT"
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
           import {
             assertSandboxProbeObservation,
             buildP02SandboxReceipt,
-            sandboxProbeDigest,
           } from "./scripts/product4/p02-runner.mjs";
-          const probe = assertSandboxProbeObservation(
+          const observedProbe = assertSandboxProbeObservation(
             JSON.parse(readFileSync(process.env.PROBE_PATH, "utf8")),
           );
           const receipt = buildP02SandboxReceipt({
             candidateRoot: process.env.CANDIDATE_ROOT,
-            headSha: process.env.HEAD_SHA,
-            baseSha: process.env.BASE_SHA,
-            treeSha256: process.env.TREE_SHA256,
-            probe,
-            probeSha256: sandboxProbeDigest(probe),
+            workspaceRoot: process.env.WORKSPACE_ROOT,
+            cliRoot: process.env.CLI_ROOT,
+            home: process.env.HOME_ROOT,
+            output: process.env.OUTPUT_ROOT,
+            headSha: process.env.PRODUCT4_HEAD_SHA,
+            baseSha: process.env.PRODUCT4_BASE_SHA,
+            treeSha256: process.env.PRODUCT4_TREE_SHA256,
+            fixtureSha256: process.env.PRODUCT4_FIXTURE_SHA256,
+            policySha256: process.env.PRODUCT4_POLICY_SHA256,
+            context: process.env.PRODUCT4_CONTEXT,
+            observedProbe,
           });
           writeFileSync(process.env.RECEIPT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, {
             encoding: "utf8",
@@ -228,7 +273,7 @@ jobs:
             --raw-report "$RUNNER_TEMP/product4-raw/raw-report.json" \
             --candidate-root "$CARPEOS_CANDIDATE_ROOT" \
             --workspace-root "$CARPEOS_SANDBOX_WORK" \
-            --cli-root "$CARPEOS_SANDBOX_WORK" \
+            --cli-root "$CARPEOS_CLI_ROOT" \
             --home "$CARPEOS_HOME" \
             --sandbox-receipt "$CARPEOS_SANDBOX_OUT/sandbox-receipt.json" \
             --head-sha "${{ github.event.workflow_run.head_sha }}" \
