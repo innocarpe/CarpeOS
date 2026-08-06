@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -14,6 +21,7 @@ import {
 } from "./p02-replay.mjs";
 import { canonicalJson, digestJson, sha256Hex } from "./policy-identity.mjs";
 export const P02_SANDBOX_RECEIPT_SCHEMA = "product4-sandbox-receipt-v1";
+export const P02_SANDBOX_PROBE_SCHEMA = "product4-sandbox-probe-v1";
 export const P02_SANDBOX_CONTRACT = Object.freeze({
   backend: "bubblewrap",
   network: "disabled",
@@ -25,20 +33,30 @@ export const P02_SANDBOX_CONTRACT = Object.freeze({
   process_limit: 64,
   memory_limit_mb: 1024,
 });
-const P02_SANDBOX_PROBE = Object.freeze({
-  backend: P02_SANDBOX_CONTRACT.backend,
-  network: P02_SANDBOX_CONTRACT.network,
-  candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
-  trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
-  writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
-  capabilities: P02_SANDBOX_CONTRACT.capabilities,
-  no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
-  process_limit: P02_SANDBOX_CONTRACT.process_limit,
-  memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
-});
-export function sandboxProbeDigest() {
-  return sha256Hex(JSON.stringify(P02_SANDBOX_PROBE));
-}
+const P02_SANDBOX_PROBE_KEYS = Object.freeze([
+  "schema_version",
+  "backend",
+  "network",
+  "candidate_inputs",
+  "trusted_mounts",
+  "writable_paths",
+  "capabilities",
+  "no_new_privileges",
+  "process_limit",
+  "memory_limit_mb",
+  "evidence",
+]);
+const P02_SANDBOX_PROBE_EVIDENCE_KEYS = Object.freeze([
+  "no_new_privileges_line",
+  "cap_eff",
+  "network_namespace",
+  "candidate_write_refused",
+  "writable_path_results",
+  "rlimit_nproc",
+  "rlimit_as_bytes",
+  "proc_self_status_sha256",
+  "proc_self_limits_sha256",
+]);
 const P02_SANDBOX_RECEIPT_KEYS = Object.freeze([
   "schema_version",
   "backend",
@@ -60,6 +78,8 @@ const P02_SANDBOX_RECEIPT_KEYS = Object.freeze([
 ]);
 const SHA1 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const ZERO_CAP = "0000000000000000";
+const MEMORY_LIMIT_BYTES = P02_SANDBOX_CONTRACT.memory_limit_mb * 1024 * 1024;
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const P02_ARGS = [
@@ -87,11 +107,231 @@ export function sandboxCommandDigest() {
   return digestJson(P02_SANDBOX_CONTRACT);
 }
 
+/**
+ * Validate an in-sandbox control observation. Claim-only static JSON without
+ * measured evidence is refused — inability to observe is failure, not success.
+ */
+export function assertSandboxProbeObservation(probe) {
+  if (!isRecord(probe))
+    throwRunnerError("sandbox_probe_invalid", "sandbox probe observation is required");
+  const keys = Object.keys(probe);
+  if (
+    keys.length !== P02_SANDBOX_PROBE_KEYS.length ||
+    P02_SANDBOX_PROBE_KEYS.some((key) => !Object.hasOwn(probe, key)) ||
+    keys.some((key) => !P02_SANDBOX_PROBE_KEYS.includes(key))
+  )
+    throwRunnerError("sandbox_probe_forged", "sandbox probe fields are not exact");
+  if (probe.schema_version !== P02_SANDBOX_PROBE_SCHEMA)
+    throwRunnerError("sandbox_probe_forged", "sandbox probe schema is invalid");
+  if (probe.backend !== P02_SANDBOX_CONTRACT.backend)
+    throwRunnerError("sandbox_probe_forged", "sandbox backend is not bubblewrap");
+  if (
+    probe.network !== P02_SANDBOX_CONTRACT.network ||
+    probe.candidate_inputs !== P02_SANDBOX_CONTRACT.candidate_inputs ||
+    probe.trusted_mounts !== P02_SANDBOX_CONTRACT.trusted_mounts ||
+    probe.capabilities !== P02_SANDBOX_CONTRACT.capabilities ||
+    probe.no_new_privileges !== P02_SANDBOX_CONTRACT.no_new_privileges ||
+    probe.process_limit !== P02_SANDBOX_CONTRACT.process_limit ||
+    probe.memory_limit_mb !== P02_SANDBOX_CONTRACT.memory_limit_mb ||
+    JSON.stringify(probe.writable_paths) !== JSON.stringify(P02_SANDBOX_CONTRACT.writable_paths)
+  )
+    throwRunnerError(
+      "sandbox_probe_forged",
+      "sandbox probe claims do not match the fixed contract",
+    );
+
+  const evidence = probe.evidence;
+  if (!isRecord(evidence))
+    throwRunnerError("sandbox_probe_forged", "sandbox probe evidence is required");
+  const evidenceKeys = Object.keys(evidence);
+  if (
+    evidenceKeys.length !== P02_SANDBOX_PROBE_EVIDENCE_KEYS.length ||
+    P02_SANDBOX_PROBE_EVIDENCE_KEYS.some((key) => !Object.hasOwn(evidence, key)) ||
+    evidenceKeys.some((key) => !P02_SANDBOX_PROBE_EVIDENCE_KEYS.includes(key))
+  )
+    throwRunnerError("sandbox_probe_forged", "sandbox probe evidence fields are not exact");
+
+  if (evidence.no_new_privileges_line !== "NoNewPrivs:\t1")
+    throwRunnerError("sandbox_probe_forged", "NoNewPrivs was not observed as enabled");
+  if (typeof evidence.cap_eff !== "string" || evidence.cap_eff.toLowerCase() !== ZERO_CAP)
+    throwRunnerError("sandbox_probe_forged", "effective capabilities were not observed as empty");
+  if (typeof evidence.network_namespace !== "string" || evidence.network_namespace.length === 0)
+    throwRunnerError("sandbox_probe_forged", "network namespace was not observed");
+  if (evidence.candidate_write_refused !== true)
+    throwRunnerError("sandbox_probe_forged", "candidate root was not observed read-only");
+  if (!isRecord(evidence.writable_path_results))
+    throwRunnerError("sandbox_probe_forged", "writable path observations are required");
+  for (const path of P02_SANDBOX_CONTRACT.writable_paths) {
+    if (evidence.writable_path_results[path] !== true)
+      throwRunnerError("sandbox_probe_forged", `writable path ${path} was not observed`);
+  }
+  if (
+    Object.keys(evidence.writable_path_results).length !==
+    P02_SANDBOX_CONTRACT.writable_paths.length
+  )
+    throwRunnerError("sandbox_probe_forged", "writable path observations are not exact");
+  if (evidence.rlimit_nproc !== P02_SANDBOX_CONTRACT.process_limit)
+    throwRunnerError(
+      "sandbox_probe_forged",
+      "process limit was not observed at the contract value",
+    );
+  if (evidence.rlimit_as_bytes !== MEMORY_LIMIT_BYTES)
+    throwRunnerError("sandbox_probe_forged", "memory limit was not observed at the contract value");
+  assertSha(evidence.proc_self_status_sha256, SHA256, "proc_self_status_sha256");
+  assertSha(evidence.proc_self_limits_sha256, SHA256, "proc_self_limits_sha256");
+  return probe;
+}
+
+/**
+ * Digest a validated observation. Zero-arg call is refused — a digest of a
+ * static claim JSON is not independent evidence.
+ */
+export function sandboxProbeDigest(probe) {
+  if (probe === undefined)
+    throwRunnerError(
+      "sandbox_probe_invalid",
+      "sandbox probe digest requires an observed probe object",
+    );
+  return digestJson(assertSandboxProbeObservation(probe));
+}
+
+/**
+ * Collect control observations from the current process. Intended to run only
+ * inside the bubblewrap namespace after setpriv --no-new-privs.
+ */
+export function collectSandboxProbeObservation({
+  candidateProbePath = "/candidate/.product4-probe-write-test",
+  writableProbePaths = P02_SANDBOX_CONTRACT.writable_paths,
+} = {}) {
+  let status;
+  let limits;
+  try {
+    status = readFileSync("/proc/self/status", "utf8");
+    limits = readFileSync("/proc/self/limits", "utf8");
+  } catch (error) {
+    throwRunnerError(
+      "sandbox_probe_unobserved",
+      `unable to observe /proc controls: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const noNewPrivsMatch = status.match(/^NoNewPrivs:\t([01])$/m);
+  if (!noNewPrivsMatch)
+    throwRunnerError("sandbox_probe_unobserved", "NoNewPrivs line was not observed");
+  const capEffMatch = status.match(/^CapEff:\t([0-9a-fA-F]+)$/m);
+  if (!capEffMatch) throwRunnerError("sandbox_probe_unobserved", "CapEff line was not observed");
+
+  let networkNamespace;
+  try {
+    // /proc/self/ns/net is a symlink whose target is "net:[inode]" — not a
+    // resolvable path. readlink preserves the observed namespace identity.
+    networkNamespace = readlinkSync("/proc/self/ns/net");
+  } catch (error) {
+    throwRunnerError(
+      "sandbox_probe_unobserved",
+      `network namespace was not observed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  let candidateWriteRefused = false;
+  try {
+    writeFileSync(candidateProbePath, "should-fail\n", { flag: "wx" });
+  } catch {
+    candidateWriteRefused = true;
+  }
+  if (!candidateWriteRefused)
+    throwRunnerError("sandbox_probe_unobserved", "candidate root accepted a write");
+
+  const writablePathResults = {};
+  for (const path of writableProbePaths) {
+    const probeFile = `${path}/.product4-probe-write-test`;
+    try {
+      writeFileSync(probeFile, "ok\n", { flag: "w" });
+      writablePathResults[path] = true;
+    } catch {
+      writablePathResults[path] = false;
+    }
+  }
+
+  const nprocMatch = limits.match(/^Max processes\s+(\S+)\s+(\S+)\s+processes\s*$/m);
+  const asMatch = limits.match(/^Max address space\s+(\S+)\s+(\S+)\s+bytes\s*$/m);
+  if (!nprocMatch || !asMatch)
+    throwRunnerError("sandbox_probe_unobserved", "rlimit rows were not observed");
+  const rlimitNproc = parseSoftLimit(nprocMatch[1], "process");
+  const rlimitAsBytes = parseSoftLimit(asMatch[1], "memory");
+
+  const probe = {
+    schema_version: P02_SANDBOX_PROBE_SCHEMA,
+    backend: P02_SANDBOX_CONTRACT.backend,
+    network: P02_SANDBOX_CONTRACT.network,
+    candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
+    trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
+    writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
+    capabilities: P02_SANDBOX_CONTRACT.capabilities,
+    no_new_privileges: noNewPrivsMatch[1] === "1",
+    process_limit: rlimitNproc,
+    memory_limit_mb: Math.floor(rlimitAsBytes / (1024 * 1024)),
+    evidence: {
+      no_new_privileges_line: `NoNewPrivs:\t${noNewPrivsMatch[1]}`,
+      cap_eff: capEffMatch[1].toLowerCase(),
+      network_namespace: networkNamespace,
+      candidate_write_refused: candidateWriteRefused,
+      writable_path_results: writablePathResults,
+      rlimit_nproc: rlimitNproc,
+      rlimit_as_bytes: rlimitAsBytes,
+      proc_self_status_sha256: sha256Hex(status),
+      proc_self_limits_sha256: sha256Hex(limits),
+    },
+  };
+  return assertSandboxProbeObservation(probe);
+}
+
+/** Test/helper: build a structurally valid observation from measured values. */
+export function buildSandboxProbeObservation(evidenceOverrides = {}) {
+  const evidence = {
+    no_new_privileges_line: "NoNewPrivs:\t1",
+    cap_eff: ZERO_CAP,
+    network_namespace: "net:[4026531840]",
+    candidate_write_refused: true,
+    writable_path_results: Object.fromEntries(
+      P02_SANDBOX_CONTRACT.writable_paths.map((path) => [path, true]),
+    ),
+    rlimit_nproc: P02_SANDBOX_CONTRACT.process_limit,
+    rlimit_as_bytes: MEMORY_LIMIT_BYTES,
+    proc_self_status_sha256: "a".repeat(64),
+    proc_self_limits_sha256: "b".repeat(64),
+    ...evidenceOverrides,
+  };
+  return assertSandboxProbeObservation({
+    schema_version: P02_SANDBOX_PROBE_SCHEMA,
+    backend: P02_SANDBOX_CONTRACT.backend,
+    network: P02_SANDBOX_CONTRACT.network,
+    candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
+    trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
+    writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
+    capabilities: P02_SANDBOX_CONTRACT.capabilities,
+    no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
+    process_limit: P02_SANDBOX_CONTRACT.process_limit,
+    memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
+    evidence,
+  });
+}
+
+function parseSoftLimit(value, label) {
+  if (value === "unlimited")
+    throwRunnerError("sandbox_probe_unobserved", `${label} soft limit is unlimited`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0)
+    throwRunnerError("sandbox_probe_unobserved", `${label} soft limit is invalid`);
+  return parsed;
+}
+
 export function buildP02SandboxReceipt({
   candidateRoot,
   headSha,
   baseSha,
   treeSha256,
+  probe,
   probeSha256,
 }) {
   if (typeof candidateRoot !== "string" || candidateRoot.length === 0)
@@ -99,7 +339,24 @@ export function buildP02SandboxReceipt({
   assertSha(headSha, SHA1, "head_sha");
   assertSha(baseSha, SHA1, "base_sha");
   assertSha(treeSha256, SHA256, "tree_sha256");
-  assertSha(probeSha256, SHA256, "probe_sha256");
+  // Prefer the full observation. A bare caller-supplied hash is never enough.
+  let resolvedProbeSha256;
+  if (probe !== undefined) {
+    resolvedProbeSha256 = sandboxProbeDigest(probe);
+    if (probeSha256 !== undefined) {
+      assertSha(probeSha256, SHA256, "probe_sha256");
+      if (probeSha256 !== resolvedProbeSha256)
+        throwRunnerError(
+          "sandbox_receipt_forged",
+          "probe hash does not match the observed probe digest",
+        );
+    }
+  } else {
+    throwRunnerError(
+      "sandbox_probe_invalid",
+      "sandbox receipt requires an observed probe object; bare probe hashes are refused",
+    );
+  }
   let candidateReal;
   try {
     candidateReal = realpathSync(resolve(candidateRoot));
@@ -124,7 +381,7 @@ export function buildP02SandboxReceipt({
     no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
     process_limit: P02_SANDBOX_CONTRACT.process_limit,
     memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
-    probe_sha256: probeSha256,
+    probe_sha256: resolvedProbeSha256,
     sandbox_command_digest: sandboxCommandDigest(),
   };
   return { ...unsigned, receipt_digest: digestJson(unsigned) };
@@ -151,11 +408,6 @@ export function assertP02SandboxReceipt(
   assertSha(receipt.base_sha, SHA1, "sandbox receipt base_sha");
   assertSha(receipt.tree_sha256, SHA256, "sandbox receipt tree_sha256");
   assertSha(receipt.probe_sha256, SHA256, "sandbox receipt probe_sha256");
-  if (receipt.probe_sha256 !== sandboxProbeDigest())
-    throwRunnerError(
-      "sandbox_receipt_forged",
-      "sandbox probe evidence is not the fixed contract probe",
-    );
   if (typeof receipt.candidate_root !== "string" || !isAbsolute(receipt.candidate_root))
     throwRunnerError("sandbox_receipt_forged", "sandbox candidate root must be absolute");
   if (candidateRoot !== undefined) {
@@ -511,6 +763,9 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "NODE_NO_WARNINGS",
     "1",
     "--setenv",
+    "NODE_OPTIONS",
+    "--disable-warning=ExperimentalWarning",
+    "--setenv",
     "NO_COLOR",
     "1",
     "--setenv",
@@ -530,6 +785,11 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
       // A runner may not have every conventional runtime directory.
     }
   }
+  // Apply rlimits inside the sandbox after setpriv. Host-side ulimit before
+  // `sudo bwrap` is reset by sudo and is not visible on /proc/self/limits.
+  // Keep AS high enough for V8 virtual reservation while still bounding the
+  // process; the probe still asserts the observed soft limit equals the
+  // contract (memory_limit_mb * 1MiB).
   bwrapArgs.push(
     "--",
     "setpriv",
@@ -537,27 +797,22 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "--inh-caps=-all",
     "--ambient-caps=-all",
     "--",
+    // --noprofile/--norc: bash -u otherwise errors on /etc/bash.bashrc PS1.
+    "/bin/bash",
+    "--noprofile",
+    "--norc",
+    "-ceu",
+    'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
+    "product4-p02-sandbox-limits",
     process.execPath,
     "/cli/apps/carpeos-cli/dist/index.js",
     ...args,
   );
-  const result = spawnSync(
-    "/bin/bash",
-    [
-      "-ceu",
-      'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
-      "product4-p02-sandbox",
-      "sudo",
-      "-n",
-      "bwrap",
-      ...bwrapArgs,
-    ],
-    {
-      cwd: workspaceReal,
-      encoding: "buffer",
-      timeout: 120_000,
-    },
-  );
+  const result = spawnSync("sudo", ["-n", "bwrap", ...bwrapArgs], {
+    cwd: workspaceReal,
+    encoding: "buffer",
+    timeout: 120_000,
+  });
   if (result.error)
     throwRunnerError(
       "sandbox_unavailable",

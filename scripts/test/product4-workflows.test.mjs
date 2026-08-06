@@ -47,6 +47,20 @@ test("M4 keeps the raw producer unprivileged and bound to pull_request C", () =>
   assert.match(source, /bwrap/);
   assert.match(source, /setpriv\s+--no-new-privs/);
   assert.match(source, /sandbox-probe\.json/);
+  assert.match(source, /sandbox-probe\.mjs/);
+  assert.match(source, /assertSandboxProbeObservation/);
+  assert.match(source, /buildP02SandboxReceipt/);
+  // Claim-only static probe JSON must not return.
+  assert.doesNotMatch(source, /JSON\.stringify\(\{backend:"bubblewrap",network:"disabled"/);
+  // rlimits must run inside the sandbox (after setpriv), not only on the host
+  // before sudo — otherwise the probe observes unlimited RLIMIT_AS.
+  assert.match(source, /ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "\$@"/);
+  assert.match(source, /product4-sandbox-limits/);
+  assert.match(source, /--noprofile/);
+  assert.match(source, /--norc/);
+  assert.match(source, /--bind "\$CARPEOS_HOME" \/home/);
+  // sudo bwrap leaves root-owned 0600 probe files; host must reclaim before read.
+  assert.match(source, /sudo -n chown -R "\$\(id -u\):\$\(id -g\)" "\$CARPEOS_SANDBOX_OUT"/);
 });
 
 test("M4 isolates base-owned evaluation from the untrusted candidate workspace", () => {
@@ -95,8 +109,13 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.match(source, /--unshare-all/);
   assert.match(source, /--cap-drop ALL/);
   assert.match(source, /setpriv[\s\S]*--no-new-privs/);
+  assert.match(source, /sandbox-probe\.mjs/);
+  assert.match(source, /assertSandboxProbeObservation/);
+  assert.doesNotMatch(source, /JSON\.stringify\(\{backend:\\"bubblewrap\\"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_WORK"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_OUT"/);
+  // sudo bwrap leaves root-owned 0600 probe files; host must reclaim before read.
+  assert.match(source, /sudo -n chown -R "\$\(id -u\):\$\(id -g\)" "\$CARPEOS_SANDBOX_OUT"/);
   assert.doesNotMatch(source, /--bind "\$HOME"/);
   assert.doesNotMatch(source, /env:[\s\S]{0,160}github\.token/);
   assertNoJobLevelRunnerContext(source);

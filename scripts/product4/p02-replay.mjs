@@ -431,9 +431,15 @@ export function assertP02RunSemantics(run, { fixture, label = "run" } = {}) {
   if (run.command_bytes !== fixtureInfo.fixture.command_line)
     throwP02Error("command_mismatch", `${label} command does not match the fixture`);
   if (run.exit_code !== fixtureInfo.fixture.expected.exit_code)
-    throwP02Error("result_mismatch", `${label} exit code does not match the fixture`);
+    throwP02Error(
+      "result_mismatch",
+      `${label} exit code does not match the fixture (exit=${run.exit_code}, expected=${fixtureInfo.fixture.expected.exit_code})`,
+    );
   if (run.stderr_bytes !== fixtureInfo.fixture.expected.stderr)
-    throwP02Error("result_mismatch", `${label} stderr does not match the fixture`);
+    throwP02Error(
+      "result_mismatch",
+      `${label} stderr does not match the fixture (bytes=${run.stderr_bytes.length}, preview=${JSON.stringify(run.stderr_bytes.slice(0, 800))})`,
+    );
 
   const body = parseJsonOutput(run.stdout_bytes);
   if (!isRecord(body))

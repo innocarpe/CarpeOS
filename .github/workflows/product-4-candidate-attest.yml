@@ -141,10 +141,13 @@ jobs:
             --ambient-caps=-all
             --
           )
-          ulimit -u 64
-          ulimit -v 1048576
-          ulimit -f 102400
-          "${sandbox[@]}" /bin/bash -ceu '
+          # rlimits must be set inside the namespace (after setpriv). Host ulimit
+          # before sudo bwrap is reset by sudo and is not observed by the probe.
+          # --noprofile/--norc: bash -u must not source /etc/bash.bashrc (PS1).
+          "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
+            ulimit -u 64
+            ulimit -v 1048576
+            ulimit -f 102400
             rm -rf /work/*
             cp -aL /candidate/. /work/
             chmod -R u+rwX /work
@@ -152,28 +155,39 @@ jobs:
             pnpm install --offline --frozen-store --frozen-lockfile --ignore-scripts --store-dir /pnpm-store
             pnpm --filter "@carpeos/cli..." build
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
-            node -e "const fs=require(\"node:fs\"); const s=fs.readFileSync(\"/proc/self/status\",\"utf8\"); if (!s.includes(\"NoNewPrivs:\" + String.fromCharCode(9) + \"1\")) process.exit(23); fs.writeFileSync(\"/output/sandbox-probe.json\", JSON.stringify({backend:\"bubblewrap\", network:\"disabled\", candidate_inputs:\"read_only\", trusted_mounts:false, writable_paths:[\"/home\",\"/output\",\"/tmp\"], capabilities:\"dropped\", no_new_privileges:true, process_limit:64, memory_limit_mb:1024}));"
+            node /work/scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
+          # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
+          # the unprivileged host job can validate and seal the receipt.
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail
           tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
-          probe_sha256="$(sha256sum "$CARPEOS_SANDBOX_OUT/sandbox-probe.json" | cut -d' ' -f1)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
           export BASE_SHA="$PRODUCT4_BASE_SHA"
           export TREE_SHA256="$tree_sha256"
-          export PROBE_SHA256="$probe_sha256"
+          export PROBE_PATH="$CARPEOS_SANDBOX_OUT/sandbox-probe.json"
+          export CANDIDATE_ROOT="$CARPEOS_CANDIDATE_ROOT"
           node --input-type=module <<'NODE'
-          import { writeFileSync } from "node:fs";
-          import { buildP02SandboxReceipt } from "./scripts/product4/p02-runner.mjs";
+          import { readFileSync, writeFileSync } from "node:fs";
+          import {
+            assertSandboxProbeObservation,
+            buildP02SandboxReceipt,
+            sandboxProbeDigest,
+          } from "./scripts/product4/p02-runner.mjs";
+          const probe = assertSandboxProbeObservation(
+            JSON.parse(readFileSync(process.env.PROBE_PATH, "utf8")),
+          );
           const receipt = buildP02SandboxReceipt({
-            candidateRoot: process.env.CARPEOS_CANDIDATE_ROOT,
+            candidateRoot: process.env.CANDIDATE_ROOT,
             headSha: process.env.HEAD_SHA,
             baseSha: process.env.BASE_SHA,
             treeSha256: process.env.TREE_SHA256,
-            probeSha256: process.env.PROBE_SHA256,
+            probe,
+            probeSha256: sandboxProbeDigest(probe),
           });
           writeFileSync(process.env.RECEIPT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, {
             encoding: "utf8",
