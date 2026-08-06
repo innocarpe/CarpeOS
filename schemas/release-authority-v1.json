@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spec.carpeos.org/schemas/release-authority-v1.json",
   "title": "CarpeOS 4.0 independent release authority receipt",
-  "description": "Synthetic/public-safe ownership and bypass evidence. It never contains a token.",
+  "description": "Synthetic/public-safe ownership and bypass evidence. External authority evidence is required before a receipt can be verified; it never contains a token.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -154,6 +154,334 @@
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
     },
-    "receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    "receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "authority_evidence": {
+      "$ref": "#/$defs/authorityEvidence"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "const": "verified" } }
+      },
+      "then": {
+        "required": ["authority_evidence"],
+        "properties": {
+          "authority_evidence": {
+            "not": {
+              "properties": {
+                "verification_method": { "const": "self_asserted_digest" }
+              },
+              "required": ["verification_method"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "authorityEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "provenance",
+        "request",
+        "release",
+        "policy",
+        "issuer",
+        "trust_root",
+        "freshness",
+        "verification_method",
+        "evidence_digest"
+      ],
+      "properties": {
+        "schema_version": { "const": "carpeos.release-authority-evidence/v1" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "request": { "$ref": "#/$defs/request" },
+        "release": { "$ref": "#/$defs/release" },
+        "policy": { "$ref": "#/$defs/policy" },
+        "issuer": { "$ref": "#/$defs/issuer" },
+        "trust_root": { "$ref": "#/$defs/trustRoot" },
+        "signature": { "$ref": "#/$defs/signature" },
+        "protected_controller_receipt": { "$ref": "#/$defs/protectedControllerReceipt" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "verification_method": {
+          "enum": [
+            "self_asserted_digest",
+            "independent_verifier_callback",
+            "protected_controller_receipt"
+          ]
+        },
+        "bypass": { "$ref": "#/$defs/bypass" },
+        "evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": ["signature"],
+              "not": { "required": ["protected_controller_receipt"] }
+            },
+            {
+              "required": ["protected_controller_receipt"],
+              "not": { "required": ["signature"] }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": { "verification_method": { "const": "self_asserted_digest" } },
+            "required": ["verification_method"]
+          },
+          "then": {
+            "properties": {
+              "provenance": { "properties": { "source": { "const": "local" } } },
+              "issuer": { "properties": { "independent": { "const": false } } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verification_method": { "const": "independent_verifier_callback" }
+            },
+            "required": ["verification_method"]
+          },
+          "then": {
+            "required": ["signature", "bypass"],
+            "properties": {
+              "provenance": {
+                "properties": {
+                  "source": { "enum": ["external", "external_authority", "live_external"] }
+                }
+              },
+              "issuer": { "properties": { "independent": { "const": true } } },
+              "not": {
+                "properties": {
+                  "signature": {
+                    "properties": { "algorithm": { "const": "local_digest" } },
+                    "required": ["algorithm"]
+                  }
+                },
+                "required": ["signature"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verification_method": { "const": "protected_controller_receipt" }
+            },
+            "required": ["verification_method"]
+          },
+          "then": {
+            "required": ["protected_controller_receipt", "bypass"],
+            "properties": {
+              "provenance": {
+                "properties": {
+                  "source": { "enum": ["external", "external_authority", "live_external"] }
+                }
+              },
+              "issuer": { "properties": { "independent": { "const": true } } }
+            }
+          }
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "issuer_ref",
+        "receipt_ref",
+        "request_digest",
+        "release_digest",
+        "observed_at"
+      ],
+      "properties": {
+        "source": {
+          "enum": ["local", "external", "external_authority", "live_external"]
+        },
+        "issuer_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" },
+        "receipt_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" },
+        "request_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "release_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "observed_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_id",
+        "external_id",
+        "candidate_sha",
+        "fixture_sha256",
+        "approval_digest",
+        "request_digest"
+      ],
+      "properties": {
+        "repository_id": { "const": 1315097793 },
+        "external_id": {
+          "type": "string",
+          "pattern": "^carpeos-4\\.0\\.0:[0-9a-f]{40}:0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f$"
+        },
+        "candidate_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "fixture_sha256": {
+          "const": "0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f"
+        },
+        "approval_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "request_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_id",
+        "release_sha",
+        "workflow_sha",
+        "verifier_sha",
+        "tag",
+        "version",
+        "approval_digest"
+      ],
+      "properties": {
+        "repository_id": { "const": 1315097793 },
+        "release_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "workflow_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "verifier_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tag": { "type": "string", "pattern": "^v\\d+\\.\\d+\\.\\d+$" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "approval_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "policy_sha256", "context", "fixture_sha256"],
+      "properties": {
+        "policy_id": { "const": "P4_0" },
+        "policy_sha256": {
+          "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+        },
+        "context": { "const": "Product 4 Candidate Evidence" },
+        "fixture_sha256": {
+          "const": "0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f"
+        }
+      }
+    },
+    "issuer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "kind", "independent"],
+      "properties": {
+        "ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" },
+        "kind": { "enum": ["external_verifier", "protected_controller", "local_builder"] },
+        "independent": { "type": "boolean" }
+      }
+    },
+    "trustRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "digest"],
+      "properties": {
+        "ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "signature": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "key_ref", "value"],
+          "properties": {
+            "algorithm": { "enum": ["ed25519", "sigstore", "sha256", "local_digest"] },
+            "key_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" },
+            "value": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        }
+      ]
+    },
+    "protectedControllerReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "receipt_type",
+        "repository_id",
+        "request_digest",
+        "release_sha",
+        "release_workflow_sha",
+        "verifier_sha",
+        "policy_id",
+        "policy_sha256",
+        "context",
+        "approval_digest",
+        "controller_ref",
+        "signature",
+        "observed_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "const": "carpeos.protected-controller-authority/v1" },
+        "receipt_type": { "const": "protected_controller_authority" },
+        "repository_id": { "const": 1315097793 },
+        "request_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "release_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "release_workflow_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "verifier_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "policy_id": { "const": "P4_0" },
+        "policy_sha256": {
+          "const": "3da2700b19734b2c62eedf75a52c3947ac7ea17573a829eab4270cff6416e83e"
+        },
+        "context": { "const": "Product 4 Candidate Evidence" },
+        "approval_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "controller_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$" },
+        "signature": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "observed_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+        },
+        "receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bypass_evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "expires_at", "max_age_seconds"],
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+        },
+        "expires_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+        },
+        "max_age_seconds": { "type": "integer", "minimum": 1, "maximum": 604800 }
+      }
+    },
+    "bypass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_deleted_result", "tag_result", "credential_result", "evidence_digest"],
+      "properties": {
+        "gate_deleted_result": { "enum": ["denied", "unknown"] },
+        "tag_result": { "enum": ["denied", "unknown"] },
+        "credential_result": { "enum": ["denied", "unknown"] },
+        "evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
   }
 }

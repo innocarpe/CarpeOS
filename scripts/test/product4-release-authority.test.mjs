@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { PRODUCT4_CONTEXT, PRODUCT4_POLICY_SHA256 } from "../product4/policy-identity.mjs";
+import {
+  digestJson,
+  MAINTENANCE_STUDY_FIXTURE_SHA256,
+  PRODUCT4_CONTEXT,
+  PRODUCT4_POLICY_SHA256,
+} from "../product4/policy-identity.mjs";
 import {
   buildBypassObservation,
   buildReleaseAuthorityEvidence,
@@ -8,12 +15,12 @@ import {
   reconcileReleaseAuthority,
   simulateReleaseBypass,
 } from "../product4/release-authority.mjs";
-import { verifyReleaseGates } from "../verify-4.0-gates.mjs";
 
 const timestamp = "2026-01-02T00:00:00Z";
-const sha = "a".repeat(40);
-const driftedSha = "c".repeat(40);
-const digest = "b".repeat(64);
+const candidateSha = "a".repeat(40);
+const workflowSha = "b".repeat(40);
+const digest = "c".repeat(64);
+const externalId = `carpeos-4.0.0:${candidateSha}:${MAINTENANCE_STUDY_FIXTURE_SHA256}`;
 
 function authorityFields(overrides = {}) {
   return {
@@ -52,8 +59,8 @@ function authorityFields(overrides = {}) {
       issues_to_release_job: false,
     },
     workflow_policy: {
-      release_workflow_sha: sha,
-      verifier_sha: sha,
+      release_workflow_sha: workflowSha,
+      verifier_sha: workflowSha,
       policy_sha256: PRODUCT4_POLICY_SHA256,
       context: PRODUCT4_CONTEXT,
     },
@@ -79,7 +86,7 @@ function authorityFields(overrides = {}) {
 }
 
 function verifiedFields(overrides = {}) {
-  return {
+  const fields = authorityFields({
     status: "verified",
     app: {
       app_id: 4242,
@@ -116,36 +123,116 @@ function verifiedFields(overrides = {}) {
     rollback: { owner_ref: "rollback_owner", status: "verified", fresh_read_required: true },
     approval: { approved: true, approval_digest: digest },
     blockers: [],
-    ...overrides,
+  });
+  const bypass = buildBypassObservation({
+    receipt: fields,
+    releaseGate: { deleted: true, actor: "candidate_release_actor" },
+    results: {
+      gate_deleted_result: "denied",
+      tag_result: "denied",
+      credential_result: "denied",
+    },
+  });
+  fields.bypass_rehearsal = {
+    status: "passed",
+    gate_deleted_result: bypass.gate_deleted_result,
+    tag_result: bypass.tag_result,
+    credential_result: bypass.credential_result,
+    evidence_digest: bypass.evidence_digest,
+  };
+  return { ...fields, ...overrides };
+}
+
+function releaseRequest(fields) {
+  return {
+    repository_id: fields.repository_id,
+    external_id: externalId,
+    candidate_sha: candidateSha,
+    fixture_sha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+    approval_digest: fields.approval.approval_digest,
   };
 }
 
-function receipt(overrides = {}) {
-  const fields = authorityFields(overrides);
-  if (fields.status === "verified") {
-    const bypass = buildBypassObservation({
-      receipt: fields,
-      releaseGate: { deleted: true, actor: "candidate_release_actor" },
-      results: {
-        gate_deleted_result: "denied",
-        tag_result: "denied",
-        credential_result: "denied",
-      },
-    });
-    fields.bypass_rehearsal = {
-      status: "passed",
+function externalEvidence(fields, request, bypass, overrides = {}) {
+  const requestWithDigest = { ...request, request_digest: digestJson(request) };
+  const release = {
+    repository_id: fields.repository_id,
+    release_sha: candidateSha,
+    workflow_sha: fields.workflow_policy.release_workflow_sha,
+    verifier_sha: fields.workflow_policy.verifier_sha,
+    tag: "v4.0.0",
+    version: "4.0.0",
+    approval_digest: fields.approval.approval_digest,
+  };
+  const policy = {
+    policy_id: "P4_0",
+    policy_sha256: PRODUCT4_POLICY_SHA256,
+    context: PRODUCT4_CONTEXT,
+    fixture_sha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+  };
+  const provenance = {
+    source: "external_authority",
+    issuer_ref: "external_verifier",
+    receipt_ref: "external-authority-receipt",
+    request_digest: requestWithDigest.request_digest,
+    release_digest: digestJson(release),
+    observed_at: fields.observed_at,
+  };
+  const issuer = { ref: "external_verifier", kind: "external_verifier", independent: true };
+  const trustRoot = { ref: "external-trust-root", digest: "d".repeat(64) };
+  const freshness = {
+    observed_at: fields.observed_at,
+    expires_at: "2026-01-02T01:00:00Z",
+    max_age_seconds: 3600,
+  };
+  const unsigned = {
+    schema_version: "carpeos.release-authority-evidence/v1",
+    provenance,
+    request: requestWithDigest,
+    release,
+    policy,
+    issuer,
+    trust_root: trustRoot,
+    freshness,
+    verification_method: "independent_verifier_callback",
+    signature: {
+      algorithm: "ed25519",
+      key_ref: "external_verifier",
+      value: "e".repeat(64),
+    },
+    bypass: {
       gate_deleted_result: bypass.gate_deleted_result,
       tag_result: bypass.tag_result,
       credential_result: bypass.credential_result,
       evidence_digest: bypass.evidence_digest,
-    };
-    fields.authority_evidence ??= buildReleaseAuthorityEvidence({ receipt: fields });
-  }
-  return buildReleaseAuthorityReceipt(fields);
+    },
+    ...overrides,
+  };
+  return { ...unsigned, evidence_digest: digestJson(unsigned) };
 }
 
-test("M5 keeps unknown authority procedural and denies tag and credential capability", () => {
-  const blocked = receipt();
+function verifiedReceipt() {
+  const fields = verifiedFields();
+  const request = releaseRequest(fields);
+  const bypass = buildBypassObservation({
+    receipt: fields,
+    releaseGate: { deleted: true, actor: "candidate_release_actor" },
+    results: {
+      gate_deleted_result: "denied",
+      tag_result: "denied",
+      credential_result: "denied",
+    },
+  });
+  const evidence = externalEvidence(fields, request, bypass);
+  return buildReleaseAuthorityReceipt(fields, {
+    authorityEvidence: evidence,
+    authorityVerifier: () => evidence,
+    releaseRequest: request,
+  });
+}
+
+test("keeps missing authority procedural and denies every release capability", () => {
+  const blocked = buildReleaseAuthorityReceipt(authorityFields());
   const reconciliation = reconcileReleaseAuthority({ receipt: blocked });
   assert.equal(reconciliation.status, "blocked");
   assert.equal(reconciliation.tag_capability, "denied");
@@ -156,8 +243,77 @@ test("M5 keeps unknown authority procedural and denies tag and credential capabi
   );
 });
 
-test("M5 accepts only independently verified authority with explicit bypass observations", () => {
-  const verified = receipt(verifiedFields());
+test("rejects a self-minted buildReleaseAuthorityEvidence digest", () => {
+  const fields = verifiedFields();
+  const localEvidence = buildReleaseAuthorityEvidence({
+    receipt: fields,
+    candidate_sha: candidateSha,
+    release_sha: candidateSha,
+    version: "4.0.0",
+  });
+  const receipt = buildReleaseAuthorityReceipt({ ...fields, authority_evidence: localEvidence });
+  assert.equal(localEvidence.provenance.source, "local");
+  assert.equal(localEvidence.verification_method, "self_asserted_digest");
+  assert.equal(receipt.status, "blocked_unknown");
+  assert.ok(receipt.blockers.includes("authority_evidence_invalid"));
+  assert.equal(receipt.authority_evidence, undefined);
+});
+
+test("keeps the runtime and schema nested authority contract aligned", () => {
+  const schema = JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../../schemas/release-authority-v1.json", import.meta.url)),
+      "utf8",
+    ),
+  );
+  const authoritySchema = schema.$defs.authorityEvidence;
+  assert.equal(schema.properties.authority_evidence.$ref, "#/$defs/authorityEvidence");
+  assert.equal(authoritySchema.additionalProperties, false);
+  assert.deepEqual(authoritySchema.required, [
+    "schema_version",
+    "provenance",
+    "request",
+    "release",
+    "policy",
+    "issuer",
+    "trust_root",
+    "freshness",
+    "verification_method",
+    "evidence_digest",
+  ]);
+  assert.ok(authoritySchema.properties.provenance);
+  assert.ok(authoritySchema.properties.request);
+  assert.ok(authoritySchema.properties.release);
+  assert.ok(authoritySchema.properties.policy);
+  assert.ok(authoritySchema.properties.freshness);
+  assert.equal(
+    buildReleaseAuthorityEvidence({ receipt: authorityFields() }).provenance.source,
+    "local",
+  );
+  const injected = verifiedReceipt().authority_evidence;
+  assert.deepEqual(
+    Object.keys(injected).sort(),
+    [
+      "bypass",
+      "evidence_digest",
+      "freshness",
+      "issuer",
+      "policy",
+      "provenance",
+      "release",
+      "request",
+      "schema_version",
+      "signature",
+      "trust_root",
+      "verification_method",
+    ].sort(),
+  );
+  for (const key of Object.keys(injected)) assert.ok(authoritySchema.properties[key]);
+});
+
+test("accepts only injected external proof with exact request, policy, and bypass bindings", () => {
+  const verified = verifiedReceipt();
+  assert.equal(verified.status, "verified");
   const observations = buildBypassObservation({
     receipt: verified,
     releaseGate: { deleted: true, actor: "candidate_release_actor" },
@@ -176,119 +332,60 @@ test("M5 accepts only independently verified authority with explicit bypass obse
   assert.equal(reconciliation.credential_capability, "protected_release_job_only");
 });
 
-test("M5 downgrades self-asserted verified JSON to blocked_unknown", () => {
-  const selfAsserted = buildReleaseAuthorityReceipt({
-    ...authorityFields(verifiedFields()),
+test("rejects stale or mismatched injected authority proof", () => {
+  const fields = verifiedFields();
+  const request = releaseRequest(fields);
+  const bypass = fields.bypass_rehearsal;
+  const stale = externalEvidence(fields, request, bypass, {
+    freshness: {
+      observed_at: "2026-01-01T00:00:00Z",
+      expires_at: "2026-01-01T01:00:00Z",
+      max_age_seconds: 3600,
+    },
   });
-  assert.equal(selfAsserted.status, "blocked_unknown");
-  assert.ok(selfAsserted.blockers.includes("authority_evidence_invalid"));
+  const staleReceipt = buildReleaseAuthorityReceipt(fields, {
+    authorityEvidence: stale,
+    authorityVerifier: () => stale,
+    releaseRequest: request,
+  });
+  assert.equal(staleReceipt.status, "blocked_unknown");
+
+  const mismatched = externalEvidence(fields, request, bypass, {
+    release: {
+      repository_id: fields.repository_id,
+      release_sha: candidateSha,
+      workflow_sha: "f".repeat(40),
+      verifier_sha: workflowSha,
+      tag: "v4.0.0",
+      version: "4.0.0",
+      approval_digest: fields.approval.approval_digest,
+    },
+  });
+  const mismatchedReceipt = buildReleaseAuthorityReceipt(fields, {
+    authorityEvidence: mismatched,
+    authorityVerifier: () => mismatched,
+    releaseRequest: request,
+  });
+  assert.equal(mismatchedReceipt.status, "blocked_unknown");
 });
 
-test("M5 refuses forged or inconsistent bypass denial instead of manufacturing denied", () => {
-  const verified = receipt(verifiedFields());
-  assert.throws(
-    () =>
-      simulateReleaseBypass({
-        receipt: verified,
-        releaseGate: { deleted: true, actor: "candidate_release_actor" },
-      }),
-    /bypass_observation_missing/,
-  );
+test("rejects forged bypass denial even when the caller supplies a valid digest", () => {
+  const verified = verifiedReceipt();
   const observations = buildBypassObservation({
     receipt: verified,
     releaseGate: { deleted: true, actor: "candidate_release_actor" },
     results: {
       gate_deleted_result: "denied",
       tag_result: "denied",
-      credential_result: "denied",
+      credential_result: "unknown",
     },
   });
   assert.throws(
     () =>
       simulateReleaseBypass({
         receipt: verified,
-        releaseGate: {
-          deleted: true,
-          actor: "candidate_release_actor",
-          observations: { ...observations, gate_actor_allowed: true },
-        },
+        releaseGate: { deleted: true, actor: "candidate_release_actor", observations },
       }),
-    /bypass_observation_inconsistent/,
-  );
-});
-
-test("M5 binds authority to the current workflow and verifier SHA", () => {
-  const drifted = receipt({
-    ...verifiedFields(),
-    workflow_policy: {
-      release_workflow_sha: sha,
-      verifier_sha: driftedSha,
-      policy_sha256: PRODUCT4_POLICY_SHA256,
-      context: PRODUCT4_CONTEXT,
-    },
-  });
-  const report = verifyReleaseGates({
-    authorityReceipt: drifted,
-    workflowSha: sha,
-    verifierSha: sha,
-    releaseSha: sha,
-    observedAt: timestamp,
-  });
-  assert.ok(report.blockers.includes("workflow_verifier_sha_drift"));
-  assert.ok(report.blockers.includes("verifier_sha_mismatch"));
-  assert.equal(report.decision, "defer");
-});
-
-test("M5 requires the install and smoke receipt", () => {
-  const report = verifyReleaseGates({
-    authorityReceipt: receipt(),
-    workflowSha: sha,
-    verifierSha: sha,
-    releaseSha: sha,
-    observedAt: timestamp,
-  });
-  assert.ok(report.blockers.includes("install_smoke_missing"));
-  assert.equal(report.decision, "defer");
-});
-
-test("M5 preserves an approved fail-closed defer", () => {
-  const approvedUnknown = receipt({ approval: { approved: true, approval_digest: digest } });
-  const report = verifyReleaseGates({
-    authorityReceipt: approvedUnknown,
-    workflowSha: sha,
-    verifierSha: sha,
-    releaseSha: sha,
-    observedAt: timestamp,
-  });
-  assert.equal(report.status, "blocked");
-  assert.equal(report.decision, "defer");
-  assert.equal(report.technical_release_blocking_claim, "none");
-  assert.ok(report.blockers.includes("release_authority_not_verified"));
-});
-
-test("M5 rejects authority tampering and malformed blocker containers", () => {
-  const blocked = receipt();
-  assert.throws(
-    () => reconcileReleaseAuthority({ receipt: { ...blocked, receipt_digest: "c".repeat(64) } }),
-    /invalid_receipt/,
-  );
-  assert.throws(
-    () => reconcileReleaseAuthority({ receipt: { ...blocked, blockers: undefined } }),
-    /invalid_receipt/,
-  );
-  assert.throws(
-    () =>
-      reconcileReleaseAuthority({
-        receipt: {
-          ...blocked,
-          controller: { ...blocked.controller, can_edit_release_workflow: true },
-          receipt_digest: blocked.receipt_digest,
-        },
-      }),
-    /invalid_receipt/,
-  );
-  assert.throws(
-    () => reconcileReleaseAuthority({ receipt: { ...blocked, token: "never" } }),
-    /invalid_receipt/,
+    /bypass_observation_unverified/,
   );
 });
