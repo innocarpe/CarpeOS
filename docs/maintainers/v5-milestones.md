@@ -36,9 +36,18 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 
 ## Draft-lane readiness (without M8)
 
+Preferred offline gate (no network, no M0 receipt rewrite, not a release cut):
+
 ```sh
+pnpm --filter @carpeos/v5 verify:offline
+```
+
+Equivalent steps:
+
+```sh
+pnpm --filter @carpeos/v5 m0:check
 pnpm --filter @carpeos/v5 test
-node packages/v5/scripts/m0-recompute.mjs
+pnpm --filter @carpeos/v5 cost:experiment:dry
 ```
 
 `v5DraftLaneReadiness` allows M8 `deferred` while marking the draft lane ready when M0–M7 + pipeline + DeepSeek primary + local telemetry + V5-off path pass.
@@ -46,6 +55,9 @@ node packages/v5/scripts/m0-recompute.mjs
 ## Recompute / experiment
 
 ```sh
+# check-only (CI-friendly; does not rewrite artifacts/v5/m0 timestamps)
+node packages/v5/scripts/m0-recompute.mjs --check-only
+# rewrite receipts under artifacts/v5/m0 (operator/maintainer)
 node packages/v5/scripts/m0-recompute.mjs
 pnpm --filter @carpeos/v5 test
 node packages/v5/scripts/live-cost-experiment.mjs --dry-run
