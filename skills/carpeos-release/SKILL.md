@@ -175,6 +175,7 @@ Repo is SSOT. From a CarpeOS checkout:
 Installs/links into:
 
 - Claude Code: `~/.claude/skills/carpeos-release`
+- Codex CLI: `~/.codex/skills/carpeos-release`
 - Codex / agents: `~/.agents/skills/carpeos-release`
 - Grok Build: `~/.grok/skills/carpeos-release`
 
@@ -182,6 +183,7 @@ Project copies (for agents that only read the repo):
 
 - `skills/carpeos-release/SKILL.md` (this file)
 - `.agents/skills/carpeos-release` → symlink/copy
+- `.codex/skills/carpeos-release` → symlink/copy
 - `.claude/skills/carpeos-release` → symlink/copy
 
 ## Quick reference commands

@@ -184,6 +184,7 @@ From a CarpeOS checkout:
 Installs/links into:
 
 - Claude Code: `~/.claude/skills/carpeos-ci`
+- Codex CLI: `~/.codex/skills/carpeos-ci`
 - Codex / agents: `~/.agents/skills/carpeos-ci`
 - Grok Build: `~/.grok/skills/carpeos-ci`
 - Gajae Code/GJC: `~/.gjc/agent/skills/carpeos-ci` and `~/.gjc/skills/carpeos-ci`
@@ -192,6 +193,7 @@ In-repo:
 
 - `skills/carpeos-ci/SKILL.md` (this file)
 - `.agents/skills/carpeos-ci` (symlink)
+- `.codex/skills/carpeos-ci` (symlink)
 - `.claude/skills/carpeos-ci` (symlink when install runs)
 
 ## Related skills

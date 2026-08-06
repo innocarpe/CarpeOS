@@ -86,6 +86,20 @@ Before opening PRs for a multi-commit branch:
 2. Inspect `git diff <base>...<head> --stat` for each proposed PR base/head pair.
 3. Create one PR per semantic group, preserving all atomic commits inside it.
 4. Verify that no unrelated milestone, file, or acceptance boundary crossed into the PR.
+## Mandatory semantic-boundary receipt
+
+Before `gh pr create` or `gh pr edit`, record these decisions in the PR description or
+the execution ledger:
+
+1. One sentence stating the PR's semantic purpose and acceptance boundary.
+2. The atomic commits included in that purpose, grouped by dependency when needed.
+3. The intentional PR base and head, verified with `git log <base>..<head>` and
+   `git diff <base>...<head> --stat`.
+4. A statement that the PR is not split merely because commits are atomic.
+
+If the branch contains multiple semantic purposes, split it by semantic ownership or
+dependency into stacked PRs. If it contains one semantic purpose, keep its complete
+atomic commit set in one PR. Never infer the PR count from the commit count.
 
 ## Required body structure
 
@@ -262,6 +276,7 @@ From a CarpeOS checkout:
 Installs/links into:
 
 - Claude Code: `~/.claude/skills/carpeos-pr`
+- Codex CLI: `~/.codex/skills/carpeos-pr`
 - Codex / agents: `~/.agents/skills/carpeos-pr`
 - Grok Build: `~/.grok/skills/carpeos-pr`
 - Gajae Code/GJC: `~/.gjc/agent/skills/carpeos-pr` and `~/.gjc/skills/carpeos-pr`
@@ -270,4 +285,5 @@ In-repo:
 
 - `skills/carpeos-pr/SKILL.md` (this file)
 - `.agents/skills/carpeos-pr`
+- `.codex/skills/carpeos-pr`
 - `.claude/skills/carpeos-pr`
