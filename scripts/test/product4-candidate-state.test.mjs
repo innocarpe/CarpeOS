@@ -8,6 +8,10 @@ import {
   promoteCandidateState,
 } from "../product4/candidate-state.mjs";
 import {
+  assertFrozenProduct4Sources,
+  digestJson,
+  readMaintenanceStudyFixture,
+  readProduct4Policy,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
   PRODUCT4_CONTEXT,
   PRODUCT4_POLICY_SHA256,
@@ -126,5 +130,50 @@ test("M4 rejects executable metadata and evidence tuple drift", () => {
   assert.throws(
     () => promoteCandidateState({ state: candidate, evidenceTuple: changedTuple, approval }),
     /mismatches C/,
+  );
+});
+test("M0 refuses policy and fixture source rotation instead of recomputing identities", () => {
+  const policy = readProduct4Policy();
+  const fixture = readMaintenanceStudyFixture();
+  assert.equal(digestJson(policy), PRODUCT4_POLICY_SHA256);
+  assert.equal(digestJson(fixture), MAINTENANCE_STUDY_FIXTURE_SHA256);
+
+  assert.throws(
+    () =>
+      assertFrozenProduct4Sources({
+        policy: { ...policy, policy_id: "P4_0_rotated" },
+        fixture,
+      }),
+    (error) => error?.code === "policy_drift",
+  );
+  assert.throws(
+    () =>
+      assertFrozenProduct4Sources({
+        policy,
+        fixture: { ...fixture, expected: { ...fixture.expected, outcome: "applied" } },
+      }),
+    (error) => error?.code === "fixture_drift",
+  );
+});
+
+test("M4 requires an evidence tuple external id bound exactly to C and the frozen fixture", () => {
+  const candidate = classifiedState(true);
+  const wrongExternalId = {
+    ...evidenceTuple,
+    external_id: `carpeos-4.0.0:${intentBase.head_sha}:${"0".repeat(64)}`,
+  };
+  assert.throws(
+    () => promoteCandidateState({ state: candidate, evidenceTuple: wrongExternalId, approval }),
+    /evidence_tuple\.external_id is not bound to C and fixture/,
+  );
+});
+
+test("M4 rejects classification states whose intent disagrees with their immutable transition", () => {
+  const candidate = classifiedState(true);
+  const { state_digest: _ignored, ...unsigned } = { ...candidate, intent: false };
+  const tampered = { ...unsigned, state_digest: digestJson(unsigned) };
+  assert.throws(
+    () => assertCandidateState(tampered),
+    /pending_evidence state requires intent=true/,
   );
 });
