@@ -764,8 +764,8 @@ export function evaluateRawCandidateWithBaseOwnedProtocolInputs(input, options) 
 }
 
 function defaultBaseOwnedProtocolProvider() {
-  const token = process.env.CARPEOS_PRODUCT4_GITHUB_READ_TOKEN;
-  if (typeof token !== "string" || token.length === 0)
+  const readCredential = process.env.CARPEOS_PRODUCT4_GITHUB_READ_TOKEN;
+  if (typeof readCredential !== "string" || readCredential.length === 0)
     throwRunnerError(
       "protocol_evidence_missing",
       "trusted read-only GitHub API token is unavailable",
