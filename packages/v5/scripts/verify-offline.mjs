@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 /**
- * Offline V5 draft-lane gate (local / maintainer).
+ * Offline V5 draft-lane gate (local / maintainer only).
+ *
+ * NOT a CI job. Monorepo `pnpm check` / `pnpm test` already runs @carpeos/v5
+ * unit tests (including M0 --check-only) and CLI e2e. Do not add a separate
+ * GitHub Actions step that re-runs this script — it duplicates package tests
+ * and burns PR lean budget. See docs/maintainers/v5-milestones.md.
+ *
  * Does not enable network, does not cut a release, does not write M0 receipts.
  *
  * Steps:

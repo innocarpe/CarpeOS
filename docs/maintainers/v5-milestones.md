@@ -36,7 +36,25 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 
 ## Draft-lane readiness (without M8)
 
-Preferred offline gate (no network, no M0 receipt rewrite, not a release cut):
+### CI (required path)
+
+Do **not** add a separate GitHub Actions job for `verify:offline`, `m0:check`, or
+the cost dry-run. PR lean / monorepo `pnpm check` already covers the draft lane:
+
+| Covered by monorepo CI | How |
+| --- | --- |
+| `@carpeos/v5` unit/contract tests | `pnpm test` (includes M0 `--check-only` spawn, pipeline, provider, eval, M8) |
+| CLI `v5` operator surface | `apps/carpeos-cli` tests (`status`, `readiness`, `eval-all200`, `m8`, offline `draft`) |
+| Format / lint / build / typecheck / public-boundary | rest of `pnpm check` |
+
+Rationale: a second workflow would re-run the same package tests, burn PR lean
+budget, and violate [ci-policy](ci-policy.md) (no duplicate monorepo build/test
+steps). Full offline stack (M0 + tests + cost dry-run) is **local/maintainer
+only**.
+
+### Local offline gate (maintainer convenience)
+
+Preferred local command (no network, no M0 receipt rewrite, not a release cut):
 
 ```sh
 pnpm --filter @carpeos/v5 verify:offline
@@ -55,7 +73,9 @@ pnpm --filter @carpeos/v5 cost:experiment:dry
 ## Recompute / experiment
 
 ```sh
-# check-only (CI-friendly; does not rewrite artifacts/v5/m0 timestamps)
+# check-only (local / package test; does not rewrite artifacts/v5/m0 timestamps)
+# Already exercised under pnpm test via packages/v5/test/m0-recompute.test.ts —
+# do not wire a standalone CI job for this script.
 node packages/v5/scripts/m0-recompute.mjs --check-only
 # rewrite receipts under artifacts/v5/m0 (operator/maintainer)
 node packages/v5/scripts/m0-recompute.mjs
@@ -65,3 +85,4 @@ node packages/v5/scripts/live-cost-experiment.mjs --dry-run
 # set -a && source ~/.carpeos/v5-provider.env && set +a
 # node packages/v5/scripts/live-cost-experiment.mjs --allow-network --spend-cap-usd 0.05
 ```
+
