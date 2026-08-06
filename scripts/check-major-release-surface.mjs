@@ -46,11 +46,7 @@ function main() {
   mustInclude("CHANGELOG.md", [`## [${version}]`], errors);
   mustInclude("README.md", [`@innocarpe/carpeos@${version}`, `v${version}`], errors);
   mustInclude("README.ko.md", [`@innocarpe/carpeos@${version}`, `v${version}`], errors);
-  mustInclude(
-    "packages/carpeos/README.md",
-    [`@innocarpe/carpeos@${version}`, version],
-    errors,
-  );
+  mustInclude("packages/carpeos/README.md", [`@innocarpe/carpeos@${version}`, version], errors);
   mustInclude(
     "docs/maintainers/versioning-and-releases.md",
     [`@innocarpe/carpeos@${version}`],
@@ -64,11 +60,7 @@ function main() {
     mustInclude(dod, [version, `@innocarpe/carpeos@${version}`], errors);
     mustInclude(prd, ["Status:"], errors);
     mustInclude("docs/PRD.md", [`PRD-v${major}.md`, `product-${version}.md`], errors);
-    mustInclude(
-      "docs/architecture/overview.md",
-      [`Product ${major}`, version],
-      errors,
-    );
+    mustInclude("docs/architecture/overview.md", [`Product ${major}`, version], errors);
   }
 
   if (errors.length > 0) {
