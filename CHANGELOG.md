@@ -12,7 +12,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- **Multi-host setup** for capture hooks and MCP beyond Claude / Codex / Grok:
+  - GJC (Gajae Code): `~/.gjc/agent/hooks/carpeos-capture.ts` + `gjc mcp add`
+  - Deep Code: `mcpServers.carpeos` in `~/.deepcode/settings.json` (secrets preserved)
+  - Reasonix: `reasonix mcp add carpeos`
+  - DeepSeek Build (`dsb`): `~/.deepseek-build/hooks.json` prepared (MCP CLI deferred)
+  - `capture-hook --provider` accepts `gjc`, `deepcode`, `reasonix`, `deepseek_build`
+    (aliases: `gajae`, `dsb`)
+  - `carpeos setup run --register-mcp auto --register-hooks auto` detects hosts on PATH
 
 ## [5.0.0] - 2026-08-06
 
