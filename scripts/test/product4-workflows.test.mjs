@@ -164,6 +164,7 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.match(source, /find \/work -mindepth 1 -exec chmod u\+rwX \{\} \+/);
   assert.doesNotMatch(source, /cp -aL \/candidate\/\. \/work\//);
   assert.doesNotMatch(source, /chmod -R u\+rwX \/work$/m);
+  assert.match(source, /pnpm --dir "\$CARPEOS_CANDIDATE_ROOT" fetch --frozen-lockfile/);
   assert.match(source, /--setenv CI true/);
   assert.match(source, /confirmModulesPurge=false/);
   // Claim-only static probe JSON must not return.
@@ -180,15 +181,18 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.doesNotMatch(source, /setup-pnpm\/node_modules\/\.bin/);
   assert.match(
     source,
-    /pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir \/pnpm-store/,
+    /pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir \/pnpm-store --config\.confirmModulesPurge=false/,
   );
   assert.doesNotMatch(source, /pnpm install --offline --frozen-store --frozen-lockfile/);
+  assert.match(source, /--noprofile/);
+  assert.match(source, /--norc/);
   assert.match(source, /--unshare-net/);
   assert.match(source, /--unshare-all/);
   assert.match(source, /--cap-drop ALL/);
   assert.match(source, /setpriv[\s\S]*--no-new-privs/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_WORK"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_OUT"/);
+  assert.match(source, /sudo -n chown -R "\$\(id -u\):\$\(id -g\)" "\$CARPEOS_SANDBOX_OUT"/);
   assert.doesNotMatch(source, /--bind "\$HOME"/);
   assert.doesNotMatch(source, /env:[\s\S]{0,160}github\.token/);
   assertNoJobLevelRunnerContext(source);

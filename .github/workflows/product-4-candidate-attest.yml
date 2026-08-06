@@ -70,30 +70,33 @@ jobs:
 
       - name: Move C into an external candidate workspace
         run: |
-          # Rename into place (do not mkdir the destination first or mv nests as
-          # $CARPEOS_CANDIDATE_ROOT/candidate and later scripts/pnpm miss the root).
+          # Rename into place (do not mkdir destination first or mv nests).
           rm -rf "$CARPEOS_CANDIDATE_ROOT"
           mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
-          chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
           mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
           chmod 0777 "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
-      - name: Freeze trusted evaluator and raw inputs before candidate execution
+
+      - name: Populate the offline package store without candidate lifecycle
+        run: pnpm --dir "$CARPEOS_CANDIDATE_ROOT" fetch --frozen-lockfile
+
+      - name: Freeze candidate root and trusted inputs before sandbox execution
         run: |
+          chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
           chmod -R a-w "$GITHUB_WORKSPACE"
           chmod -R a-w "$RUNNER_TEMP/product4-raw"
+
       - name: Install the bubblewrap sandbox runtime
         run: |
           if ! command -v bwrap >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y bubblewrap
           fi
+
       - name: Execute candidate build and CLI in a bounded bubblewrap sandbox
         run: |
           set -euo pipefail
-          # setup-pnpm install prefix is not bindable under `sudo bwrap` on GHA
-          # ("Permission denied" on the action tool bin dir). Stage a self-contained
-          # node+pnpm prefix and a copy of the offline store under /var/tmp
-          # (not /tmp: sandbox uses --tmpfs /tmp).
+          # setup-pnpm install prefix is not bindable under `sudo bwrap` on GHA.
+          # Stage node+pnpm and a disposable store under /var/tmp.
           tool_root="/var/tmp/product4-host-tools-${GITHUB_RUN_ID}"
           staged_store="/var/tmp/product4-pnpm-store-${GITHUB_RUN_ID}"
           rm -rf "$tool_root" "$staged_store"
@@ -110,8 +113,6 @@ jobs:
           host_store="$(pnpm store path --silent)"
           test -d "$host_store"
           test -n "$(find "$host_store" -mindepth 1 -print -quit)"
-          # Full copy (not hardlink): hardlinks can leave SQLite store index unusable
-          # under the sandbox mount + setpriv user.
           cp -a "$host_store"/. "$staged_store"/
           chmod -R a+rwX "$tool_root" "$staged_store"
           test -x "$tool_root/bin/node"
@@ -142,7 +143,7 @@ jobs:
             --setenv NODE_NO_WARNINGS 1
             --setenv NO_COLOR 1
             --setenv TZ UTC
-            # --clearenv strips host CI; pnpm aborts modules purge without TTY unless CI=true.
+            # --clearenv strips host CI; pnpm aborts modules purge without TTY.
             --setenv CI true
             --setenv PATH "$tool_root/bin:/usr/local/bin:/usr/bin:/bin"
             --cap-drop ALL
@@ -152,8 +153,6 @@ jobs:
             --ro-bind /lib64 /lib64
             --ro-bind /etc /etc
             --ro-bind "$tool_root" "$tool_root"
-            # Writable: pnpm v10+ opens a SQLite store index even for offline install.
-            # staged_store is a disposable /var/tmp copy, not the host package cache.
             --bind "$staged_store" /pnpm-store
             --
             setpriv
@@ -162,26 +161,29 @@ jobs:
             --ambient-caps=-all
             --
           )
-          ulimit -u 64
-          ulimit -v 1048576
-          "${sandbox[@]}" /bin/bash -ceu '
+          # Contract rlimits only around the measured probe (not install/build).
+          # --noprofile/--norc: bash -u must not source /etc/bash.bashrc (PS1).
+          "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
             rm -rf /work/*
-            # Dropped caps + user ns cannot chown; cp -a ownership preserve fails hard.
             cp -RL --no-preserve=ownership /candidate/. /work/
-            # Do not chmod the bind-mount root itself (EPERM under setpriv); only contents.
             find /work -mindepth 1 -exec chmod u+rwX {} +
             cd /work
-            # See evaluate.yml: avoid --frozen-store (ReadOnlyStoreIndex/index.db).
             pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir /pnpm-store --config.confirmModulesPurge=false
             pnpm --filter "@carpeos/cli..." build
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
-            node /work/scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
+            ulimit -u 64
+            ulimit -v 1048576
+            ulimit -f 102400
+            node scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
+          # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
+          # the unprivileged host job can validate and seal the receipt.
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
+
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail
-          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT" || true
           tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
@@ -213,6 +215,7 @@ jobs:
           });
           NODE
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_OUT"
+
       - name: Recompute C-bound semantics from the trusted base
         run: |
           rm -rf "$RUNNER_TEMP/product4-attestation-out"
