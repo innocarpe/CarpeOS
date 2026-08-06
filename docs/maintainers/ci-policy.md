@@ -38,35 +38,53 @@ CI does **not** exist to:
 | **Trust / release plane** | explicit product activation or release paths | Product 4 evidence, release authority | **not** default PR required; cost justified by the plane |
 | **Local** | agent / human **before push / PR** | parallel PR-lean preflight (`make preflight`) | target ≤ PR lean; fail closed locally |
 
-PR lean and Main full may share job definitions with `if:` conditions, or use
-separate jobs. Prefer **one workflow file with clear lanes** over copy-pasted
-workflows.
+Prefer **one workflow file** with **parallel jobs** for PR lean, not a single
+serial mega-step. Local `pnpm check` remains the sequential twin for agents.
 
 ### 2.0 Path filter (required-check safe)
 
-Full monorepo work (`pnpm install` + `pnpm check` + main-full extras) runs only
-when the change set touches **CI-relevant paths** (code / schemas / scripts /
-lockfile / workflows / …). See `.github/workflows/ci.yml` `dorny/paths-filter`
-filter `ci:`.
+Monorepo jobs run only when the change set touches **CI-relevant paths**. See
+`.github/workflows/ci.yml` `dorny/paths-filter` filter `ci:`.
 
-| Change set example | Full Checks monorepo work | Job `Checks` status |
+| Change set example | Parallel monorepo jobs | Job `Checks` status |
 | --- | --- | --- |
-| `apps/**`, `packages/**`, `scripts/**`, `schemas/**`, lockfile, workflows | **runs** | success/fail from `pnpm check` |
-| README / most of `docs/**` / root governance markdown only | **skipped** | **success** (explicit skip step; required check not missing) |
+| `apps/**`, `packages/**`, `scripts/**`, schemas, lockfile, workflows | **run** | aggregate success/fail |
+| README / most of `docs/**` / root governance markdown only | **skipped** | **success** (aggregate sees path filter false) |
 
 Rules:
 
-1. **Do not** use top-level `on.pull_request.paths-ignore` alone for the Checks
-   job — skipped workflows leave required status checks **missing** and block
-   merges.
-2. Keep the job named **`Checks`** always present; gate expensive steps with
-   `if: steps.filter.outputs.ci == 'true'`.
-3. **Secret scan** (`secret-scan.yml`) stays on every PR/push (cheap; docs can
-   leak tokens).
-4. When editing the path list, update `scripts/test/ci-workflow.test.mjs` and
-   this section in the same PR.
-5. Local agents still run `make preflight` before PR when they touch code; pure
-   docs edits may skip monorepo preflight, but still must not invent claims.
+1. **Do not** use top-level `on.pull_request.paths-ignore` alone — skipped
+   workflows leave required status checks **missing** and block merges.
+2. Keep an aggregate job named **`Checks`** always present (`if: always()`).
+3. **Secret scan** (`secret-scan.yml`) stays on every PR/push.
+4. When editing the path list or job graph, update
+   `scripts/test/ci-workflow.test.mjs` and this section in the same PR.
+5. Local agents still run `make preflight` before PR when they touch code.
+
+### 2.0.1 Parallel PR lean jobs + caching
+
+Implementation (`.github/workflows/ci.yml`):
+
+```text
+changes (path filter)
+    ├─ quality      format + lint          ∥
+    ├─ boundary     public-boundary        ∥
+    └─ build        pnpm build → artifact
+            ├─ typecheck   (download dist)  ∥
+            └─ test        (download dist)  ∥
+main-full (push main only; after build+test)
+Checks (aggregate, required name)
+```
+
+| Concern | Approach |
+| --- | --- |
+| Shared install | composite `.github/actions/setup-node-pnpm` (`cache: pnpm` + frozen lockfile) |
+| Build once | `build` job uploads `monorepo-dist`; typecheck/test/main-full download it |
+| Required check | job **`Checks`** aggregates; does not re-run `pnpm check` serially |
+| Wall clock | dominated by max(quality, boundary, build+max(typecheck,test)), not sum of all |
+
+Do **not** reintroduce a serial `pnpm check` step on GHA unless abandoning the
+parallel graph with an explicit policy change.
 
 ### 2.1 Local preflight (mandatory before PR)
 
@@ -94,16 +112,15 @@ Keep this set small and non-duplicative:
 
 | Check | How | Notes |
 | --- | --- | --- |
-| Format | `pnpm format:check` (Biome) | cheap |
-| Lint | `pnpm lint` | cheap |
-| Build | `pnpm build` | monorepo once |
-| Typecheck | `pnpm typecheck` | monorepo once |
-| Unit / contract tests | `pnpm test` | includes package tests + `scripts/test/*.test.mjs` |
-| Public boundary | `pnpm public-boundary` | public repo invariant |
+| Format + lint | job `quality` | parallel with boundary/build |
+| Public boundary | job `boundary` | parallel |
+| Build | job `build` → artifact | once |
+| Typecheck | job `typecheck` | after build artifact |
+| Unit / contract tests | job `test` | after build artifact |
 | Secret scan | `secret-scan.yml` (Gitleaks) | separate workflow OK |
+| Aggregate | job `Checks` | required status name |
 
-`pnpm check` is an acceptable **single** PR step when it equals the above and
-does not pull smokes/e2e.
+Local agents still use sequential `pnpm check` or parallel `make preflight`.
 
 ### 3.2 Main full (deeper, not every PR)
 
