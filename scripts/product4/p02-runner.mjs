@@ -19,9 +19,16 @@ import {
   loadP02Fixture,
   P02_COMMAND_LINE,
 } from "./p02-replay.mjs";
-import { canonicalJson, digestJson, sha256Hex } from "./policy-identity.mjs";
+import {
+  canonicalJson,
+  digestJson,
+  MAINTENANCE_STUDY_FIXTURE_SHA256,
+  PRODUCT4_CONTEXT,
+  PRODUCT4_POLICY_SHA256,
+  sha256Hex,
+} from "./policy-identity.mjs";
 export const P02_SANDBOX_RECEIPT_SCHEMA = "product4-sandbox-receipt-v1";
-export const P02_SANDBOX_PROBE_SCHEMA = "product4-sandbox-probe-v1";
+export const P02_SANDBOX_PROBE_SCHEMA = "carpeos.product4-sandbox-probe/v1";
 export const P02_SANDBOX_CONTRACT = Object.freeze({
   backend: "bubblewrap",
   network: "disabled",
@@ -35,27 +42,35 @@ export const P02_SANDBOX_CONTRACT = Object.freeze({
 });
 const P02_SANDBOX_PROBE_KEYS = Object.freeze([
   "schema_version",
-  "backend",
+  "identity",
+  "roots",
+  "facts",
+  "probe_digest",
+]);
+const P02_SANDBOX_PROBE_IDENTITY_KEYS = Object.freeze([
+  "head_sha",
+  "base_sha",
+  "tree_sha256",
+  "fixture_sha256",
+  "policy_sha256",
+  "context",
+]);
+const P02_SANDBOX_PROBE_ROOT_KEYS = Object.freeze([
+  "candidate_root",
+  "workspace_root",
+  "cli_root",
+  "home",
+  "output",
+]);
+const P02_SANDBOX_PROBE_FACT_KEYS = Object.freeze([
   "network",
   "candidate_inputs",
   "trusted_mounts",
-  "writable_paths",
   "capabilities",
   "no_new_privileges",
+  "writable_paths",
   "process_limit",
   "memory_limit_mb",
-  "evidence",
-]);
-const P02_SANDBOX_PROBE_EVIDENCE_KEYS = Object.freeze([
-  "no_new_privileges_line",
-  "cap_eff",
-  "network_namespace",
-  "candidate_write_refused",
-  "writable_path_results",
-  "rlimit_nproc",
-  "rlimit_as_bytes",
-  "proc_self_status_sha256",
-  "proc_self_limits_sha256",
 ]);
 const P02_SANDBOX_RECEIPT_KEYS = Object.freeze([
   "schema_version",
@@ -64,6 +79,9 @@ const P02_SANDBOX_RECEIPT_KEYS = Object.freeze([
   "head_sha",
   "base_sha",
   "tree_sha256",
+  "fixture_sha256",
+  "policy_sha256",
+  "context",
   "network",
   "candidate_inputs",
   "trusted_mounts",
@@ -72,6 +90,7 @@ const P02_SANDBOX_RECEIPT_KEYS = Object.freeze([
   "no_new_privileges",
   "process_limit",
   "memory_limit_mb",
+  "observed_probe",
   "probe_sha256",
   "sandbox_command_digest",
   "receipt_digest",
@@ -80,7 +99,21 @@ const SHA1 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const ZERO_CAP = "0000000000000000";
 const MEMORY_LIMIT_BYTES = P02_SANDBOX_CONTRACT.memory_limit_mb * 1024 * 1024;
-
+const FROZEN_IDENTITY = Object.freeze({
+  fixture_sha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+  policy_sha256: PRODUCT4_POLICY_SHA256,
+  context: PRODUCT4_CONTEXT,
+});
+const SANDBOX_ROOT_LABELS = Object.freeze([
+  "candidate_root",
+  "workspace_root",
+  "cli_root",
+  "home",
+  "output",
+]);
+const PROBE_DIGEST_KEYS = Object.freeze(
+  P02_SANDBOX_PROBE_KEYS.filter((key) => key !== "probe_digest"),
+);
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const P02_ARGS = [
   "adjudicate",
@@ -108,98 +141,142 @@ export function sandboxCommandDigest() {
 }
 
 /**
- * Validate an in-sandbox control observation. Claim-only static JSON without
- * measured evidence is refused — inability to observe is failure, not success.
+ * Validate the exact in-sandbox observation record. A digest-only claim cannot
+ * establish the controls used for a replay, so the complete record is required.
  */
-export function assertSandboxProbeObservation(probe) {
+export function assertSandboxProbeObservation(probe, { allowMissingDigest = false } = {}) {
   if (!isRecord(probe))
-    throwRunnerError("sandbox_probe_invalid", "sandbox probe observation is required");
+    throwRunnerError("sandbox_probe_missing", "sandbox probe observation is required");
   const keys = Object.keys(probe);
+  const requiredKeys = allowMissingDigest ? PROBE_DIGEST_KEYS : P02_SANDBOX_PROBE_KEYS;
   if (
-    keys.length !== P02_SANDBOX_PROBE_KEYS.length ||
-    P02_SANDBOX_PROBE_KEYS.some((key) => !Object.hasOwn(probe, key)) ||
-    keys.some((key) => !P02_SANDBOX_PROBE_KEYS.includes(key))
+    keys.length !== requiredKeys.length ||
+    requiredKeys.some((key) => !Object.hasOwn(probe, key)) ||
+    keys.some((key) => !requiredKeys.includes(key))
   )
     throwRunnerError("sandbox_probe_forged", "sandbox probe fields are not exact");
   if (probe.schema_version !== P02_SANDBOX_PROBE_SCHEMA)
     throwRunnerError("sandbox_probe_forged", "sandbox probe schema is invalid");
-  if (probe.backend !== P02_SANDBOX_CONTRACT.backend)
-    throwRunnerError("sandbox_probe_forged", "sandbox backend is not bubblewrap");
-  if (
-    probe.network !== P02_SANDBOX_CONTRACT.network ||
-    probe.candidate_inputs !== P02_SANDBOX_CONTRACT.candidate_inputs ||
-    probe.trusted_mounts !== P02_SANDBOX_CONTRACT.trusted_mounts ||
-    probe.capabilities !== P02_SANDBOX_CONTRACT.capabilities ||
-    probe.no_new_privileges !== P02_SANDBOX_CONTRACT.no_new_privileges ||
-    probe.process_limit !== P02_SANDBOX_CONTRACT.process_limit ||
-    probe.memory_limit_mb !== P02_SANDBOX_CONTRACT.memory_limit_mb ||
-    JSON.stringify(probe.writable_paths) !== JSON.stringify(P02_SANDBOX_CONTRACT.writable_paths)
-  )
-    throwRunnerError(
-      "sandbox_probe_forged",
-      "sandbox probe claims do not match the fixed contract",
-    );
 
-  const evidence = probe.evidence;
-  if (!isRecord(evidence))
-    throwRunnerError("sandbox_probe_forged", "sandbox probe evidence is required");
-  const evidenceKeys = Object.keys(evidence);
-  if (
-    evidenceKeys.length !== P02_SANDBOX_PROBE_EVIDENCE_KEYS.length ||
-    P02_SANDBOX_PROBE_EVIDENCE_KEYS.some((key) => !Object.hasOwn(evidence, key)) ||
-    evidenceKeys.some((key) => !P02_SANDBOX_PROBE_EVIDENCE_KEYS.includes(key))
-  )
-    throwRunnerError("sandbox_probe_forged", "sandbox probe evidence fields are not exact");
+  assertProbeIdentity(probe.identity);
+  assertProbeRoots(probe.roots);
+  assertProbeFacts(probe.facts);
 
-  if (evidence.no_new_privileges_line !== "NoNewPrivs:\t1")
-    throwRunnerError("sandbox_probe_forged", "NoNewPrivs was not observed as enabled");
-  if (typeof evidence.cap_eff !== "string" || evidence.cap_eff.toLowerCase() !== ZERO_CAP)
-    throwRunnerError("sandbox_probe_forged", "effective capabilities were not observed as empty");
-  if (typeof evidence.network_namespace !== "string" || evidence.network_namespace.length === 0)
-    throwRunnerError("sandbox_probe_forged", "network namespace was not observed");
-  if (evidence.candidate_write_refused !== true)
-    throwRunnerError("sandbox_probe_forged", "candidate root was not observed read-only");
-  if (!isRecord(evidence.writable_path_results))
-    throwRunnerError("sandbox_probe_forged", "writable path observations are required");
-  for (const path of P02_SANDBOX_CONTRACT.writable_paths) {
-    if (evidence.writable_path_results[path] !== true)
-      throwRunnerError("sandbox_probe_forged", `writable path ${path} was not observed`);
+  if (!allowMissingDigest) {
+    assertSha(probe.probe_digest, SHA256, "sandbox probe probe_digest");
+    if (probe.probe_digest !== digestSandboxProbe(probe))
+      throwRunnerError("sandbox_probe_forged", "sandbox probe digest is invalid");
   }
-  if (
-    Object.keys(evidence.writable_path_results).length !==
-    P02_SANDBOX_CONTRACT.writable_paths.length
-  )
-    throwRunnerError("sandbox_probe_forged", "writable path observations are not exact");
-  if (evidence.rlimit_nproc !== P02_SANDBOX_CONTRACT.process_limit)
-    throwRunnerError(
-      "sandbox_probe_forged",
-      "process limit was not observed at the contract value",
-    );
-  if (evidence.rlimit_as_bytes !== MEMORY_LIMIT_BYTES)
-    throwRunnerError("sandbox_probe_forged", "memory limit was not observed at the contract value");
-  assertSha(evidence.proc_self_status_sha256, SHA256, "proc_self_status_sha256");
-  assertSha(evidence.proc_self_limits_sha256, SHA256, "proc_self_limits_sha256");
   return probe;
 }
 
+function assertProbeIdentity(identity) {
+  assertExactObject(identity, P02_SANDBOX_PROBE_IDENTITY_KEYS, "sandbox probe identity");
+  assertSha(identity.head_sha, SHA1, "sandbox probe head_sha");
+  assertSha(identity.base_sha, SHA1, "sandbox probe base_sha");
+  assertSha(identity.tree_sha256, SHA256, "sandbox probe tree_sha256");
+  if (
+    identity.fixture_sha256 !== FROZEN_IDENTITY.fixture_sha256 ||
+    identity.policy_sha256 !== FROZEN_IDENTITY.policy_sha256 ||
+    identity.context !== FROZEN_IDENTITY.context
+  )
+    throwRunnerError(
+      "sandbox_probe_forged",
+      "sandbox probe fixture, policy, and context identity is not frozen",
+    );
+}
+
+function assertProbeRoots(roots) {
+  assertExactObject(roots, P02_SANDBOX_PROBE_ROOT_KEYS, "sandbox probe roots");
+  const canonical = {};
+  for (const label of P02_SANDBOX_PROBE_ROOT_KEYS)
+    canonical[label] = assertRegularDirectoryRoot(
+      roots[label],
+      `sandbox probe ${label}`,
+      "sandbox_probe_forged",
+    );
+  for (const left of SANDBOX_ROOT_LABELS) {
+    for (const right of SANDBOX_ROOT_LABELS) {
+      if (left >= right) continue;
+      if (left === "candidate_root" && right === "workspace_root") continue;
+      if (pathsOverlap(canonical[left], canonical[right]))
+        throwRunnerError(
+          "sandbox_probe_forged",
+          `sandbox probe ${left} and ${right} roots overlap`,
+        );
+    }
+  }
+  return canonical;
+}
+
+function assertProbeFacts(facts) {
+  assertExactObject(facts, P02_SANDBOX_PROBE_FACT_KEYS, "sandbox probe facts");
+  if (
+    facts.network !== P02_SANDBOX_CONTRACT.network ||
+    facts.candidate_inputs !== P02_SANDBOX_CONTRACT.candidate_inputs ||
+    facts.trusted_mounts !== P02_SANDBOX_CONTRACT.trusted_mounts ||
+    facts.capabilities !== P02_SANDBOX_CONTRACT.capabilities ||
+    facts.no_new_privileges !== P02_SANDBOX_CONTRACT.no_new_privileges ||
+    facts.process_limit !== P02_SANDBOX_CONTRACT.process_limit ||
+    facts.memory_limit_mb !== P02_SANDBOX_CONTRACT.memory_limit_mb ||
+    !Array.isArray(facts.writable_paths) ||
+    facts.writable_paths.length !== P02_SANDBOX_CONTRACT.writable_paths.length ||
+    facts.writable_paths.some((path, index) => path !== P02_SANDBOX_CONTRACT.writable_paths[index])
+  )
+    throwRunnerError("sandbox_probe_forged", "sandbox probe facts do not match the fixed contract");
+  if (new Set(facts.writable_paths).size !== facts.writable_paths.length)
+    throwRunnerError("sandbox_probe_forged", "sandbox probe writable paths are not exact");
+  if (typeof facts.no_new_privileges !== "boolean")
+    throwRunnerError(
+      "sandbox_probe_forged",
+      "sandbox probe no-new-privileges observation is invalid",
+    );
+  if (!Number.isSafeInteger(facts.process_limit) || facts.process_limit <= 0)
+    throwRunnerError("sandbox_probe_forged", "sandbox probe process limit observation is invalid");
+  if (!Number.isSafeInteger(facts.memory_limit_mb) || facts.memory_limit_mb <= 0)
+    throwRunnerError("sandbox_probe_forged", "sandbox probe memory limit observation is invalid");
+}
+
+function assertExactObject(value, expectedKeys, label) {
+  if (!isRecord(value)) throwRunnerError("sandbox_probe_forged", `${label} is required`);
+  const keys = Object.keys(value);
+  if (
+    keys.length !== expectedKeys.length ||
+    expectedKeys.some((key) => !Object.hasOwn(value, key)) ||
+    keys.some((key) => !expectedKeys.includes(key))
+  )
+    throwRunnerError("sandbox_probe_forged", `${label} fields are not exact`);
+}
+
+function digestSandboxProbe(probe) {
+  const unsigned = Object.fromEntries(PROBE_DIGEST_KEYS.map((key) => [key, probe[key]]));
+  return digestJson(unsigned);
+}
+
 /**
- * Digest a validated observation. Zero-arg call is refused — a digest of a
- * static claim JSON is not independent evidence.
+ * Digest a validated observation. A caller may use this to seal a complete
+ * record before passing it to buildP02SandboxReceipt; a digest-only call is
+ * refused.
  */
 export function sandboxProbeDigest(probe) {
   if (probe === undefined)
     throwRunnerError(
-      "sandbox_probe_invalid",
+      "sandbox_probe_missing",
       "sandbox probe digest requires an observed probe object",
     );
-  return digestJson(assertSandboxProbeObservation(probe));
+  const unsignedProbe = { ...probe };
+  delete unsignedProbe.probe_digest;
+  assertSandboxProbeObservation(unsignedProbe, { allowMissingDigest: true });
+  return digestSandboxProbe(unsignedProbe);
 }
 
 /**
- * Collect control observations from the current process. Intended to run only
- * inside the bubblewrap namespace after setpriv --no-new-privs.
+ * Collect the contract facts from inside the sandbox. The caller must provide
+ * the exact identity and host roots that are sealed into the observation.
  */
 export function collectSandboxProbeObservation({
+  identity,
+  roots,
   candidateProbePath = "/candidate/.product4-probe-write-test",
   writableProbePaths = P02_SANDBOX_CONTRACT.writable_paths,
 } = {}) {
@@ -208,30 +285,23 @@ export function collectSandboxProbeObservation({
   try {
     status = readFileSync("/proc/self/status", "utf8");
     limits = readFileSync("/proc/self/limits", "utf8");
+    // /proc/self/ns/net is a symlink whose target is "net:[inode]" — not a
+    // resolvable path. readlink preserves the observed namespace identity.
+    readlinkSync("/proc/self/ns/net");
+    readFileSync("/proc/self/mountinfo", "utf8");
   } catch (error) {
     throwRunnerError(
       "sandbox_probe_unobserved",
-      `unable to observe /proc controls: ${error instanceof Error ? error.message : String(error)}`,
+      `sandbox controls could not be observed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   const noNewPrivsMatch = status.match(/^NoNewPrivs:\t([01])$/m);
-  if (!noNewPrivsMatch)
-    throwRunnerError("sandbox_probe_unobserved", "NoNewPrivs line was not observed");
   const capEffMatch = status.match(/^CapEff:\t([0-9a-fA-F]+)$/m);
-  if (!capEffMatch) throwRunnerError("sandbox_probe_unobserved", "CapEff line was not observed");
-
-  let networkNamespace;
-  try {
-    // /proc/self/ns/net is a symlink whose target is "net:[inode]" — not a
-    // resolvable path. readlink preserves the observed namespace identity.
-    networkNamespace = readlinkSync("/proc/self/ns/net");
-  } catch (error) {
-    throwRunnerError(
-      "sandbox_probe_unobserved",
-      `network namespace was not observed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const nprocMatch = limits.match(/^Max processes\s+(\S+)\s+(\S+)\s+processes\s*$/m);
+  const asMatch = limits.match(/^Max address space\s+(\S+)\s+(\S+)\s+bytes\s*$/m);
+  if (!noNewPrivsMatch || !capEffMatch || !nprocMatch || !asMatch)
+    throwRunnerError("sandbox_probe_unobserved", "sandbox control rows were not observed");
 
   let candidateWriteRefused = false;
   try {
@@ -242,79 +312,82 @@ export function collectSandboxProbeObservation({
   if (!candidateWriteRefused)
     throwRunnerError("sandbox_probe_unobserved", "candidate root accepted a write");
 
-  const writablePathResults = {};
+  const writableResults = {};
   for (const path of writableProbePaths) {
-    const probeFile = `${path}/.product4-probe-write-test`;
     try {
-      writeFileSync(probeFile, "ok\n", { flag: "w" });
-      writablePathResults[path] = true;
+      writeFileSync(`${path}/.product4-probe-write-test`, "ok\n", { flag: "w" });
+      writableResults[path] = true;
     } catch {
-      writablePathResults[path] = false;
+      writableResults[path] = false;
     }
   }
+  if (
+    writableProbePaths.length !== P02_SANDBOX_CONTRACT.writable_paths.length ||
+    writableProbePaths.some((path, index) => path !== P02_SANDBOX_CONTRACT.writable_paths[index]) ||
+    Object.values(writableResults).some((value) => value !== true)
+  )
+    throwRunnerError("sandbox_probe_unobserved", "writable path observations are incomplete");
 
-  const nprocMatch = limits.match(/^Max processes\s+(\S+)\s+(\S+)\s+processes\s*$/m);
-  const asMatch = limits.match(/^Max address space\s+(\S+)\s+(\S+)\s+bytes\s*$/m);
-  if (!nprocMatch || !asMatch)
-    throwRunnerError("sandbox_probe_unobserved", "rlimit rows were not observed");
-  const rlimitNproc = parseSoftLimit(nprocMatch[1], "process");
-  const rlimitAsBytes = parseSoftLimit(asMatch[1], "memory");
+  const processLimit = parseSoftLimit(nprocMatch[1], "process");
+  const memoryBytes = parseSoftLimit(asMatch[1], "memory");
+  if (noNewPrivsMatch[1] !== "1" || capEffMatch[1].toLowerCase() !== ZERO_CAP)
+    throwRunnerError("sandbox_probe_unobserved", "privilege controls were not observed");
+  if (processLimit !== P02_SANDBOX_CONTRACT.process_limit)
+    throwRunnerError(
+      "sandbox_probe_unobserved",
+      "process limit was not observed at the contract value",
+    );
+  if (memoryBytes !== MEMORY_LIMIT_BYTES)
+    throwRunnerError(
+      "sandbox_probe_unobserved",
+      "memory limit was not observed at the contract value",
+    );
+  if (!isRecord(identity) || !isRecord(roots))
+    throwRunnerError("sandbox_probe_unobserved", "probe identity and roots are required");
 
   const probe = {
     schema_version: P02_SANDBOX_PROBE_SCHEMA,
-    backend: P02_SANDBOX_CONTRACT.backend,
-    network: P02_SANDBOX_CONTRACT.network,
-    candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
-    trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
-    writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
-    capabilities: P02_SANDBOX_CONTRACT.capabilities,
-    no_new_privileges: noNewPrivsMatch[1] === "1",
-    process_limit: rlimitNproc,
-    memory_limit_mb: Math.floor(rlimitAsBytes / (1024 * 1024)),
-    evidence: {
-      no_new_privileges_line: `NoNewPrivs:\t${noNewPrivsMatch[1]}`,
-      cap_eff: capEffMatch[1].toLowerCase(),
-      network_namespace: networkNamespace,
-      candidate_write_refused: candidateWriteRefused,
-      writable_path_results: writablePathResults,
-      rlimit_nproc: rlimitNproc,
-      rlimit_as_bytes: rlimitAsBytes,
-      proc_self_status_sha256: sha256Hex(status),
-      proc_self_limits_sha256: sha256Hex(limits),
+    identity,
+    roots,
+    facts: {
+      network: P02_SANDBOX_CONTRACT.network,
+      candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
+      trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
+      capabilities: P02_SANDBOX_CONTRACT.capabilities,
+      no_new_privileges: true,
+      writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
+      process_limit: processLimit,
+      memory_limit_mb: Math.floor(memoryBytes / (1024 * 1024)),
     },
   };
-  return assertSandboxProbeObservation(probe);
+  return {
+    ...probe,
+    probe_digest: sandboxProbeDigest(probe),
+  };
 }
 
-/** Test/helper: build a structurally valid observation from measured values. */
-export function buildSandboxProbeObservation(evidenceOverrides = {}) {
-  const evidence = {
-    no_new_privileges_line: "NoNewPrivs:\t1",
-    cap_eff: ZERO_CAP,
-    network_namespace: "net:[4026531840]",
-    candidate_write_refused: true,
-    writable_path_results: Object.fromEntries(
-      P02_SANDBOX_CONTRACT.writable_paths.map((path) => [path, true]),
-    ),
-    rlimit_nproc: P02_SANDBOX_CONTRACT.process_limit,
-    rlimit_as_bytes: MEMORY_LIMIT_BYTES,
-    proc_self_status_sha256: "a".repeat(64),
-    proc_self_limits_sha256: "b".repeat(64),
-    ...evidenceOverrides,
-  };
-  return assertSandboxProbeObservation({
+/** Test/helper: build a complete observed record from explicit identity and roots. */
+export function buildSandboxProbeObservation({ identity, roots, facts = {} } = {}) {
+  const probe = {
     schema_version: P02_SANDBOX_PROBE_SCHEMA,
-    backend: P02_SANDBOX_CONTRACT.backend,
-    network: P02_SANDBOX_CONTRACT.network,
-    candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
-    trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
-    writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
-    capabilities: P02_SANDBOX_CONTRACT.capabilities,
-    no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
-    process_limit: P02_SANDBOX_CONTRACT.process_limit,
-    memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
-    evidence,
-  });
+    identity,
+    roots,
+    facts: {
+      network: P02_SANDBOX_CONTRACT.network,
+      candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
+      trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
+      capabilities: P02_SANDBOX_CONTRACT.capabilities,
+      no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
+      writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
+      process_limit: P02_SANDBOX_CONTRACT.process_limit,
+      memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
+      ...facts,
+    },
+  };
+  return {
+    ...probe,
+    probe_digest: sandboxProbeDigest(probe),
+  };
 }
 
 function parseSoftLimit(value, label) {
@@ -328,51 +401,92 @@ function parseSoftLimit(value, label) {
 
 export function buildP02SandboxReceipt({
   candidateRoot,
+  workspaceRoot,
+  cliRoot,
+  home,
+  output,
   headSha,
   baseSha,
   treeSha256,
+  fixtureSha256,
+  policySha256,
+  context,
+  observedProbe,
   probe,
   probeSha256,
 }) {
   if (typeof candidateRoot !== "string" || candidateRoot.length === 0)
     throwRunnerError("sandbox_receipt_invalid", "candidate root is required");
+  if (observedProbe !== undefined && probe !== undefined && observedProbe !== probe)
+    throwRunnerError("sandbox_probe_forged", "sandbox probe aliases are ambiguous");
+  const suppliedProbe = observedProbe ?? probe;
+  if (!isRecord(suppliedProbe))
+    throwRunnerError(
+      "sandbox_probe_missing",
+      "sandbox receipt requires an observed probe object; bare probe hashes are refused",
+    );
+  const probeRecord = { ...suppliedProbe };
+  if (!Object.hasOwn(probeRecord, "probe_digest"))
+    probeRecord.probe_digest = sandboxProbeDigest(probeRecord);
+  assertSandboxProbeObservation(probeRecord);
+
   assertSha(headSha, SHA1, "head_sha");
   assertSha(baseSha, SHA1, "base_sha");
   assertSha(treeSha256, SHA256, "tree_sha256");
-  // Prefer the full observation. A bare caller-supplied hash is never enough.
-  let resolvedProbeSha256;
-  if (probe !== undefined) {
-    resolvedProbeSha256 = sandboxProbeDigest(probe);
-    if (probeSha256 !== undefined) {
-      assertSha(probeSha256, SHA256, "probe_sha256");
-      if (probeSha256 !== resolvedProbeSha256)
-        throwRunnerError(
-          "sandbox_receipt_forged",
-          "probe hash does not match the observed probe digest",
-        );
-    }
-  } else {
-    throwRunnerError(
-      "sandbox_probe_invalid",
-      "sandbox receipt requires an observed probe object; bare probe hashes are refused",
-    );
+  const expectedIdentity = {
+    head_sha: headSha,
+    base_sha: baseSha,
+    tree_sha256: treeSha256,
+    fixture_sha256: fixtureSha256 ?? FROZEN_IDENTITY.fixture_sha256,
+    policy_sha256: policySha256 ?? FROZEN_IDENTITY.policy_sha256,
+    context: context ?? FROZEN_IDENTITY.context,
+  };
+  assertProbeIdentity(expectedIdentity);
+  for (const key of P02_SANDBOX_PROBE_IDENTITY_KEYS) {
+    if (probeRecord.identity[key] !== expectedIdentity[key])
+      throwRunnerError("sandbox_receipt_forged", `sandbox probe ${key} is not identity-bound`);
   }
-  let candidateReal;
-  try {
-    candidateReal = realpathSync(resolve(candidateRoot));
-  } catch (error) {
+
+  const expectedRoots = {
+    ...probeRecord.roots,
+    ...(workspaceRoot === undefined ? {} : { workspace_root: workspaceRoot }),
+    ...(cliRoot === undefined ? {} : { cli_root: cliRoot }),
+    ...(home === undefined ? {} : { home }),
+    ...(output === undefined ? {} : { output }),
+  };
+  const canonicalCandidate = assertRegularDirectoryRoot(candidateRoot, "candidate root");
+  const observedRoots = {};
+  for (const key of P02_SANDBOX_PROBE_ROOT_KEYS) {
+    const expected = assertRegularDirectoryRoot(expectedRoots[key], `sandbox ${key}`);
+    const observed = assertRegularDirectoryRoot(probeRecord.roots[key], `sandbox probe ${key}`);
+    observedRoots[key] = observed;
+    if (expected !== observed)
+      throwRunnerError(
+        "sandbox_receipt_forged",
+        `sandbox receipt ${key} is not bound to the observed root`,
+      );
+  }
+  if (observedRoots.candidate_root !== canonicalCandidate)
     throwRunnerError(
-      "sandbox_receipt_invalid",
-      `candidate root must exist: ${error instanceof Error ? error.message : String(error)}`,
+      "sandbox_receipt_forged",
+      "sandbox receipt is bound to another candidate root",
     );
+
+  if (probeSha256 !== undefined) {
+    assertSha(probeSha256, SHA256, "probe_sha256");
+    if (probeSha256 !== probeRecord.probe_digest)
+      throwRunnerError("sandbox_receipt_forged", "probe hash does not match observed probe digest");
   }
   const unsigned = {
     schema_version: P02_SANDBOX_RECEIPT_SCHEMA,
     backend: P02_SANDBOX_CONTRACT.backend,
-    candidate_root: candidateReal,
-    head_sha: headSha,
-    base_sha: baseSha,
-    tree_sha256: treeSha256,
+    candidate_root: canonicalCandidate,
+    head_sha: expectedIdentity.head_sha,
+    base_sha: expectedIdentity.base_sha,
+    tree_sha256: expectedIdentity.tree_sha256,
+    fixture_sha256: expectedIdentity.fixture_sha256,
+    policy_sha256: expectedIdentity.policy_sha256,
+    context: expectedIdentity.context,
     network: P02_SANDBOX_CONTRACT.network,
     candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
     trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
@@ -381,7 +495,8 @@ export function buildP02SandboxReceipt({
     no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
     process_limit: P02_SANDBOX_CONTRACT.process_limit,
     memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
-    probe_sha256: resolvedProbeSha256,
+    observed_probe: probeRecord,
+    probe_sha256: probeRecord.probe_digest,
     sandbox_command_digest: sandboxCommandDigest(),
   };
   return { ...unsigned, receipt_digest: digestJson(unsigned) };
@@ -389,7 +504,19 @@ export function buildP02SandboxReceipt({
 
 export function assertP02SandboxReceipt(
   receipt,
-  { candidateRoot, headSha, baseSha, treeSha256 } = {},
+  {
+    candidateRoot,
+    workspaceRoot,
+    cliRoot,
+    home,
+    output,
+    headSha,
+    baseSha,
+    treeSha256,
+    fixtureSha256,
+    policySha256,
+    context,
+  } = {},
 ) {
   if (!isRecord(receipt))
     throwRunnerError("sandbox_receipt_missing", "trusted sandbox receipt is required");
@@ -408,31 +535,72 @@ export function assertP02SandboxReceipt(
   assertSha(receipt.base_sha, SHA1, "sandbox receipt base_sha");
   assertSha(receipt.tree_sha256, SHA256, "sandbox receipt tree_sha256");
   assertSha(receipt.probe_sha256, SHA256, "sandbox receipt probe_sha256");
-  if (typeof receipt.candidate_root !== "string" || !isAbsolute(receipt.candidate_root))
-    throwRunnerError("sandbox_receipt_forged", "sandbox candidate root must be absolute");
+  assertSandboxProbeObservation(receipt.observed_probe);
+  if (receipt.probe_sha256 !== receipt.observed_probe.probe_digest)
+    throwRunnerError("sandbox_receipt_forged", "sandbox probe hash is not observation-bound");
+  const expectedIdentity = {
+    head_sha: headSha ?? receipt.head_sha,
+    base_sha: baseSha ?? receipt.base_sha,
+    tree_sha256: treeSha256 ?? receipt.tree_sha256,
+    fixture_sha256: fixtureSha256 ?? FROZEN_IDENTITY.fixture_sha256,
+    policy_sha256: policySha256 ?? FROZEN_IDENTITY.policy_sha256,
+    context: context ?? FROZEN_IDENTITY.context,
+  };
+  assertProbeIdentity({
+    head_sha: receipt.head_sha,
+    base_sha: receipt.base_sha,
+    tree_sha256: receipt.tree_sha256,
+    fixture_sha256: receipt.fixture_sha256,
+    policy_sha256: receipt.policy_sha256,
+    context: receipt.context,
+  });
+  for (const key of P02_SANDBOX_PROBE_IDENTITY_KEYS) {
+    if (
+      receipt[key] !== receipt.observed_probe.identity[key] ||
+      receipt[key] !== expectedIdentity[key]
+    )
+      throwRunnerError("sandbox_receipt_forged", `sandbox receipt ${key} is not identity-bound`);
+  }
+
+  const canonicalCandidate = assertRegularDirectoryRoot(
+    receipt.candidate_root,
+    "sandbox candidate root",
+  );
   if (candidateRoot !== undefined) {
-    let expectedRoot;
-    let actualRoot;
-    try {
-      expectedRoot = realpathSync(resolve(candidateRoot));
-      actualRoot = realpathSync(receipt.candidate_root);
-    } catch {
-      throwRunnerError("sandbox_receipt_forged", "sandbox candidate root is unavailable");
-    }
-    if (expectedRoot !== actualRoot)
+    const expected = assertRegularDirectoryRoot(candidateRoot, "candidate root");
+    if (expected !== canonicalCandidate)
       throwRunnerError(
         "sandbox_receipt_forged",
         "sandbox receipt is bound to another candidate root",
       );
   }
-  for (const [key, expected] of [
-    ["head_sha", headSha],
-    ["base_sha", baseSha],
-    ["tree_sha256", treeSha256],
-  ]) {
-    if (expected !== undefined && receipt[key] !== expected)
+  const expectedRoots = { workspaceRoot, cliRoot, home, output };
+  const rootKeys = {
+    workspaceRoot: "workspace_root",
+    cliRoot: "cli_root",
+    home: "home",
+    output: "output",
+  };
+  for (const [key, expected] of Object.entries(expectedRoots)) {
+    if (expected === undefined) continue;
+    const expectedReal = assertRegularDirectoryRoot(expected, `sandbox ${key}`);
+    const observedReal = assertRegularDirectoryRoot(
+      receipt.observed_probe.roots[rootKeys[key]],
+      `sandbox probe ${key}`,
+    );
+    if (expectedReal !== observedReal)
       throwRunnerError("sandbox_receipt_forged", `sandbox receipt ${key} is not identity-bound`);
   }
+  const observedCandidate = assertRegularDirectoryRoot(
+    receipt.observed_probe.roots.candidate_root,
+    "sandbox probe candidate root",
+  );
+  if (observedCandidate !== canonicalCandidate)
+    throwRunnerError(
+      "sandbox_receipt_forged",
+      "sandbox receipt candidate root is not observation-bound",
+    );
+
   if (
     receipt.network !== P02_SANDBOX_CONTRACT.network ||
     receipt.candidate_inputs !== P02_SANDBOX_CONTRACT.candidate_inputs ||
@@ -443,11 +611,21 @@ export function assertP02SandboxReceipt(
     receipt.memory_limit_mb !== P02_SANDBOX_CONTRACT.memory_limit_mb ||
     JSON.stringify(receipt.writable_paths) !==
       JSON.stringify(P02_SANDBOX_CONTRACT.writable_paths) ||
+    !equalJson(receipt.observed_probe.facts, {
+      network: receipt.network,
+      candidate_inputs: receipt.candidate_inputs,
+      trusted_mounts: receipt.trusted_mounts,
+      capabilities: receipt.capabilities,
+      no_new_privileges: receipt.no_new_privileges,
+      writable_paths: receipt.writable_paths,
+      process_limit: receipt.process_limit,
+      memory_limit_mb: receipt.memory_limit_mb,
+    }) ||
     receipt.sandbox_command_digest !== sandboxCommandDigest()
   )
     throwRunnerError(
       "sandbox_receipt_forged",
-      "sandbox receipt does not enforce the fixed contract",
+      "sandbox receipt does not enforce the observed fixed contract",
     );
   const unsigned = { ...receipt };
   delete unsigned.receipt_digest;
@@ -487,7 +665,12 @@ export function runP02Twice({
     throw new Error("P02 runner requires a runtime home");
   if (typeof cliRoot !== "string" || cliRoot.length === 0)
     throw new Error("P02 runner requires a CLI root");
-  assertP02SandboxReceipt(sandboxReceipt, { candidateRoot });
+  assertP02SandboxReceipt(sandboxReceipt, {
+    candidateRoot,
+    workspaceRoot,
+    cliRoot,
+    home: resolve(home),
+  });
   if (process.platform !== "linux")
     throwRunnerError("sandbox_unavailable", "P02 requires a Linux bubblewrap sandbox");
   const runtimeHome = resolve(home);
@@ -708,7 +891,11 @@ function runOnce(home, workspaceRoot, cliRoot, fixture, fixtureSha256, label, sa
 }
 
 function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
-  assertP02SandboxReceipt(sandboxReceipt);
+  assertP02SandboxReceipt(sandboxReceipt, {
+    workspaceRoot,
+    cliRoot,
+    home: resolve(home),
+  });
   let workspaceReal;
   let cliReal;
   let homeReal;
@@ -787,9 +974,7 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
   }
   // Apply rlimits inside the sandbox after setpriv. Host-side ulimit before
   // `sudo bwrap` is reset by sudo and is not visible on /proc/self/limits.
-  // Keep AS high enough for V8 virtual reservation while still bounding the
-  // process; the probe still asserts the observed soft limit equals the
-  // contract (memory_limit_mb * 1MiB).
+  // --noprofile/--norc: bash -u must not source /etc/bash.bashrc (PS1 unbound).
   bwrapArgs.push(
     "--",
     "setpriv",
@@ -797,7 +982,6 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "--inh-caps=-all",
     "--ambient-caps=-all",
     "--",
-    // --noprofile/--norc: bash -u otherwise errors on /etc/bash.bashrc PS1.
     "/bin/bash",
     "--noprofile",
     "--norc",
@@ -1103,6 +1287,35 @@ function assertDisposableDatabasePath(databasePath, { allowMissing = false } = {
   }
   if (stat.isSymbolicLink() || !stat.isFile())
     throwRunnerError("fixture_store_not_disposable", "P02 database path must be a regular file");
+}
+function assertRegularDirectoryRoot(value, label, code = "sandbox_receipt_forged") {
+  if (typeof value !== "string" || value.length === 0 || !isAbsolute(value))
+    throwRunnerError(code, `${label} must be an absolute path`);
+  let stat;
+  try {
+    stat = lstatSync(value);
+  } catch (error) {
+    throwRunnerError(
+      code,
+      `${label} is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory())
+    throwRunnerError(code, `${label} must be a regular directory`);
+  try {
+    return realpathSync(value);
+  } catch (error) {
+    throwRunnerError(
+      code,
+      `${label} cannot be resolved: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function pathsOverlap(left, right) {
+  const leftPrefix = left.endsWith("/") ? left : `${left}/`;
+  const rightPrefix = right.endsWith("/") ? right : `${right}/`;
+  return left === right || left.startsWith(rightPrefix) || right.startsWith(leftPrefix);
 }
 function assertSha(value, pattern, label) {
   if (typeof value !== "string" || !pattern.test(value))
