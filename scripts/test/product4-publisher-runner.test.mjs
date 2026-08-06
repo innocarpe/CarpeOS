@@ -62,6 +62,10 @@ function evaluatorResult() {
         outbox_rows: 0,
         protected_uploads: 0,
       },
+      candidate_execution: {
+        unprivileged: true,
+        isolated: true,
+      },
     },
     provenance: {
       base_sha: baseSha,

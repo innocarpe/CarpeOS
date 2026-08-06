@@ -34,7 +34,7 @@ jobs:
       - name: Download trusted attestation data
         uses: actions/download-artifact@v7
         with:
-          name: product4-attestation-${{ github.event.workflow_run.head_sha }}
+          name: product4-attestation
           path: ${{ runner.temp }}/product4-attestation
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -50,7 +50,7 @@ jobs:
       - name: Upload the blocked data-only publication receipt
         uses: actions/upload-artifact@v6
         with:
-          name: product4-publication-${{ github.event.workflow_run.head_sha }}
+          name: product4-publication
           path: ${{ runner.temp }}/product4-publication.json
           if-no-files-found: error
           retention-days: 7

@@ -23,6 +23,7 @@ jobs:
       CARPEOS_HOME: ${{ runner.temp }}/carpeos-product4-evaluator
       CARPEOS_TRUST_ZONE: tz_synthetic
       PRODUCT4_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+      CARPEOS_CANDIDATE_ROOT: ${{ runner.temp }}/carpeos-product4-candidate
     steps:
       - name: Check out trusted evaluator base
         uses: actions/checkout@v7
@@ -57,33 +58,45 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           path: candidate
           persist-credentials: false
+      - name: Move C into a process-only candidate workspace
+        run: |
+          mkdir -p "$CARPEOS_CANDIDATE_ROOT"
+          mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
+
+      - name: Freeze trusted evaluator and raw inputs before candidate execution
+        run: |
+          chmod -R a-w "$GITHUB_WORKSPACE"
+          chmod -R a-w "$RUNNER_TEMP/product4-raw"
 
       - name: Build C without privileged credentials
-        working-directory: candidate
+        working-directory: ${{ runner.temp }}/carpeos-product4-candidate
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm --filter '@carpeos/cli...' build
 
-      - name: Initialize a disposable evaluator store
-        run: node candidate/apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
+      - name: Initialize a disposable evaluator store inside the candidate workspace
+        working-directory: ${{ runner.temp }}/carpeos-product4-candidate
+        run: node apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
 
       - name: Recompute C-bound semantics from the trusted base
         run: |
-          tree_sha256="$(node scripts/product4/tree-digest.mjs "$GITHUB_WORKSPACE/candidate" HEAD)"
-          NODE_NO_WARNINGS=1 node scripts/product4/evaluator-runner.mjs \
+          rm -rf "$RUNNER_TEMP/product4-attestation-out"
+          mkdir -m 700 "$RUNNER_TEMP/product4-attestation-out"
+          tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
+          NODE_NO_WARNINGS=1 node "$GITHUB_WORKSPACE/scripts/product4/evaluator-runner.mjs" \
             --raw-report "$RUNNER_TEMP/product4-raw/raw-report.json" \
-            --candidate-root "$GITHUB_WORKSPACE/candidate" \
+            --candidate-root "$CARPEOS_CANDIDATE_ROOT" \
             --home "$CARPEOS_HOME" \
             --head-sha "${{ github.event.workflow_run.head_sha }}" \
             --base-sha "$PRODUCT4_BASE_SHA" \
             --tree-sha256 "$tree_sha256" \
             --workflow-sha "${{ github.workflow_sha }}" \
-            --output "$RUNNER_TEMP/product4-attestation.json"
+            --output "$RUNNER_TEMP/product4-attestation-out/attestation.json"
 
       - name: Upload strict attestation data
         uses: actions/upload-artifact@v6
         with:
-          name: product4-attestation-${{ github.event.workflow_run.head_sha }}
-          path: ${{ runner.temp }}/product4-attestation.json
+          name: product4-attestation
+          path: ${{ runner.temp }}/product4-attestation-out/attestation.json
           if-no-files-found: error
           retention-days: 7

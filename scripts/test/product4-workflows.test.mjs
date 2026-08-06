@@ -30,6 +30,9 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.match(source, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(source, /path: candidate/);
   assert.match(source, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(source, /name: product4-raw-\$\{\{ github\.event\.workflow_run\.head_sha \}\}\n/);
+  assert.match(source, /name: product4-attestation\n/);
+  assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
   assert.match(source, /persist-credentials: false/);
   assert.match(source, /evaluator-runner\.mjs/);
   assert.match(source, /--candidate-root/);
@@ -45,6 +48,10 @@ test("M4 publisher has no candidate checkout and performs a data-only dry run", 
   assert.match(source, /on:\n {2}workflow_run:/);
   assert.doesNotMatch(source, /pull_request_target|head_repository|path: candidate|candidate-root/);
   assert.match(source, /publisher-runner\.mjs/);
+  assert.match(source, /name: product4-attestation\n/);
+  assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
+  assert.match(source, /name: product4-publication\n/);
+  assert.doesNotMatch(source, /product4-publication-\$\{\{/);
   assert.match(source, /live authority/);
   assert.match(source, /contents: read/);
   assert.match(source, /actions: read/);
