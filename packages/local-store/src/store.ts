@@ -388,6 +388,46 @@ export type ProposeClaimDraftResult =
       valid_time_defaulted: boolean;
     };
 
+/**
+ * Human-only AcceptanceDecision writer (Product 6 complete path).
+ * Fail-closed: requires humanConfirmed === true. Never call from agentic auto-runner.
+ */
+export type RecordHumanAcceptanceInput = {
+  /** Claim payload claim_id values (not event ids). */
+  claimRefs: readonly string[];
+  decision: "accepted" | "rejected" | "needs_review";
+  /** Human actor id (not agent/system/llm). */
+  decidedBy: string;
+  rationale?: string;
+  subjectRef?: string;
+  /** Must be true — hard fence against accidental automation. */
+  humanConfirmed: true;
+  idempotencyKey?: string;
+};
+
+export type RecordHumanAcceptanceResult =
+  | {
+      status: "recorded" | "replay";
+      event: CanonicalEvent<"AcceptanceDecision">;
+      local_sequence: number;
+      outbox_id: number;
+      request_fingerprint: string;
+      protected_value_id: string;
+    }
+  | {
+      status: "failed";
+      error: string;
+    };
+
+export type AgenticFeedBackfillResult = {
+  schema: "carpeos.agentic.feed-backfill/v1";
+  scanned: number;
+  enqueued: number;
+  already_present: number;
+  skipped: number;
+  reason_codes: string[];
+};
+
 export type LocalCanonicalEventSnapshot = {
   source: "canonical" | "inbox";
   local_sequence: number | null;
@@ -1172,6 +1212,326 @@ export class LocalCaptureStore {
         valid_time_defaulted: input.validTime === undefined,
       };
     });
+  }
+
+  /**
+   * Human-only AcceptanceDecision append (never used by agentic auto path).
+   * Requires humanConfirmed: true and a non-machine decidedBy actor.
+   */
+  recordHumanAcceptanceDecision(input: RecordHumanAcceptanceInput): RecordHumanAcceptanceResult {
+    if (input.humanConfirmed !== true) {
+      return { status: "failed", error: "humanConfirmed must be true (fail-closed)" };
+    }
+    const decidedBy = input.decidedBy.trim();
+    if (decidedBy.length < 2) {
+      return { status: "failed", error: "decidedBy (human actor) is required" };
+    }
+    if (/^(agent|system|llm|flash|auto|runner|bot)([._-]|$)/i.test(decidedBy)) {
+      return {
+        status: "failed",
+        error: "decidedBy must be a human actor id (machine ids rejected)",
+      };
+    }
+    if (input.claimRefs.length === 0) {
+      return { status: "failed", error: "claimRefs is required" };
+    }
+    if (
+      input.decision !== "accepted" &&
+      input.decision !== "rejected" &&
+      input.decision !== "needs_review"
+    ) {
+      return { status: "failed", error: `invalid decision: ${String(input.decision)}` };
+    }
+
+    // Resolve claim_ids against draft/active Claims in this trust zone.
+    const claimIds = [...new Set(input.claimRefs.map((c) => c.trim()).filter(Boolean))];
+    const foundClaims = this.listCanonicalEventSnapshots({
+      visibleTrustZoneIds: [this.trustZone.trust_zone_id],
+      eventTypes: ["Claim"],
+    }).filter((snap) => {
+      if (snap.event.event_type !== "Claim") return false;
+      return claimIds.includes(snap.event.payload.claim_id);
+    });
+    if (foundClaims.length !== claimIds.length) {
+      const found = new Set(
+        foundClaims
+          .map((s) => (s.event.event_type === "Claim" ? s.event.payload.claim_id : ""))
+          .filter(Boolean),
+      );
+      const missing = claimIds.filter((id) => !found.has(id));
+      return {
+        status: "failed",
+        error: `claim_refs not found in trust zone: ${missing.join(",")}`,
+      };
+    }
+
+    const recordedAt = this.clock.now().toISOString();
+    const normalizedInput = {
+      claim_refs: [...claimIds].sort(),
+      decision: input.decision,
+      decided_by: decidedBy,
+      rationale: input.rationale?.trim() || null,
+      subject_ref: input.subjectRef ?? this.projectId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      human_confirmed: true as const,
+    };
+    const requestFingerprint = fingerprintObject({
+      tool: "human_acceptance_decision",
+      ...normalizedInput,
+    });
+    const idempotencyKey =
+      input.idempotencyKey ?? `idem_${hashHex(stableJson(normalizedInput)).slice(0, 32)}`;
+    if (!isIdempotencyKey(idempotencyKey)) {
+      return { status: "failed", error: "idempotency_key must match idem_[A-Za-z0-9_-]{16,128}" };
+    }
+    const eventDigest = hashHex(
+      stableJson({
+        trust_zone_id: this.trustZone.trust_zone_id,
+        idempotency_key: idempotencyKey,
+        request_fingerprint: requestFingerprint,
+      }),
+    );
+    const protectedValueId = `pv_${eventDigest.slice(0, 24)}`;
+    const protectedPayload = Buffer.from(
+      stableJson({
+        tool: "human_acceptance_decision",
+        decided_at: recordedAt,
+        ...normalizedInput,
+      }),
+      "utf8",
+    );
+    const encrypted = encrypt(protectedPayload, this.keyBytes);
+    const event: CanonicalEvent<"AcceptanceDecision"> = {
+      schema_version: "v1",
+      event_id: `evt_${eventDigest.slice(0, 32)}`,
+      event_type: "AcceptanceDecision",
+      subject_ref: normalizeIdentifier(normalizedInput.subject_ref),
+      valid_time: { start: recordedAt, end: null },
+      recorded_time: { start: recordedAt, end: null },
+      lifecycle_status: "active",
+      epistemic_authority: "verified",
+      trust_zone: this.trustZone,
+      provenance: foundClaims.map((snap) => ({
+        ref_type: "event" as const,
+        ref_id: snap.event_id,
+        relationship: "supports" as const,
+      })),
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      payload: {
+        decision_id: `decision_${eventDigest.slice(32, 56)}`,
+        claim_refs: normalizedInput.claim_refs,
+        decision: input.decision,
+        decided_by: decidedBy,
+        decided_at: recordedAt,
+        ...(input.rationale !== undefined && input.rationale.trim().length > 0
+          ? { rationale: input.rationale.trim() }
+          : {}),
+      },
+    };
+    try {
+      assertCanonicalEventConformance(event);
+    } catch (error) {
+      return {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    const eventJson = stableJson(event);
+    const syncRequest: SyncPushRequest = {
+      schema_version: "v1",
+      request_id: `req_${hashHex(stableJson({ event_id: event.event_id, client_id: this.clientId })).slice(0, 32)}`,
+      client_id: this.clientId,
+      trust_zone_id: this.trustZone.trust_zone_id,
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      events: [event],
+      erasures: [],
+    };
+    const syncConformance = validateConformance("syncApi", syncRequest);
+    if (!syncConformance.valid) {
+      return {
+        status: "failed",
+        error: `invalid sync push request: ${syncConformance.errors.join("; ")}`,
+      };
+    }
+
+    try {
+      return this.withImmediateTransaction(() => {
+        const existing = this.findEventByIdempotency(this.trustZone.trust_zone_id, idempotencyKey);
+        if (existing !== undefined) {
+          const existingEvent = JSON.parse(
+            existing.event_json,
+          ) as CanonicalEvent<"AcceptanceDecision">;
+          if (existingEvent.request_fingerprint !== requestFingerprint) {
+            throw new IdempotencyConflictError({
+              idempotencyKey,
+              existingFingerprint: existingEvent.request_fingerprint,
+              incomingFingerprint: requestFingerprint,
+            });
+          }
+          return {
+            status: "replay" as const,
+            event: existingEvent,
+            local_sequence: Number(existing.local_sequence),
+            outbox_id: this.findOutboxIdForEvent(existingEvent.event_id),
+            request_fingerprint: requestFingerprint,
+            protected_value_id: existing.protected_value_id,
+          };
+        }
+
+        this.db
+          .prepare(`
+            INSERT INTO protected_values (
+              protected_value_id, vault_ref, key_ref, nonce_ref, tag_ref,
+              nonce, tag, ciphertext, plaintext_digest, size_bytes, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            protectedValueId,
+            "vault_local",
+            "key_local_active",
+            `nonce_${protectedValueId.slice(3)}`,
+            `tag_${protectedValueId.slice(3)}`,
+            encrypted.nonce,
+            encrypted.tag,
+            encrypted.ciphertext,
+            hashHex(protectedPayload),
+            protectedPayload.byteLength,
+            recordedAt,
+          );
+
+        const eventInsert = this.db
+          .prepare(`
+            INSERT INTO canonical_events (
+              event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+              protected_value_id, event_json, recorded_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            event.event_id,
+            event.event_type,
+            this.trustZone.trust_zone_id,
+            idempotencyKey,
+            requestFingerprint,
+            protectedValueId,
+            eventJson,
+            recordedAt,
+          );
+
+        const outboxInsert = this.db
+          .prepare(`
+            INSERT INTO outbox (
+              event_id, state, attempts, available_at, push_request_json, created_at, updated_at
+            )
+            VALUES (?, 'pending', 0, ?, ?, ?, ?)
+          `)
+          .run(event.event_id, recordedAt, stableJson(syncRequest), recordedAt, recordedAt);
+
+        return {
+          status: "recorded" as const,
+          event,
+          local_sequence: Number(eventInsert.lastInsertRowid),
+          outbox_id: Number(outboxInsert.lastInsertRowid),
+          request_fingerprint: requestFingerprint,
+          protected_value_id: protectedValueId,
+        };
+      });
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        return { status: "failed", error: error.message };
+      }
+      return {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Backfill agentic capture feed from historical EvidenceArtifact events.
+   * Fail-open per row. No LLM. Product 6 complete path (E0 residual history).
+   */
+  backfillAgenticCaptureFeed(
+    input: {
+      limit?: number;
+      /** Only SessionEnd/Stop/PreCompact by default (admit-eligible hooks). */
+      hookEventNames?: readonly string[];
+    } = {},
+  ): AgenticFeedBackfillResult {
+    const limit = input.limit ?? 100;
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("backfill limit must be a positive integer");
+    }
+    const allowedHooks = new Set(
+      (input.hookEventNames ?? ["SessionEnd", "Stop", "PreCompact"]).map((h) => h.trim()),
+    );
+    const evidence = this.listCanonicalEventSnapshots({
+      visibleTrustZoneIds: [this.trustZone.trust_zone_id],
+      eventTypes: ["EvidenceArtifact"],
+    });
+
+    let scanned = 0;
+    let enqueued = 0;
+    let already_present = 0;
+    let skipped = 0;
+    const reason_codes: string[] = [];
+
+    for (const snap of evidence) {
+      if (enqueued >= limit) break;
+      if (snap.event.event_type !== "EvidenceArtifact") continue;
+      scanned += 1;
+      // Hook name may live in capture_requests metadata; fall back to SessionEnd.
+      let hook = "SessionEnd";
+      try {
+        const row = this.db
+          .prepare(`SELECT hook_event_name FROM capture_requests WHERE event_id = ? LIMIT 1`)
+          .get(snap.event_id) as { hook_event_name: string } | undefined;
+        if (row?.hook_event_name) hook = row.hook_event_name;
+      } catch {
+        // table may lack column in older DBs
+      }
+      if (!allowedHooks.has(hook)) {
+        skipped += 1;
+        continue;
+      }
+      const existing = this.db
+        .prepare(`SELECT source_event_id FROM agentic_capture_feed WHERE source_event_id = ?`)
+        .get(snap.event_id) as { source_event_id: string } | undefined;
+      if (existing !== undefined) {
+        already_present += 1;
+        continue;
+      }
+      try {
+        this.insertAgenticCaptureFeed({
+          source_event_id: snap.event_id,
+          artifact_id: snap.event.payload.artifact_id,
+          trust_zone_id: this.trustZone.trust_zone_id,
+          hook_event_name: hook,
+          protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+          created_at: this.clock.now().toISOString(),
+        });
+        enqueued += 1;
+      } catch {
+        skipped += 1;
+      }
+      if (enqueued >= limit) break;
+    }
+
+    if (enqueued > 0) reason_codes.push("feed_backfill_enqueued");
+    if (already_present > 0) reason_codes.push("feed_rows_already_present");
+    if (scanned === 0) reason_codes.push("no_evidence_scanned");
+
+    return {
+      schema: "carpeos.agentic.feed-backfill/v1",
+      scanned,
+      enqueued,
+      already_present,
+      skipped,
+      reason_codes,
+    };
   }
 
   /**

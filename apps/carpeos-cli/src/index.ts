@@ -10,12 +10,15 @@ import {
   AGENTIC_FLASH_MODEL_ID,
   AGENTIC_PLANE,
   AGENTIC_POLICY_VERSION,
+  backfillAgenticFeed,
   computeGraphDensityMetrics,
   countAgenticJobs,
   createFlashSpendState,
   evaluateAutoPromotePrecisionFromPath,
   evaluateGoldenManifest,
   getAgenticProposal,
+  humanAcceptAgenticClaim,
+  humanReviewAgenticHeld,
   listAgenticDraftClaimProposals,
   listAgenticHeldProposals,
   listAgenticProposals,
@@ -24,7 +27,10 @@ import {
   migrateAgenticJobs,
   migrateAgenticProposals,
   processAgenticOnce,
+  putReconcileReceipt,
+  reconcileAgenticUnits,
   runAgenticProposalPipeline,
+  unitsFromCanonicalEvents,
 } from "@carpeos/agentic";
 import { ADJUDICATION_POLICY_VERSION, isIdempotencyKey } from "@carpeos/capture";
 import {
@@ -1410,7 +1416,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag|reconcile|backfill|promote-held|accept-claim). See: carpeos help agentic",
     );
   }
 
@@ -1853,6 +1859,189 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         store.close();
       }
     }
+    case "reconcile": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+          limit: { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const store = openStore(options, env);
+      const db = openAgenticDb(runtimeDir);
+      try {
+        const limit = Number(parsed.values.limit ?? "100");
+        const events = store
+          .listCanonicalEventSnapshots({
+            visibleTrustZoneIds: [store.trustZone.trust_zone_id],
+          })
+          .map((row) => row.event);
+        const units = unitsFromCanonicalEvents(events);
+        const report = reconcileAgenticUnits({
+          units,
+          limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 100,
+        });
+        putReconcileReceipt(db, report, store.trustZone.trust_zone_id);
+        writeJson(process.stdout, {
+          ok: report.ok,
+          command: "agentic.reconcile",
+          policy_version: AGENTIC_POLICY_VERSION,
+          trust_zone_id: store.trustZone.trust_zone_id,
+          report,
+          note: "E10 actions are proposals for human hold path only; no auto AcceptanceDecision",
+        });
+        return report.ok ? 0 : 1;
+      } finally {
+        store.close();
+        db.close();
+      }
+    }
+    case "backfill": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+          limit: { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const store = openStore(options, env);
+      try {
+        const limit = Number(parsed.values.limit ?? "100");
+        const result = backfillAgenticFeed({
+          store,
+          limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 100,
+        });
+        writeJson(process.stdout, {
+          ok: true,
+          command: "agentic.backfill",
+          result,
+          next: "carpeos agentic run --once --materialize",
+        });
+        return 0;
+      } finally {
+        store.close();
+      }
+    }
+    case "promote-held": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "event-id": { type: "string" },
+          reject: { type: "boolean", default: false },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const eventId = parsed.values["event-id"]?.trim();
+      if (eventId === undefined || eventId.length === 0) {
+        throw new CliUsageError("agentic promote-held requires --event-id <evt_…>");
+      }
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const store = openStore(options, env);
+      try {
+        const result = humanReviewAgenticHeld({
+          store,
+          source_event_id: eventId,
+          decision: parsed.values.reject === true ? "reject" : "promote",
+        });
+        writeJson(process.stdout, {
+          ok: result.ok,
+          command: "agentic.promote-held",
+          result,
+        });
+        return result.ok ? 0 : 1;
+      } finally {
+        store.close();
+      }
+    }
+    case "accept-claim": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "claim-id": { type: "string" },
+          "decided-by": { type: "string" },
+          decision: { type: "string", default: "accepted" },
+          rationale: { type: "string" },
+          "human-confirmed": { type: "boolean", default: false },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const claimId = parsed.values["claim-id"]?.trim();
+      const decidedBy = parsed.values["decided-by"]?.trim();
+      if (claimId === undefined || claimId.length === 0) {
+        throw new CliUsageError("agentic accept-claim requires --claim-id <claim_…>");
+      }
+      if (decidedBy === undefined || decidedBy.length === 0) {
+        throw new CliUsageError("agentic accept-claim requires --decided-by <human-actor-id>");
+      }
+      if (parsed.values["human-confirmed"] !== true) {
+        throw new CliUsageError(
+          "agentic accept-claim requires --human-confirmed (hard fence; no auto AcceptanceDecision)",
+        );
+      }
+      const decisionRaw = (parsed.values.decision ?? "accepted").trim();
+      if (
+        decisionRaw !== "accepted" &&
+        decisionRaw !== "rejected" &&
+        decisionRaw !== "needs_review"
+      ) {
+        throw new CliUsageError(
+          "agentic accept-claim --decision must be accepted|rejected|needs_review",
+        );
+      }
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const store = openStore(options, env);
+      try {
+        const result = humanAcceptAgenticClaim({
+          store,
+          claim_id: claimId,
+          decision: decisionRaw,
+          decided_by: decidedBy,
+          human_confirmed: true,
+          ...(parsed.values.rationale !== undefined ? { rationale: parsed.values.rationale } : {}),
+        });
+        writeJson(process.stdout, {
+          ok: result.ok,
+          command: "agentic.accept-claim",
+          result,
+        });
+        return result.ok ? 0 : 1;
+      } finally {
+        store.close();
+      }
+    }
     case "graphrag": {
       const parsed = parseArgs({
         args: [...rest],
@@ -2167,6 +2356,10 @@ USAGE
   carpeos agentic precision [--path <golden-manifest.json>]
   carpeos agentic graph-metrics [--home <path>] [--rebuild]
   carpeos agentic graphrag [--path <query-set.json>] [--hit-rate-min 0.9]
+  carpeos agentic reconcile [--limit N]
+  carpeos agentic backfill [--limit N]
+  carpeos agentic promote-held --event-id <evt_…> [--reject]
+  carpeos agentic accept-claim --claim-id <claim_…> --decided-by <human> --human-confirmed [--decision accepted|rejected|needs_review]
 
 SUBCOMMANDS
   status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
@@ -2178,6 +2371,10 @@ SUBCOMMANDS
   precision    P3 offline auto-promote precision suite (must ≥ 0.90; zero must_not leaks)
   graph-metrics  P4 meaning graph density (rebuild graph_v2; projection only)
   graphrag     P6 offline GraphRAG query set (typed promoted units > evidence residue)
+  reconcile    E10 deterministic dedupe/contradict proposals (human hold path only)
+  backfill     Enqueue historical EvidenceArtifact rows into agentic capture feed
+  promote-held Human promote/reject agentic_v1 held Observation disposition
+  accept-claim Human AcceptanceDecision for a draft Claim (requires --human-confirmed)
 
 HARD FENCES
   - Capture inserts feed only (no LLM/network/await in capture transaction)

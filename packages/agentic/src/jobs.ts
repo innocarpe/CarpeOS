@@ -430,6 +430,7 @@ function assertJob(job: AgenticJob): void {
     "gate",
     "materialize",
     "project",
+    "reconcile",
   ];
   if (!stages.includes(job.stage)) {
     throw new Error(`invalid stage: ${job.stage}`);

@@ -7,18 +7,21 @@
  */
 
 export * from "./admit.js";
+export * from "./backfill.js";
 export * from "./claims.js";
 export * from "./digest.js";
 export * from "./flash.js";
 export * from "./gate.js";
 export * from "./golden.js";
 export * from "./graph-metrics.js";
+export * from "./human-review.js";
 export * from "./jobs.js";
 export * from "./materialize.js";
 export * from "./pack.js";
 export * from "./pipeline.js";
 export * from "./precision.js";
 export * from "./proposals.js";
+export * from "./reconcile.js";
 export * from "./runner.js";
 export type { SqlDatabase, SqlStatement } from "./sql.js";
 export * from "./stages.js";
