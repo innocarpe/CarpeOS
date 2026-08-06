@@ -1,0 +1,257 @@
+{
+  "fixture": "prior_reviewable_v1",
+  "fixture_input": {
+    "scope": "scope_fixture_prior",
+    "prior_run_id": "run_fixture_prior_0",
+    "current_run_id": "run_fixture_prior_1",
+    "prior_row": "row_fixture_prior_0",
+    "prior_receipt": "rev_fixture_prior_0",
+    "current_attempt": "att_fixture_prior_1",
+    "current_proposal": "prop_fixture_prior_1",
+    "current_row": "row_fixture_prior_1",
+    "current_transition": "tr_fixture_prior_1",
+    "digest_namespace": "fixture_input_excluded_from_projection",
+    "identity_derivation": "generated_from_frozen_b1_formulas",
+    "human_labels_are_nonproduction": true,
+    "scope_members": {
+      "artifact_id": "artifact_f612dc3cddc5f92f",
+      "config_identity": "cfg_2b4dddefcb92c998",
+      "evaluation_identity": "eval_743ab4dd29f12f87",
+      "operation": "extract",
+      "pack_digest": "sha256:fe9e4920d4a9c839bc5a65b9de2c6ce1ae7fe90f69c0e28480911e1e9858cbb5",
+      "pack_id": "pack_93f3a715da893fbe",
+      "proposal_policy_version": "proposal_policy_v1",
+      "redaction_policy_id": "redact_v1",
+      "selected_model_id": "model_synthetic_primary",
+      "source_event_id": "event_bbeeed71c03a4646",
+      "trust_zone_id": "tz_6c87e6016dc7da3b"
+    },
+    "segment_bindings": {},
+    "profile_digest_binding": "fixture_input:profile_prior"
+  },
+  "run_record": {
+    "schema": "carpeos.llm-run/v1",
+    "run_id": "run_e4a91974f0d61034",
+    "run_scope_key": "scope_b116618cd15d610a",
+    "run_ordinal": 1,
+    "proposal_run_key": "prun_e4a91974f0d61034",
+    "operation": "extract",
+    "selected_model_id": "model_synthetic_primary",
+    "attempt_ids": [
+      "att_bc891530bc2908a6"
+    ],
+    "selected_attempt_ids": [
+      "att_bc891530bc2908a6"
+    ],
+    "status": "blocked",
+    "reason_code": "prior_reviewable_run",
+    "config_identity": "cfg_2b4dddefcb92c998",
+    "evaluation_identity": "eval_743ab4dd29f12f87",
+    "redaction_policy_id": "redact_v1",
+    "pack_id": "pack_93f3a715da893fbe",
+    "pack_digest": "sha256:fe9e4920d4a9c839bc5a65b9de2c6ce1ae7fe90f69c0e28480911e1e9858cbb5",
+    "canonical_input_digest": "sha256:05c953dca46608786356dce13795f681f94a8c0cbe99d5552666fb0aa2084f7e",
+    "audit_envelope": {
+      "created_at": "2026-08-06T00:00:00Z",
+      "updated_at": "2026-08-06T00:00:00Z",
+      "actor_ref": null,
+      "trace_ref": null
+    }
+  },
+  "attempt_records": [
+    {
+      "schema": "carpeos.llm-attempt/v1",
+      "attempt_id": "att_bc891530bc2908a6",
+      "run_scope_key": "scope_b116618cd15d610a",
+      "run_ordinal": 1,
+      "attempt_ordinal": 0,
+      "attempt_role": "primary",
+      "attempt_role_rank": 0,
+      "source_event_id": "event_bbeeed71c03a4646",
+      "artifact_id": "artifact_f612dc3cddc5f92f",
+      "trust_zone_id": "tz_6c87e6016dc7da3b",
+      "operation": "extract",
+      "provider_id": "synthetic",
+      "model_id": "model_synthetic_primary",
+      "adapter_version": "adapter_synthetic_v1",
+      "profile_id": "profile_4c45fbf295700c86",
+      "profile_digest": "sha256:4b9c55f476fe98f6eaded70dc5d1cfa55cd9698d9db9a3655a9aee04e12df40d",
+      "config_identity": "cfg_2b4dddefcb92c998",
+      "evaluation_identity": "eval_743ab4dd29f12f87",
+      "redaction_policy_id": "redact_v1",
+      "pack_id": "pack_93f3a715da893fbe",
+      "pack_digest": "sha256:fe9e4920d4a9c839bc5a65b9de2c6ce1ae7fe90f69c0e28480911e1e9858cbb5",
+      "state": "completed",
+      "result": {
+        "schema": "carpeos.llm-extract/v1",
+        "result": "no_candidate",
+        "candidates": [],
+        "citations": []
+      },
+      "result_digest": "sha256:4312b3bddfd4b0c4d9376f6ad7a4f1fbcc0c7194d2cfabaa63fd4286161a66e7",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    }
+  ],
+  "candidates": [],
+  "synthesis": null,
+  "prior": {
+    "row": {
+      "schema": "carpeos.proposal-row/v1",
+      "row_id": "row_2afe6eaf8317a730",
+      "run_scope_key": "scope_b116618cd15d610a",
+      "run_ordinal": 0,
+      "proposal_id": "prop_eb3cead7604ecb0f",
+      "status": "draft",
+      "reason_code": "awaiting_review",
+      "transition_seq": 0,
+      "selected_attempt_ids": [
+        "att_e1acaf8ef5d36932"
+      ],
+      "selected_candidate_ids": [
+        "cand_da67bbafdbaee728"
+      ],
+      "synthesis_id": "syn_a6502e3c69ae37bd",
+      "canonical_effect": "none",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    },
+    "receipt": {
+      "schema": "carpeos.proposal-review-receipt/v1",
+      "receipt_id": "receipt_57a9e6383193d942",
+      "run_scope_key": "scope_b116618cd15d610a",
+      "run_ordinal": 0,
+      "proposal_id": "prop_eb3cead7604ecb0f",
+      "review_key": "rev_c968a1de97e16c4e",
+      "review_state": "reviewable",
+      "actor_ref": null,
+      "outcome": null,
+      "canonical_effect": "none",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    }
+  },
+  "output": {
+    "schema": "carpeos.reducer-output/v1",
+    "run_scope_key": "scope_b116618cd15d610a",
+    "run_ordinal": 1,
+    "run_id": "run_e4a91974f0d61034",
+    "proposal_id": "prop_16dfef15b0b967f3",
+    "status": "blocked",
+    "reason_code": "prior_reviewable_run",
+    "selected_attempt_ids": [
+      "att_bc891530bc2908a6"
+    ],
+    "selected_candidate_ids": [],
+    "synthesis_id": null,
+    "proposal_row": {
+      "schema": "carpeos.proposal-row/v1",
+      "row_id": "row_c46d1bd1fb8317c1",
+      "run_scope_key": "scope_b116618cd15d610a",
+      "run_ordinal": 1,
+      "proposal_id": "prop_16dfef15b0b967f3",
+      "status": "blocked",
+      "reason_code": "prior_reviewable_run",
+      "transition_seq": 0,
+      "selected_attempt_ids": [
+        "att_bc891530bc2908a6"
+      ],
+      "selected_candidate_ids": [],
+      "synthesis_id": null,
+      "canonical_effect": "none",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    },
+    "transitions": [
+      {
+        "schema": "carpeos.proposal-transition/v1",
+        "transition_id": "tr_bedddf19e81fea4e",
+        "run_scope_key": "scope_b116618cd15d610a",
+        "run_ordinal": 1,
+        "proposal_id": "prop_16dfef15b0b967f3",
+        "transition_seq": 0,
+        "from_status": "blocked",
+        "to_status": "blocked",
+        "reason_code": "prior_reviewable_run",
+        "review_key": "rev_c968a1de97e16c4e",
+        "canonical_effect": "none",
+        "audit_envelope": {
+          "created_at": "2026-08-06T00:00:00Z",
+          "updated_at": "2026-08-06T00:00:00Z",
+          "actor_ref": null,
+          "trace_ref": null
+        }
+      }
+    ],
+    "prior": {
+      "row": {
+        "schema": "carpeos.proposal-row/v1",
+        "row_id": "row_2afe6eaf8317a730",
+        "run_scope_key": "scope_b116618cd15d610a",
+        "run_ordinal": 0,
+        "proposal_id": "prop_eb3cead7604ecb0f",
+        "status": "draft",
+        "reason_code": "awaiting_review",
+        "transition_seq": 0,
+        "selected_attempt_ids": [
+          "att_e1acaf8ef5d36932"
+        ],
+        "selected_candidate_ids": [
+          "cand_da67bbafdbaee728"
+        ],
+        "synthesis_id": "syn_a6502e3c69ae37bd",
+        "canonical_effect": "none",
+        "audit_envelope": {
+          "created_at": "2026-08-06T00:00:00Z",
+          "updated_at": "2026-08-06T00:00:00Z",
+          "actor_ref": null,
+          "trace_ref": null
+        }
+      },
+      "receipt": {
+        "schema": "carpeos.proposal-review-receipt/v1",
+        "receipt_id": "receipt_57a9e6383193d942",
+        "run_scope_key": "scope_b116618cd15d610a",
+        "run_ordinal": 0,
+        "proposal_id": "prop_eb3cead7604ecb0f",
+        "review_key": "rev_c968a1de97e16c4e",
+        "review_state": "reviewable",
+        "actor_ref": null,
+        "outcome": null,
+        "canonical_effect": "none",
+        "audit_envelope": {
+          "created_at": "2026-08-06T00:00:00Z",
+          "updated_at": "2026-08-06T00:00:00Z",
+          "actor_ref": null,
+          "trace_ref": null
+        }
+      }
+    }
+  },
+  "expected": {
+    "status": "blocked",
+    "reason_code": "prior_reviewable_run",
+    "selected_attempt_ids": [
+      "att_bc891530bc2908a6"
+    ],
+    "selected_candidate_ids": [],
+    "synthesis_id": null,
+    "output_sha256": "7358225464e3defec3adba8d6b92316e3b3fea02d155667a5a71132ea4cba7f0"
+  }
+}
