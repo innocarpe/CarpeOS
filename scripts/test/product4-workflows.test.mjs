@@ -43,7 +43,7 @@ test("M4 keeps the raw producer unprivileged and bound to pull_request C", () =>
   assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
   assert.match(source, /--sandbox-receipt/);
   assert.match(source, /bwrap/);
-  assert.match(source, /setpriv --no-new-privs/);
+  assert.match(source, /setpriv\s+--no-new-privs/);
   assert.match(source, /sandbox-probe\.json/);
 });
 

@@ -563,15 +563,20 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
       // A runner may not have every conventional runtime directory.
     }
   }
-  bwrapArgs.push("--", process.execPath, "/cli/apps/carpeos-cli/dist/index.js", ...args);
-  const result = spawnSync(
+  bwrapArgs.push(
+    "--",
     "setpriv",
+    "--no-new-privs",
+    "--inh-caps=-all",
+    "--ambient-caps=-all",
+    "--",
+    process.execPath,
+    "/cli/apps/carpeos-cli/dist/index.js",
+    ...args,
+  );
+  const result = spawnSync(
+    "/bin/sh",
     [
-      "--no-new-privs",
-      "--inh-caps=-all",
-      "--ambient-caps=-all",
-      "--",
-      "/bin/sh",
       "-ceu",
       'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
       "product4-p02-sandbox",
