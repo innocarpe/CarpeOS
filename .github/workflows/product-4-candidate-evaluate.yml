@@ -32,6 +32,8 @@ jobs:
       - name: Configure disposable runner paths
         run: |
           echo "CARPEOS_HOME=$RUNNER_TEMP/carpeos-product4" >> "$GITHUB_ENV"
+          echo "CARPEOS_SANDBOX_WORK=$RUNNER_TEMP/product4-sandbox-work" >> "$GITHUB_ENV"
+          echo "CARPEOS_SANDBOX_OUT=$RUNNER_TEMP/product4-sandbox-out" >> "$GITHUB_ENV"
 
       - name: Check out candidate head C
         uses: actions/checkout@v7
@@ -59,12 +61,77 @@ jobs:
       - name: Initialize a disposable synthetic store
         run: node apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
 
+      - name: Establish the trusted sandbox receipt
+        run: |
+          set -euo pipefail
+          mkdir -p "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
+          node_path="$(readlink -f "$(command -v node)")"
+          node_dir="$(dirname "$node_path")"
+          sandbox=(
+            bwrap
+            --die-with-parent
+            --new-session
+            --unshare-all
+            --unshare-net
+            --clearenv
+            --ro-bind "$GITHUB_WORKSPACE" /candidate
+            --bind "$CARPEOS_SANDBOX_WORK" /work
+            --bind "$CARPEOS_SANDBOX_OUT" /output
+            --tmpfs /tmp
+            --proc /proc
+            --dev /dev
+            --dir /run
+            --chdir /candidate
+            --setenv HOME /tmp
+            --setenv PATH /usr/local/bin:/usr/bin:/bin
+            --cap-drop ALL
+            --rlimit-nproc 64
+            --rlimit-as 1073741824
+            --rlimit-fsize 104857600
+            --ro-bind /usr /usr
+            --ro-bind /bin /bin
+            --ro-bind /lib /lib
+            --ro-bind /lib64 /lib64
+            --ro-bind /etc /etc
+            --ro-bind "$node_dir" "$node_dir"
+          )
+          setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all --bounding-set=-all -- \
+            "${sandbox[@]}" "$node_path" -e 'const fs=require("node:fs"); const status=fs.readFileSync("/proc/self/status","utf8"); if (!status.includes("NoNewPrivs:" + String.fromCharCode(9) + "1")) process.exit(23); fs.writeFileSync("/output/sandbox-probe.json", JSON.stringify({backend:"bubblewrap",network:"disabled",candidate_inputs:"read_only",trusted_mounts:false,writable_paths:["/home","/output","/tmp"],capabilities:"dropped",no_new_privileges:true,process_limit:64,memory_limit_mb:1024}));'
+          probe_sha256="$(sha256sum "$CARPEOS_SANDBOX_OUT/sandbox-probe.json" | cut -d' ' -f1)"
+          expected_probe_sha256="$(node --input-type=module -e 'import { sandboxProbeDigest } from "./scripts/product4/p02-runner.mjs"; process.stdout.write(sandboxProbeDigest())')"
+          test "$probe_sha256" = "$expected_probe_sha256"
+          tree_sha256="$(node scripts/product4/tree-digest.mjs "$GITHUB_WORKSPACE" HEAD)"
+          export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
+          export HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          export BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          export TREE_SHA256="$tree_sha256"
+          export PROBE_SHA256="$probe_sha256"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          import { buildP02SandboxReceipt } from "./scripts/product4/p02-runner.mjs";
+
+          const receipt = buildP02SandboxReceipt({
+            candidateRoot: process.env.GITHUB_WORKSPACE,
+            headSha: process.env.HEAD_SHA,
+            baseSha: process.env.BASE_SHA,
+            treeSha256: process.env.TREE_SHA256,
+            probeSha256: process.env.PROBE_SHA256,
+          });
+          writeFileSync(process.env.RECEIPT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, {
+            encoding: "utf8",
+            mode: 0o400,
+          });
+          NODE
+          chmod -R a-w "$CARPEOS_SANDBOX_OUT"
       - name: Replay the exact read-only P02 command twice
         run: |
           mkdir -p "$RUNNER_TEMP/product4-artifacts"
           NODE_NO_WARNINGS=1 node scripts/product4/p02-runner.mjs \
             --home "$CARPEOS_HOME" \
             --workspace-root "$GITHUB_WORKSPACE" \
+            --cli-root "$GITHUB_WORKSPACE" \
+            --candidate-root "$GITHUB_WORKSPACE" \
+            --sandbox-receipt "$CARPEOS_SANDBOX_OUT/sandbox-receipt.json" \
             --output "$RUNNER_TEMP/product4-artifacts/p02-receipt.json"
           tree_sha256="$(node scripts/product4/tree-digest.mjs "$GITHUB_WORKSPACE" HEAD)"
           node scripts/product4/raw-producer.mjs \

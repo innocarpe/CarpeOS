@@ -40,6 +40,10 @@ test("M4 keeps the raw producer unprivileged and bound to pull_request C", () =>
   assert.match(source, /tree-digest\.mjs/);
   assert.match(source, /p02-runner\.mjs/);
   assert.match(source, /raw-producer\.mjs/);
+  assert.match(source, /--sandbox-receipt/);
+  assert.match(source, /bwrap/);
+  assert.match(source, /setpriv --no-new-privs/);
+  assert.match(source, /sandbox-probe\.json/);
 });
 
 test("M4 isolates base-owned evaluation from the untrusted candidate workspace", () => {
