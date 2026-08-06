@@ -226,13 +226,22 @@ describe("Product 4 M0 contracts", () => {
     expect(evaluatorAttestation.schema_version).toBe("carpeos.product4-evaluator-attestation/v1");
 
     const duplicatePredicate = structuredClone(evaluatorAttestation);
-    duplicatePredicate.predicate_results[15].predicate_id = "identity_bound";
+    const duplicatePredicateItem = duplicatePredicate.predicate_results[15];
+    expect(duplicatePredicateItem).toBeDefined();
+    if (duplicatePredicateItem !== undefined)
+      duplicatePredicateItem.predicate_id = "identity_bound";
     expect(validator?.(duplicatePredicate)).toBe(false);
     const reorderedPredicates = structuredClone(evaluatorAttestation);
-    [reorderedPredicates.predicate_results[0], reorderedPredicates.predicate_results[1]] = [
-      reorderedPredicates.predicate_results[1],
-      reorderedPredicates.predicate_results[0],
-    ];
+    const firstPredicate = reorderedPredicates.predicate_results[0];
+    const secondPredicate = reorderedPredicates.predicate_results[1];
+    expect(firstPredicate).toBeDefined();
+    expect(secondPredicate).toBeDefined();
+    if (firstPredicate !== undefined && secondPredicate !== undefined) {
+      [reorderedPredicates.predicate_results[0], reorderedPredicates.predicate_results[1]] = [
+        secondPredicate,
+        firstPredicate,
+      ];
+    }
     expect(validator?.(reorderedPredicates)).toBe(false);
 
     const malformedHead = structuredClone(evaluatorAttestation);
