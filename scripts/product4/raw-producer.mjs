@@ -8,6 +8,7 @@ import {
   PRODUCT4_REPOSITORY_ID,
   sha256Hex,
 } from "./policy-identity.mjs";
+import { assertP02Receipt } from "./p02-replay.mjs";
 
 export const RAW_REPORT_SCHEMA = "product4-candidate-report-v1";
 const SHA1 = /^[0-9a-f]{40}$/;
@@ -63,7 +64,12 @@ export function buildRawCandidateReport(input) {
   assertP02(input.p02, errors);
   assertZeroWrite(input.zero_write, errors);
   assertNoForbiddenKeys(input, errors);
-  if (errors.length > 0) throwRawError("invalid_report", errors.join("; "));
+  if (errors.length > 0) {
+    const code = errors.some((error) => error.startsWith("p02_evidence_mismatch:"))
+      ? "p02_evidence_mismatch"
+      : "invalid_report";
+    throwRawError(code, errors.join("; "));
+  }
 
   const report = {
     schema_version: RAW_REPORT_SCHEMA,
@@ -135,7 +141,12 @@ export function assertRawCandidateReport(report) {
     assertZeroWrite(report.observations.zero_write, errors);
   }
   assertNoForbiddenKeys(report, errors);
-  if (errors.length > 0) throwRawError("invalid_report", errors.join("; "));
+  if (errors.length > 0) {
+    const code = errors.some((error) => error.startsWith("p02_evidence_mismatch:"))
+      ? "p02_evidence_mismatch"
+      : "invalid_report";
+    throwRawError(code, errors.join("; "));
+  }
   return report;
 }
 
@@ -172,6 +183,14 @@ function assertCommands(commands, errors) {
       command.exit_code > 255
     )
       errors.push("command exit_code is invalid");
+  }
+  const replayA = commands.find((command) => command?.command_id === "p02_replay_a");
+  const replayB = commands.find((command) => command?.command_id === "p02_replay_b");
+  if (replayA !== undefined && replayB !== undefined) {
+    for (const key of ["invocation_digest", "exit_code", "stdout_sha256", "stderr_sha256"]) {
+      if (replayA[key] !== replayB[key])
+        errors.push(`p02_evidence_mismatch: replay command ${key} differs between A and B`);
+    }
   }
 }
 
@@ -245,9 +264,30 @@ export function buildRawCandidateReportFromP02({
   evaluatedAt = new Date().toISOString(),
 }) {
   if (!isRecord(p02Receipt)) throwRawError("invalid_p02", "P02 receipt must be an object");
+  try {
+    assertP02Receipt(p02Receipt);
+  } catch (error) {
+    throwRawError("invalid_p02", error instanceof Error ? error.message : "P02 receipt is invalid");
+  }
   const runs = [p02Receipt.run_a, p02Receipt.run_b];
   if (runs.some((run) => !isRecord(run)))
     throwRawError("invalid_p02", "P02 replay runs are required");
+  for (const key of [
+    "command_bytes",
+    "tool_version",
+    "environment_digest",
+    "exit_code",
+    "stdout_bytes",
+    "stderr_bytes",
+    "plan_digest",
+    "rows",
+    "high_water",
+    "ids",
+    "provenance_digest",
+  ]) {
+    if (JSON.stringify(runs[0][key]) !== JSON.stringify(runs[1][key]))
+      throwRawError("p02_evidence_mismatch", `P02 replay ${key} differs between A and B`);
+  }
   const commands = runs.map((run, index) => ({
     command_id: index === 0 ? "p02_replay_a" : "p02_replay_b",
     invocation_digest: digestJson({

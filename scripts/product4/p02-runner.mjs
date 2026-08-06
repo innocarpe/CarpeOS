@@ -619,8 +619,9 @@ export function readStoreObservation(home, observer) {
 
 /**
  * Compare immutable table preimages, not just row counts. Every observation is
- * compared to the baseline so update/delete and write-then-delete changes that
- * restore the final count remain visible at the between snapshot.
+ * compared to the baseline so in-place updates remain visible at the between
+ * snapshot. A database-version change without an attributable table preimage
+ * is fail-closed because this observer cannot identify the mutated table.
  */
 export function mutationProbeBetween(...observations) {
   if (observations.length < 2)
@@ -630,21 +631,33 @@ export function mutationProbeBetween(...observations) {
     );
   const baseline = observations[0];
   const mutation = {};
+  let tableMutationObserved = false;
   for (const key of Object.keys(ZERO_WRITE_TABLES)) {
     const changed = observations.slice(1).some((observation) => {
       const left = baseline?.table_preimages?.[key];
       const right = observation?.table_preimages?.[key];
-      return (
+      const tableChanged =
         left === undefined ||
         right === undefined ||
         left.count !== right.count ||
         left.preimage_sha256 !== right.preimage_sha256 ||
         !equalJson(left.row_digests, right.row_digests) ||
-        !equalRelevantHighWater(baseline.highWater, observation.highWater, key) ||
-        (baseline.data_version !== undefined && observation?.data_version !== baseline.data_version)
-      );
+        !equalRelevantHighWater(baseline.highWater, observation.highWater, key);
+      if (tableChanged) tableMutationObserved = true;
+      return tableChanged;
     });
     mutation[key] = changed ? 1 : 0;
+  }
+  const databaseVersionChanged =
+    baseline?.data_version !== undefined &&
+    observations
+      .slice(1)
+      .some((observation) => observation?.data_version !== baseline.data_version);
+  if (databaseVersionChanged && !tableMutationObserved) {
+    throwRunnerError(
+      "mutation_observation_ambiguous",
+      "database data_version changed without an attributable zero-write table preimage",
+    );
   }
   return mutation;
 }

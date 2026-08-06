@@ -62,6 +62,9 @@ const HIGH_WATER_KEYS = [
 ];
 const EQUALITY_KEYS = [
   "command_bytes",
+  "tool_version",
+  "environment_digest",
+  "exit_code",
   "stdout_bytes",
   "stderr_bytes",
   "plan_digest",
@@ -291,16 +294,7 @@ export function buildP02Receipt({
     assertMutationObservation(mutationObservation);
   }
 
-  const equal = {
-    command_bytes: runA.command_bytes === runB.command_bytes,
-    stdout_bytes: runA.stdout_bytes === runB.stdout_bytes,
-    stderr_bytes: runA.stderr_bytes === runB.stderr_bytes,
-    plan_digest: runA.plan_digest === runB.plan_digest,
-    rows: equalJson(runA.rows, runB.rows),
-    high_water: equalJson(runA.high_water, runB.high_water),
-    ids: equalJson(runA.ids, runB.ids),
-    provenance: runA.provenance_digest === runB.provenance_digest,
-  };
+  const equal = replayEquality(runA, runB);
   if (Object.values(equal).some((value) => value !== true)) {
     throwP02Error("non_deterministic_replay", "P02 runs are not byte- and observation-identical");
   }
@@ -378,6 +372,15 @@ export function assertP02Receipt(receipt) {
     EQUALITY_KEYS.some((key) => receipt.equality[key] !== true)
   ) {
     errors.push("all replay equality observations must be true");
+  }
+  if (isRecord(receipt.run_a) && isRecord(receipt.run_b)) {
+    const observedEquality = replayEquality(receipt.run_a, receipt.run_b);
+    if (
+      Object.values(observedEquality).some((value) => value !== true) ||
+      EQUALITY_KEYS.some((key) => receipt.equality[key] !== observedEquality[key])
+    ) {
+      errors.push("replay runs are not byte- and observation-identical");
+    }
   }
   assertMutationProbe(receipt.mutation_probe, errors);
 
@@ -702,6 +705,21 @@ function assertNoForbiddenKeys(value, errors, path = "$") {
 
 function equalJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+function replayEquality(runA, runB) {
+  return {
+    command_bytes: runA?.command_bytes === runB?.command_bytes,
+    tool_version: runA?.tool_version === runB?.tool_version,
+    environment_digest: runA?.environment_digest === runB?.environment_digest,
+    exit_code: runA?.exit_code === runB?.exit_code,
+    stdout_bytes: runA?.stdout_bytes === runB?.stdout_bytes,
+    stderr_bytes: runA?.stderr_bytes === runB?.stderr_bytes,
+    plan_digest: runA?.plan_digest === runB?.plan_digest,
+    rows: equalJson(runA?.rows, runB?.rows),
+    high_water: equalJson(runA?.high_water, runB?.high_water),
+    ids: equalJson(runA?.ids, runB?.ids),
+    provenance: runA?.provenance_digest === runB?.provenance_digest,
+  };
 }
 
 function isRecord(value) {

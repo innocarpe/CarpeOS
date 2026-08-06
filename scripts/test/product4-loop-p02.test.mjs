@@ -187,6 +187,32 @@ test("M3 creates a deterministic truthful no-analog P02 receipt", () => {
   assert.deepEqual(receipt.mutation_probe, mutationProbe);
   assertP02Receipt(receipt);
 });
+test("M3 accepts equal deterministic replays under the strict attestation predicate", () => {
+  const snapshot = syntheticStoreObservation(["a".repeat(64)], 1);
+  const observation = {
+    high_water: snapshot.highWater,
+    tables: snapshot.table_preimages,
+    data_version: snapshot.data_version,
+  };
+  const mutationObservation = {
+    before: observation,
+    between: structuredClone(observation),
+    after: structuredClone(observation),
+  };
+  const receipt = buildP02Receipt({
+    runA: strictRun,
+    runB: structuredClone(strictRun),
+    mutationProbe,
+    fixture: readMaintenanceStudyFixture(),
+    fixtureSha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+    mutationObservation,
+    strict: true,
+  });
+  assertP02Receipt(receipt);
+  assert.equal(receipt.equality.tool_version, true);
+  assert.equal(receipt.equality.environment_digest, true);
+  assert.equal(receipt.equality.exit_code, true);
+});
 
 test("M3 refuses non-identical replays and every non-zero write probe", () => {
   const changedStdout = structuredClone(baseRun);
@@ -202,6 +228,18 @@ test("M3 refuses non-identical replays and every non-zero write probe", () => {
     () => buildP02Receipt({ runA: baseRun, runB: changedHighWater, mutationProbe }),
     /not byte- and observation-identical/,
   );
+  for (const [field, value] of [
+    ["tool_version", "carpeos-cli-other"],
+    ["environment_digest", "d".repeat(64)],
+    ["exit_code", 1],
+  ]) {
+    const changed = structuredClone(baseRun);
+    changed[field] = value;
+    assert.throws(
+      () => buildP02Receipt({ runA: baseRun, runB: changed, mutationProbe }),
+      /not byte- and observation-identical|replay_failed/,
+    );
+  }
 
   const wrote = { ...mutationProbe, canonical_events: 1 };
   assert.throws(
@@ -271,10 +309,12 @@ test("M3 detects in-place updates despite unchanged table counts", () => {
   assert.equal(probe.review_rows, 0);
 });
 
-test("M3 detects write-then-delete mutations while restoring final counts", () => {
+test("M3 refuses unattributed transient mutations instead of claiming per-table detection", () => {
   const before = syntheticStoreObservation(["a".repeat(64)], 1);
   const between = syntheticStoreObservation(["a".repeat(64)], 2);
   const after = syntheticStoreObservation(["a".repeat(64)], 2);
-  const probe = mutationProbeBetween(before, between, after);
-  for (const key of mutationTableKeys) assert.equal(probe[key], 1);
+  assert.throws(
+    () => mutationProbeBetween(before, between, after),
+    /mutation_observation_ambiguous/,
+  );
 });
