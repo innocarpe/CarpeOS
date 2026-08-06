@@ -43,6 +43,9 @@ jobs:
       - name: Consume only the strict attestation as data
         run: |
           node scripts/product4/publisher-runner.mjs \
+            --head-sha "${{ github.event.workflow_run.head_sha }}" \
+            --run-id "${{ github.event.workflow_run.id }}" \
+            --artifact-name "product4-attestation" \
             --evaluator-result "$RUNNER_TEMP/product4-attestation/attestation.json" \
             --workflow-sha "${{ github.workflow_sha }}" \
             --output "$RUNNER_TEMP/product4-publication.json"
