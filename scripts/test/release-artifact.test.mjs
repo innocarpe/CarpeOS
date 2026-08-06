@@ -74,5 +74,10 @@ describe("release artifact workflow", () => {
     assert.ok(verifier < publish);
     assert.match(workflow, /publish:\n\s+name:[\s\S]*needs: release-gate/);
     assert.doesNotMatch(gate, /registry-url:|NODE_AUTH_TOKEN\x3a|id-token: write|npm publish/);
+    // upload-artifact@v4 skips dotpaths unless include-hidden-files is true.
+    assert.match(
+      gate,
+      /name: Preserve the exact gated artifact[\s\S]*include-hidden-files:\s*true[\s\S]*if-no-files-found:\s*error/,
+    );
   });
 });
