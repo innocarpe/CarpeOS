@@ -159,10 +159,24 @@ If row 3 is yes, or row 4 blows the PR budget without approval, **do not add to 
 
 ## Local verification (typical)
 
+**Hard rule for agents:** run the local preflight gate **before** `gh pr create` /
+push-for-review. Do not use GHA as a format/lint/public-boundary linter.
+
 ```bash
-# PR lean mirror
-pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test && pnpm public-boundary
-# or, if check == lean only:
+# Preferred — parallel PR-lean preflight (format∥lint∥boundary → build → typecheck∥test)
+make preflight
+# equivalents:
+pnpm preflight
+pnpm preflight:pr
+node scripts/preflight.mjs --mode=pr
+
+# Fast agent loop (not sufficient alone to open a PR)
+make preflight-quick
+
+# Auto-format then full preflight
+make preflight-fix
+
+# Sequential exact CI Checks step (also valid; slower than preflight)
 pnpm check
 
 # Workflow contract tests when editing Product 4 YAML
@@ -172,6 +186,10 @@ node --test scripts/test/product4-workflows.test.mjs
 gh run list --workflow CI --limit 5
 gh run view <id> --json jobs --jq '.jobs[].steps[] | {name, conclusion, startedAt, completedAt}'
 ```
+
+`scripts/preflight.mjs` also probes merge conflicts vs `origin/main` and prints
+Linux-only gaps (bubblewrap Product 4 sandbox, Gitleaks) so agents do not claim
+full CI parity on macOS.
 
 ## Install this skill for every harness
 

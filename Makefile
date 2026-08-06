@@ -9,7 +9,9 @@
 #
 #   make install                # pnpm install
 #   make build / test / lint    # Common package scripts
-#   make check                  # Full repo gate (pnpm check)
+#   make check                  # Full repo gate (pnpm check) — sequential CI mirror
+#   make preflight              # Local PR gate (parallel PR-lean; run before gh pr create)
+#   make preflight-quick        # Fast agent loop (format/lint/boundary + scoped tests)
 #   make help                   # Show this help
 # =============================================================================
 
@@ -49,17 +51,26 @@ help: ## Show available commands
 	@echo "  $(YELLOW)make format-check$(RESET)             - pnpm format:check"
 	@echo "  $(YELLOW)make public-boundary$(RESET)          - pnpm public-boundary"
 	@echo "  $(YELLOW)make labels-check$(RESET)             - pnpm labels:check"
-	@echo "  $(YELLOW)make check$(RESET)                    - Full gate (pnpm check)"
+	@echo "  $(YELLOW)make check$(RESET)                    - Sequential full gate (pnpm check / CI step)"
+	@echo ""
+	@echo "$(GREEN)Preflight (local, before push/PR):$(RESET)"
+	@echo "  $(YELLOW)make preflight$(RESET)                - Parallel PR-lean gate (default; required before PR)"
+	@echo "  $(YELLOW)make preflight-quick$(RESET)          - Fast format/lint/boundary + scoped tests"
+	@echo "  $(YELLOW)make preflight-pr$(RESET)             - Alias for make preflight"
+	@echo "  $(YELLOW)make preflight-full$(RESET)           - preflight + main-full smoke subset"
+	@echo "  $(YELLOW)make preflight-fix$(RESET)           - biome format --write then preflight"
 	@echo ""
 	@echo "$(BLUE)Examples:$(RESET)"
 	@echo "  make worktree pages            # ../$(PROJECT_NAME)-pages on worktree/pages"
 	@echo "  make worktree cloudflare-ops   # ../$(PROJECT_NAME)-cloudflare-ops"
 	@echo "  make remove-worktree pages"
+	@echo "  make preflight                 # green before gh pr create"
 	@echo ""
 	@echo "$(BLUE)Notes:$(RESET)"
 	@echo "  • New branches default to worktree/<name> from $(BASE_REF)"
 	@echo "  • Override base with BASE_REF=origin/main if needed"
 	@echo "  • Claude Code memory is symlinked from the main checkout when present"
+	@echo "  • Agents MUST run make preflight (or pnpm preflight) before opening a PR"
 	@echo ""
 
 # =============================================================================
@@ -191,6 +202,7 @@ status-worktree: ## Show worktree status
 
 .PHONY: install build test lint typecheck format format-check
 .PHONY: public-boundary labels-check check
+.PHONY: preflight preflight-quick preflight-pr preflight-full preflight-fix
 
 install: ## Install dependencies (pnpm install)
 	@$(PNPM) install
@@ -219,8 +231,22 @@ public-boundary: ## Public boundary scanner
 labels-check: ## Label catalog / PR label checks
 	@$(PNPM) labels:check
 
-check: ## Full repository gate
+check: ## Sequential full repository gate (exact CI Checks step)
 	@$(PNPM) check
+
+preflight: ## Parallel local PR-lean gate (run before gh pr create)
+	@$(PNPM) preflight:pr
+
+preflight-pr: preflight ## Alias for preflight
+
+preflight-quick: ## Fast agent loop preflight
+	@$(PNPM) preflight:quick
+
+preflight-full: ## Preflight + main-full smoke subset
+	@$(PNPM) preflight:full
+
+preflight-fix: ## Format then full preflight
+	@node scripts/preflight.mjs --mode=pr --fix-format
 
 # Treat positional worktree names as arguments, not unknown targets.
 %:

@@ -56,10 +56,22 @@ update PR description, ship branch, stack PR, draft PR for review.
 9. **Before creating a PR**, inspect `git log <base>..<head>` and
    `git diff <base>...<head> --stat`; confirm the PR has one semantic purpose,
    its base is intentional, and no unrelated commit/file has leaked in.
-10. **Title** — English Conventional Commit subject matching the semantic PR change
+10. **Local preflight is mandatory (hard gate)** — before `gh pr create` / push for
+    review, run the local PR-lean gate and keep it green:
+    - preferred: `make preflight` or `pnpm preflight` / `pnpm preflight:pr`
+    - auto-format then gate: `make preflight-fix`
+    - agent iteration only: `make preflight-quick` (not enough alone for PR open)
+    - preflight runs format/lint/public-boundary in parallel, then build, then
+      typecheck∥test, plus merge-tree conflict probe vs `origin/main`
+    - list the exact preflight command + `PREFLIGHT PASS` in the Validation table
+    - **Do not open a PR on a red preflight.** CI re-runs the same invariants; local
+      green is required to stop wasting Actions minutes on format/boundary nits
+    - still document Linux-only gaps (bubblewrap Product 4 sandbox, Gitleaks) as
+      `Not run — Linux GHA only` when applicable
+11. **Title** — English Conventional Commit subject matching the semantic PR change
     (and matching the kind label).
-11. **Length** — aim for a reviewable body: enough that a cold reviewer can understand problem, approach, risk, and how to verify without reading the whole diff. Prefer complete sentences over telegram bullets alone.
-12. **Post-create verify** — after create/edit, run the label gate below. Do not report
+12. **Length** — aim for a reviewable body: enough that a cold reviewer can understand problem, approach, risk, and how to verify without reading the whole diff. Prefer complete sentences over telegram bullets alone.
+13. **Post-create verify** — after create/edit, run the label gate below. Do not report
     the PR as done until it passes.
 
 ## Atomic commits vs semantic PRs
@@ -181,6 +193,11 @@ schemas, or projections.>
 ### Create
 
 ```bash
+# 0) Local PR-lean gate FIRST (hard fail closed)
+make preflight
+# or: pnpm preflight:pr
+# or: make preflight-fix   # if format drift is expected
+
 # pick kind from title/diff; never invent labels outside the catalog
 KIND=chore   # feat|fix|docs|spec|chore
 AREA=        # optional: capture|sync|retrieval|interfaces|infra
