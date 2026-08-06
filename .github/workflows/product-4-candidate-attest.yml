@@ -114,7 +114,7 @@ jobs:
             --ro-bind "$node_dir" "$node_dir"
             --ro-bind "$pnpm_dir" "$pnpm_dir"
           )
-          setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all --bounding-set=-all -- "${sandbox[@]}" /bin/sh -ceu '
+          setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all -- "${sandbox[@]}" /bin/sh -ceu '
             rm -rf /work/*
             cp -aL /candidate/. /work/
             chmod -R u+rwX /work

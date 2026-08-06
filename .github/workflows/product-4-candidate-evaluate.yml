@@ -95,7 +95,7 @@ jobs:
             --ro-bind /etc /etc
             --ro-bind "$node_dir" "$node_dir"
           )
-          setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all --bounding-set=-all -- \
+          setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all -- \
             "${sandbox[@]}" "$node_path" -e 'const fs=require("node:fs"); const status=fs.readFileSync("/proc/self/status","utf8"); if (!status.includes("NoNewPrivs:" + String.fromCharCode(9) + "1")) process.exit(23); fs.writeFileSync("/output/sandbox-probe.json", JSON.stringify({backend:"bubblewrap",network:"disabled",candidate_inputs:"read_only",trusted_mounts:false,writable_paths:["/home","/output","/tmp"],capabilities:"dropped",no_new_privileges:true,process_limit:64,memory_limit_mb:1024}));'
           probe_sha256="$(sha256sum "$CARPEOS_SANDBOX_OUT/sandbox-probe.json" | cut -d' ' -f1)"
           expected_probe_sha256="$(node --input-type=module -e 'import { sandboxProbeDigest } from "./scripts/product4/p02-runner.mjs"; process.stdout.write(sandboxProbeDigest())')"
