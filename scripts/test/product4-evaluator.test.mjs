@@ -18,6 +18,7 @@ import {
 import {
   assertBaseOwnedProtocolEvidence,
   assertCandidateWorkspaceBoundary,
+  assertStrictReplayEvidence,
   buildBaseOwnedProtocolEvidence,
   classifyImmutableCandidateScope,
   evaluateRawCandidate,
@@ -651,6 +652,29 @@ test("M4 production evaluator CLI fails closed without base-owned protocol evide
   assert.equal(result.status, 2);
   assert.match(result.stderr, /protocol_evidence_missing/);
   assert.equal(result.stdout, "");
+});
+test("M4 accepts equal deterministic replay evidence with distinct replay IDs", () => {
+  const replay = {
+    observations: {
+      commands: [
+        {
+          command_id: "p02_replay_a",
+          invocation_digest: "e".repeat(64),
+          stdout_sha256: "f".repeat(64),
+          stderr_sha256: "0".repeat(64),
+        },
+        {
+          command_id: "p02_replay_b",
+          invocation_digest: "e".repeat(64),
+          stdout_sha256: "f".repeat(64),
+          stderr_sha256: "0".repeat(64),
+        },
+      ],
+    },
+  };
+  assert.equal(assertStrictReplayEvidence(replay), true);
+  replay.observations.commands[1].stdout_sha256 = "1".repeat(64);
+  assert.equal(assertStrictReplayEvidence(replay), false);
 });
 
 test("M4 rejects caller-supplied all-true trusted predicates", () => {

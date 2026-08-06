@@ -1310,7 +1310,11 @@ function trustedStrictAttestation(rawReport) {
       stderr_sha256: command?.stderr_sha256,
     }),
   );
-  return evidence[0] !== evidence[1];
+  return evidence[0] === evidence[1];
+}
+
+export function assertStrictReplayEvidence(rawReport) {
+  return trustedStrictAttestation(rawReport);
 }
 
 function trustedObservations(p02Receipt, candidateExecution) {
