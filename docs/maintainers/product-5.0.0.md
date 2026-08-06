@@ -1,6 +1,7 @@
 # Product 5.0.0 — Definition of Done (maintainers)
 
-Status: **Draft-lane complete in-tree; M8 release seam deferred; npm major not cut**
+Status: **Draft-lane complete; ready for npm `5.0.0` cut when maintainer authorizes release**  
+M8 **release seam** remains deferred (install-smoke only; no invented 4.0 acceptance).
 
 Primary path: **DeepSeek Direct** (`deepseek-v4-flash`). OpenRouter not required.
 
@@ -42,16 +43,50 @@ PRD-v4 remains independently releasable; V5 never gates 4.0.0.
 - Cloudflare Worker telemetry deploy (operator-optional)
 - Claiming npm `@innocarpe/carpeos@5.0.0` without the release skill + maintainer publish authorization
 
-## npm / GitHub Release (separate)
+## npm / GitHub Release checklist
 
-Only after maintainer authorization:
+Preflight (this worktree / main):
 
-1. Fold Unreleased changelog for 5.0.0
-2. `node scripts/release.mjs 5.0.0 --dry-run` then cut
-3. Push tag only with explicit OK
-4. Activate global CLI at exact version and smoke `carpeos v5 readiness`
+```sh
+git fetch origin && git status --short   # clean on main @ origin/main
+pnpm check
+node packages/v5/scripts/m0-recompute.mjs
+node packages/v5/scripts/m8-decision.mjs
+node apps/carpeos-cli/dist/index.js v5 readiness   # after build
+node scripts/release.mjs 5.0.0 --dry-run           # expect 3.2.0 -> 5.0.0
+```
 
-Until then, public package remains the current published line (e.g. 3.2.x); V5 is in-tree opt-in.
+Cut (local only until push authorized):
+
+```sh
+node scripts/release.mjs 5.0.0
+# verify:
+node -p "require('./packages/carpeos/package.json').version"   # 5.0.0
+git tag -l 'v5.0.0'
+```
+
+Publish (requires explicit maintainer OK):
+
+```sh
+git push origin main
+git push origin v5.0.0
+# Release workflow: check → npm publish → GitHub Release
+```
+
+Activate:
+
+```sh
+npm install --global "@innocarpe/carpeos@5.0.0"
+carpeos --version
+carpeos v5 readiness
+carpeos help v5
+```
+
+### SemVer note
+
+Public package jumps **3.2.0 → 5.0.0** as an explicit product major for the V5 draft
+lane. Product 4 work remains an independent in-repo lane and is **not** a prerequisite
+npm `4.0.0` cut for this release.
 
 ## Commands
 
