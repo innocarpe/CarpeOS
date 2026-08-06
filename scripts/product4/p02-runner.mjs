@@ -797,7 +797,10 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "--inh-caps=-all",
     "--ambient-caps=-all",
     "--",
+    // --noprofile/--norc: bash -u otherwise errors on /etc/bash.bashrc PS1.
     "/bin/bash",
+    "--noprofile",
+    "--norc",
     "-ceu",
     'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
     "product4-p02-sandbox-limits",

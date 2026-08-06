@@ -121,6 +121,8 @@ jobs:
             # Apply rlimits inside the sandbox. Host `ulimit` before `sudo bwrap`
             # is reset by sudo, so the probe would observe unlimited RLIMIT_AS.
             /bin/bash
+            --noprofile
+            --norc
             -ceu
             'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"'
             product4-sandbox-limits

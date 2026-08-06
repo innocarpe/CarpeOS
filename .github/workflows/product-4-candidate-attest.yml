@@ -143,7 +143,8 @@ jobs:
           )
           # rlimits must be set inside the namespace (after setpriv). Host ulimit
           # before sudo bwrap is reset by sudo and is not observed by the probe.
-          "${sandbox[@]}" /bin/bash -ceu '
+          # --noprofile/--norc: bash -u must not source /etc/bash.bashrc (PS1).
+          "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
             ulimit -u 64
             ulimit -v 1048576
             ulimit -f 102400
