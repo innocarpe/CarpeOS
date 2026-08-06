@@ -328,61 +328,126 @@ test("M3 refuses unattributed transient mutations instead of claiming per-table 
   );
 });
 
-test("M4 refuses claim-only sandbox probes without measured evidence", () => {
+function sandboxIdentity() {
+  return {
+    head_sha: "a".repeat(40),
+    base_sha: "b".repeat(40),
+    tree_sha256: "c".repeat(64),
+    fixture_sha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+    policy_sha256: PRODUCT4_POLICY_SHA256,
+    context: PRODUCT4_CONTEXT,
+  };
+}
+
+function sandboxRoots() {
+  return {
+    candidate_root: mkdtempSync(join(tmpdir(), "product4-candidate-")),
+    workspace_root: mkdtempSync(join(tmpdir(), "product4-workspace-")),
+    cli_root: mkdtempSync(join(tmpdir(), "product4-cli-")),
+    home: mkdtempSync(join(tmpdir(), "product4-home-")),
+    output: mkdtempSync(join(tmpdir(), "product4-output-")),
+  };
+}
+
+function observedProbe(overrides = {}) {
+  return buildSandboxProbeObservation({
+    identity: sandboxIdentity(),
+    roots: sandboxRoots(),
+    ...overrides,
+  });
+}
+
+test("M4 refuses claim-only and legacy hash-only sandbox receipts", () => {
   assert.throws(
     () =>
       assertSandboxProbeObservation({
-        backend: "bubblewrap",
-        network: "disabled",
-        candidate_inputs: "read_only",
-        trusted_mounts: false,
-        writable_paths: ["/home", "/output", "/tmp"],
-        capabilities: "dropped",
-        no_new_privileges: true,
-        process_limit: 64,
-        memory_limit_mb: 1024,
+        schema_version: "carpeos.product4-sandbox-probe/v1",
+        facts: {
+          network: "disabled",
+          candidate_inputs: "read_only",
+          trusted_mounts: false,
+          writable_paths: ["/home", "/output", "/tmp"],
+          capabilities: "dropped",
+          no_new_privileges: true,
+          process_limit: 64,
+          memory_limit_mb: 1024,
+        },
       }),
     /sandbox_probe/,
   );
   assert.throws(() => sandboxProbeDigest(), /sandbox probe digest requires/);
+
+  const roots = sandboxRoots();
   assert.throws(
     () =>
       buildP02SandboxReceipt({
-        candidateRoot: mkdtempSync(join(tmpdir(), "product4-probe-")),
-        headSha: "a".repeat(40),
-        baseSha: "b".repeat(40),
-        treeSha256: "c".repeat(64),
+        candidateRoot: roots.candidate_root,
+        headSha: sandboxIdentity().head_sha,
+        baseSha: sandboxIdentity().base_sha,
+        treeSha256: sandboxIdentity().tree_sha256,
         probeSha256: "d".repeat(64),
       }),
-    /observed probe object|bare probe hashes/,
+    /sandbox_probe_missing|observed probe object|bare probe hashes/,
   );
 });
 
-test("M4 accepts only observations whose evidence matches the fixed contract", () => {
-  const probe = buildSandboxProbeObservation();
-  assert.equal(probe.schema_version, "product4-sandbox-probe-v1");
+test("M4 requires exact observed identity, controls, and separated regular roots", () => {
+  const probe = observedProbe();
+  assert.equal(probe.schema_version, "carpeos.product4-sandbox-probe/v1");
   assert.match(sandboxProbeDigest(probe), /^[0-9a-f]{64}$/);
+
+  for (const [field, value] of [
+    ["network", "enabled"],
+    ["trusted_mounts", true],
+    ["capabilities", "full"],
+    ["no_new_privileges", false],
+    ["process_limit", 128],
+    ["memory_limit_mb", 2048],
+  ]) {
+    assert.throws(() => observedProbe({ facts: { [field]: value } }), /sandbox_probe_forged/);
+  }
   assert.throws(
-    () =>
-      buildSandboxProbeObservation({
-        rlimit_nproc: 128,
-      }),
-    /process limit was not observed/,
+    () => observedProbe({ facts: { writable_paths: ["/home", "/output"] } }),
+    /sandbox_probe_forged/,
   );
   assert.throws(
     () =>
-      buildSandboxProbeObservation({
-        no_new_privileges_line: "NoNewPrivs:\t0",
+      observedProbe({
+        identity: { ...sandboxIdentity(), fixture_sha256: "d".repeat(64) },
       }),
-    /NoNewPrivs was not observed/,
+    /sandbox_probe_forged/,
   );
-  const root = mkdtempSync(join(tmpdir(), "product4-receipt-probe-"));
+
+  const roots = probe.roots;
+  const overlapping = { ...roots, output: roots.candidate_root };
+  assert.throws(
+    () =>
+      buildSandboxProbeObservation({
+        identity: sandboxIdentity(),
+        roots: overlapping,
+      }),
+    /overlap/,
+  );
+  const workspaceOverlap = { ...roots, workspace_root: roots.cli_root };
+  assert.throws(
+    () =>
+      buildSandboxProbeObservation({
+        identity: sandboxIdentity(),
+        roots: workspaceOverlap,
+      }),
+    /overlap/,
+  );
   const receipt = buildP02SandboxReceipt({
-    candidateRoot: root,
-    headSha: "a".repeat(40),
-    baseSha: "b".repeat(40),
-    treeSha256: "c".repeat(64),
-    probe,
+    candidateRoot: roots.candidate_root,
+    workspaceRoot: roots.workspace_root,
+    cliRoot: roots.cli_root,
+    home: roots.home,
+    output: roots.output,
+    headSha: sandboxIdentity().head_sha,
+    baseSha: sandboxIdentity().base_sha,
+    treeSha256: sandboxIdentity().tree_sha256,
+    observedProbe: probe,
   });
-  assert.equal(receipt.probe_sha256, sandboxProbeDigest(probe));
+  assert.equal(receipt.probe_sha256, probe.probe_digest);
+  assert.equal(receipt.observed_probe.probe_digest, probe.probe_digest);
 });
