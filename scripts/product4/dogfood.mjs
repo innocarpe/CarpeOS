@@ -17,6 +17,7 @@ import {
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
+  normalizeCheckRunsResponse,
 } from "./github-evidence-api.mjs";
 import { assertP02Receipt, buildP02Receipt, P02_COMMAND_LINE } from "./p02-replay.mjs";
 import {
@@ -26,7 +27,11 @@ import {
   PRODUCT4_POLICY_SHA256,
 } from "./policy-identity.mjs";
 import { buildRawCandidateReportFromP02 } from "./raw-producer.mjs";
-import { buildReleaseAuthorityReceipt, reconcileReleaseAuthority } from "./release-authority.mjs";
+import {
+  buildReleaseAuthorityEvidence,
+  buildReleaseAuthorityReceipt,
+  reconcileReleaseAuthority,
+} from "./release-authority.mjs";
 import { projectFixedContext, reconcileRulesetResponse } from "./ruleset-guard.mjs";
 
 export const DOGFOOD_SCHEMA = "product4-dogfood-receipt-v1";
@@ -311,28 +316,42 @@ function duplicateApiResults() {
     repositoryPath: identity.repository_path,
     headSha: candidateSha,
   });
-  const suite = {
+  const repository = { id: identity.repository_id, full_name: identity.repository_path };
+  const app = { id: identity.app_id };
+  const checkSuite = {
     id: 1,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
-    head_sha: candidateSha,
-    external_id: externalId,
-    fixture_sha256: identity.fixture_sha256,
-    policy_sha256: identity.policy_sha256,
-    context: identity.context,
-    check_name: identity.check_name,
-    app_id: 4242,
-    runs: [
-      { id: 2, app_id: 4242, head_sha: candidateSha, conclusion: "success" },
-      { id: 2, app_id: 4242, head_sha: candidateSha, conclusion: "failure" },
-    ],
+    repository,
+    app,
+    head_sha: identity.head_sha,
+    status: "completed",
+    conclusion: "success",
   };
+  const checkRun = {
+    id: 2,
+    name: identity.check_name,
+    external_id: identity.external_id,
+    repository,
+    app,
+    head_sha: identity.head_sha,
+    status: "completed",
+    conclusion: "success",
+    check_suite: checkSuite,
+  };
+  const conflictingRun = { ...checkRun, conclusion: "failure" };
+  const page = normalizeCheckRunsResponse(
+    {
+      total_count: 2,
+      check_runs: [checkRun, conflictingRun],
+      headers: { link: "" },
+    },
+    { identity },
+  );
   expectRefusal(
     () =>
       buildEvidenceReceipt({
         query,
         identity,
-        pages: [{ items: [suite], headers: { link: "" } }],
+        pages: [page],
         observedAt: timestamp,
       }),
     "duplicate_refusal",
@@ -366,18 +385,31 @@ function responseLoss() {
 }
 
 function gateDeletionBypass() {
-  const result = reconcileReleaseAuthority({
-    receipt: verifiedAuthority(),
-    releaseGate: { deleted: true, actor: "candidate_release_actor" },
-  });
+  const receipt = blockedAuthority();
+  const observation = {
+    gate_deleted: true,
+    gate_actor: "candidate_release_actor",
+    gate_actor_allowed: false,
+    gate_deleted_result: "denied",
+    tag_result: "denied",
+    credential_result: "denied",
+  };
+  const releaseGate = {
+    deleted: true,
+    actor: "candidate_release_actor",
+    observations: {
+      ...observation,
+      evidence_digest: digestJson({ ...observation, controller_ref: receipt.controller.ref }),
+    },
+  };
+  const result = reconcileReleaseAuthority({ receipt, releaseGate });
   if (
-    result.status !== "procedural_ready" ||
-    result.bypass.gate_deleted_result !== "denied" ||
-    result.bypass.tag_result !== "denied" ||
-    result.bypass.credential_result !== "denied"
+    result.status !== "blocked" ||
+    result.tag_capability !== "denied" ||
+    result.credential_capability !== "denied"
   )
     throwDogfoodError("release_bypass_accepted", "candidate bypass obtained release capability");
-  return "denied";
+  return "blocked";
 }
 
 function missingOwnership() {
