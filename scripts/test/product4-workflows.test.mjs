@@ -70,6 +70,34 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
     /const evaluation = evaluateCandidateEvidence\(\{[\s\S]*\n {4}trustedEvidence,\n {2}\}\);/,
   );
   assert.match(source, /--candidate-root/);
+  assert.match(source, /cache-dependency-path: candidate\/pnpm-lock\.yaml/);
+  assert.match(source, /node_path=.*command -v node/);
+  assert.match(source, /pnpm_command=.*command -v pnpm/);
+  assert.match(source, /pnpm_path=.*readlink -f "\$pnpm_command"/);
+  assert.match(source, /pnpm_store=.*pnpm store path --silent/);
+  assert.match(source, /test -x "\$node_path"/);
+  assert.match(source, /test -x "\$pnpm_path"/);
+  assert.match(source, /test -d "\$pnpm_store"/);
+  assert.match(source, /find "\$pnpm_store" -mindepth 1 -print -quit/);
+  assert.match(
+    source,
+    /--setenv PATH "\$node_dir:\$pnpm_bin_dir:\/usr\/local\/bin:\/usr\/bin:\/bin"/,
+  );
+  assert.match(source, /--ro-bind "\$node_dir" "\$node_dir"/);
+  assert.match(source, /--ro-bind "\$pnpm_dir" "\$pnpm_dir"/);
+  assert.match(source, /--ro-bind "\$pnpm_bin_dir" "\$pnpm_bin_dir"/);
+  assert.match(source, /--ro-bind "\$pnpm_store" \/pnpm-store/);
+  assert.match(
+    source,
+    /pnpm install --offline --frozen-store --frozen-lockfile --ignore-scripts --store-dir \/pnpm-store/,
+  );
+  assert.match(source, /--unshare-net/);
+  assert.match(source, /--unshare-all/);
+  assert.match(source, /--cap-drop ALL/);
+  assert.match(source, /setpriv[\s\S]*--no-new-privs/);
+  assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_WORK"/);
+  assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_OUT"/);
+  assert.doesNotMatch(source, /--bind "\$HOME"/);
   assert.doesNotMatch(source, /env:[\s\S]{0,160}github\.token/);
   assertNoJobLevelRunnerContext(source);
   assert.doesNotMatch(
