@@ -316,32 +316,20 @@ function duplicateApiResults() {
     repositoryPath: identity.repository_path,
     headSha: candidateSha,
   });
-  const repository = { id: identity.repository_id, full_name: identity.repository_path };
-  const app = { id: identity.app_id };
-  const checkSuite = {
-    id: 1,
-    repository,
-    app,
-    head_sha: identity.head_sha,
-    status: "completed",
-    conclusion: "success",
-  };
-  const checkRun = {
-    id: 2,
-    name: identity.check_name,
-    external_id: identity.external_id,
-    repository,
-    app,
-    head_sha: identity.head_sha,
-    status: "completed",
-    conclusion: "success",
-    check_suite: checkSuite,
-  };
-  const conflictingRun = { ...checkRun, conclusion: "failure" };
-  const page = normalizeCheckRunsResponse(
+  // Receipts require adapter-marked GitHub pages. Drive the same-id conflict through the
+  // real check-runs adapter so duplicate refusal still targets buildEvidenceReceipt.
+  const successPage = normalizeCheckRunsResponse(
     {
-      total_count: 2,
-      check_runs: [checkRun, conflictingRun],
+      total_count: 1,
+      check_runs: [syntheticGitHubRun(identity, 2, "success")],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  const failurePage = normalizeCheckRunsResponse(
+    {
+      total_count: 1,
+      check_runs: [syntheticGitHubRun(identity, 2, "failure")],
       headers: { link: "" },
     },
     { identity },
@@ -351,12 +339,38 @@ function duplicateApiResults() {
       buildEvidenceReceipt({
         query,
         identity,
-        pages: [page],
+        pages: [successPage, failurePage],
         observedAt: timestamp,
       }),
     "duplicate_refusal",
   );
   return "refused";
+}
+
+function syntheticGitHubRun(identity, id, conclusion) {
+  const repository = {
+    id: identity.repository_id,
+    full_name: identity.repository_path,
+  };
+  const app = { id: identity.app_id, name: "synthetic-product4-app" };
+  return {
+    id,
+    repository,
+    head_sha: identity.head_sha,
+    app,
+    name: identity.check_name,
+    external_id: identity.external_id,
+    status: "completed",
+    conclusion,
+    check_suite: {
+      id: 1,
+      repository,
+      head_sha: identity.head_sha,
+      app,
+      status: "completed",
+      conclusion: "success",
+    },
+  };
 }
 
 function responseLoss() {
