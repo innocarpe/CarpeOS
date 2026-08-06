@@ -18,6 +18,7 @@ import {
   assertEvaluatorAttestation,
   evaluateCandidateEvidence,
   PREDICATE_IDS,
+  TRUSTED_EVIDENCE_SCHEMA,
 } from "./evaluator.mjs";
 import {
   assertExactCheckQuery,
@@ -894,6 +895,30 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     evaluator_workflow_sha: evaluatorWorkflowSha,
     evaluated_at: evaluatedAt,
   };
+  let evaluatorTreeSha256;
+  try {
+    evaluatorTreeSha256 = gitTreeSha256({
+      repoRoot: TRUSTED_EVALUATOR_ROOT,
+      commit: "HEAD",
+    });
+  } catch (error) {
+    throwRunnerError(
+      "evaluator_tree_unavailable",
+      `trusted evaluator tree cannot be computed: ${errorMessage(error)}`,
+    );
+  }
+  const trustedEvidence = {
+    schema_version: TRUSTED_EVIDENCE_SCHEMA,
+    owner: "base_evaluator",
+    identity: { ...identity },
+    predicate_digest: digestJson(trustedPredicates),
+    observation_digest: digestJson(observations),
+    source_report_digest: digestJson(rawReport),
+    source: {
+      kind: "base_recompute",
+      evaluator_tree_sha256: evaluatorTreeSha256,
+    },
+  };
   const evaluation = evaluateCandidateEvidence({
     identity,
     candidateReport: rawReport,
@@ -903,6 +928,7 @@ function evaluateRawCandidateFromBaseOwnedEvidence(
     issuerWorkflowSha: evaluatorWorkflowSha,
     candidateReportedSuccess: undefined,
     requireCandidateExecutionObservation: true,
+    trustedEvidence,
   });
   const artifact = {
     schema_version: EVALUATOR_RESULT_SCHEMA,
