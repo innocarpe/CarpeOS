@@ -105,6 +105,38 @@ V5-off is a **valid release path**. Incomplete V5 evidence is `blocked`/`deferre
 
 ---
 
+## Provider routing (amendment)
+
+Original design was **OpenRouter-first**. Implementation now keeps a
+**provider-neutral** adapter boundary:
+
+```text
+ProviderAdapter
+  ├─ fake
+  ├─ deepseek_direct   ← primary opt-in experimental real route (cost measurement)
+  └─ openrouter        ← optional DeepSeek + predeclared Luna escalation
+```
+
+| Profile | Provider | Verified model ID | Auth env | Default network |
+| --- | --- | --- | --- | --- |
+| `deepseek_direct_extract_v1` | DeepSeek Direct | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | **off** |
+| `openrouter_deepseek_extract_v1` | OpenRouter | `deepseek/deepseek-v4-flash-0731` | `OPENROUTER_API_KEY` | **off** |
+| `openrouter_luna_escalation_v1` | OpenRouter | `openai/gpt-5.6-luna` | `OPENROUTER_API_KEY` | **off** |
+| `fake_extract_v1` | fake | `fake-extract-v1` | none | n/a |
+
+Rules:
+
+- DeepSeek Direct uses DeepSeek billing/policy only; never send `DEEPSEEK_API_KEY` to OpenRouter.
+- OpenRouter uses OpenRouter auth/billing/routing; `allow_fallbacks: false` and provider order constraints.
+- Luna is a **predeclared** escalation/synthesis slot only — no blind retry on timeout/5xx/malformed output.
+- A valid primary `no_candidate` may trigger **one** Luna escalation when consent allows.
+- No ZDR / no-retention / no-training claims without provider-specific evidence.
+- Cost experiment runs only on synthetic redacted EvidencePack digests (body-free metadata + price snapshot). Never on the capture hot path.
+
+Real provider calls remain **disabled by default** until offline contracts, fakes, consent, route, budget, privacy gates, and an explicit network enable pass.
+
+---
+
 ## Package surface
 
 Offline implementation lives in monorepo package `@carpeos/v5`:
@@ -112,5 +144,6 @@ Offline implementation lives in monorepo package `@carpeos/v5`:
 - fixtures: `fixtures/v5/m0/`
 - receipts: `artifacts/v5/m0/`
 - recompute: `node packages/v5/scripts/m0-recompute.mjs`
+- providers: `packages/v5/src/provider*.ts` (fake HTTP contracts + cost experiment)
 
-Real provider calls, Worker deployment, and canonical migrations are **not** part of the current offline delivery.
+Real provider calls, Worker deployment, and canonical migrations are **not** part of the default offline delivery. To run a live DeepSeek cost experiment later, set `DEEPSEEK_API_KEY` in the environment only (never commit it) and enable network under consent + kill-switch gates.
