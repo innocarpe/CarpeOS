@@ -89,10 +89,7 @@ test("M4 attestation binds both dispatch replay and workflow_run lineage", () =>
   const source = workflow("product-4-candidate-attest.yml");
   // The evaluate trust plane remains dispatch-only; attestation has no PR trigger.
   assert.match(source, /workflow_run:/);
-  assert.match(
-    source,
-    /workflows:\n\s+- Product 4 Candidate Evidence \(unprivileged\)/,
-  );
+  assert.match(source, /workflows:\n\s+- Product 4 Candidate Evidence \(unprivileged\)/);
   assert.match(source, /types: \[completed\]/);
   assert.match(source, /workflow_dispatch:/);
   assert.match(source, /run_id:[\s\S]*required: true/);
@@ -146,10 +143,7 @@ test("M4 attestation binds both dispatch replay and workflow_run lineage", () =>
   assert.match(metadataStep, /\.head_sha == \$head_sha/);
 
   // Artifact selection and all checkouts use the same normalized run/C/base/repo.
-  assert.match(
-    source,
-    /name: product4-raw-\$\{\{ steps\.normalize\.outputs\.head_sha \}\}/,
-  );
+  assert.match(source, /name: product4-raw-\$\{\{ steps\.normalize\.outputs\.head_sha \}\}/);
   assert.match(source, /repository: \$\{\{ steps\.normalize\.outputs\.repository \}\}/);
   assert.match(source, /run-id: \$\{\{ steps\.normalize\.outputs\.run_id \}\}/);
   assert.match(source, /report_head=.*jq -er/);
