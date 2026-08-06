@@ -4,11 +4,17 @@ Status: maintainer policy for the public npm package and Git tags.
 
 This document is the source of truth for how CarpeOS versions are chosen, tagged,
 and published. Follow it before the first and every subsequent npm release.
-Current public release target: `@innocarpe/carpeos@4.0.0` (Product 4 code plane; tag/publish after merge), published on npm and
-verified through global activation. Its shipped `adj_v3` work keeps automatic
-Claim creation off and creates no `AcceptanceDecision`; evaluators and dogfood
-are evidence-only, synthetic, and disposable. B0 policy reconciliation is
-preview-only; B1 apply/writer/receipt work is deferred.
+Current public release: **`@innocarpe/carpeos@5.0.0`** (Product 5 draft lane on top of
+the Product 4 trust/evidence package plane). npm `5.0.0` is published; see
+[product-5.0.0.md](product-5.0.0.md) and prior [product-4.0.0.md](product-4.0.0.md).
+Independent Product 4 live release authority remains out of band / fail-closed.
+Shipped `adj_v3` keeps automatic Claim creation off. B0 reconciliation is
+preview-only; B1 apply remains deferred. V5 is opt-in with `canonical_effect: "none"`.
+
+**After every MAJOR cut**, complete
+[major-release-surface.md](major-release-surface.md) (README EN/KO, package README,
+PRD index + `PRD-vN`, `product-N.0.0.md`, architecture overview, this banner).
+Checker: `node scripts/check-major-release-surface.mjs`.
 
 ## What is versioned
 

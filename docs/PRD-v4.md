@@ -1,10 +1,15 @@
 # PRD v4 — CarpeOS 4.0.0
 
-Status: **Planned** — the 4.0.0 thesis and scope are consensus-frozen; implementation, activation, and release have not started.
+Status: **Package plane shipped** as `@innocarpe/carpeos@4.0.0` / `v4.0.0` — governed
+evidence / trust-plane contracts, evaluator, publisher, and dispatch-only workflows
+are in the public package. **Full thesis residual:** independent live release
+authority, App/settings ownership, and human-approved correction **apply** remain
+out of band / fail-closed (not invented by the package cut). Receipt:
+[product-4.0.0.md](maintainers/product-4.0.0.md).
 Policy contract: immutable evaluator/intent policy `P4_0`; active required-check context `Product 4 Candidate Evidence`
-Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md) · [PRD-v3](PRD-v3.md)
+Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md) · [PRD-v3](PRD-v3.md) · [PRD-v5](PRD-v5.md)
 
-This document is the **product requirements snapshot for major version 4**. It records the agreed thesis, problem, scope, safety boundaries, and success criteria. It does not claim that Product 4 workflows, settings, credentials, releases, or runtime behavior exist.
+This document is the **product requirements snapshot for major version 4**. It records the agreed thesis, problem, scope, safety boundaries, and success criteria. Implementation of the **trust/evidence plane** is released on npm; do not read this as live authority or automatic correction apply.
 
 ---
 
@@ -46,7 +51,9 @@ The agreed problem statement is:
 4. **Policy rotation is not safely representable by the current required-check selector.** A same-name required context can accept an old result after a policy change. 4.0 must freeze one policy and one context instead of pretending that invalidation exists.
 5. **Activation and release authority are separate ownership problems.** Existing repository and release state cannot be treated as Product 4 authority without actual App, settings, ruleset, controller, and credential-ownership receipts.
 
-These are requirements for a future implementation. The current repository remains a 3.2 product until the 4.0 gates are actually implemented and evidenced.
+These requirements drove the 4.0 package plane. The public package now ships
+evidence/evaluator/publisher contracts and fail-closed authority schemas; it
+still does not invent live independent authority or B1 apply writers.
 
 ---
 

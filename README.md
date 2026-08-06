@@ -20,9 +20,9 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest release:** [`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([notes](CHANGELOG.md) · [v3.2.0 release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
-[product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
+**Latest release:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([notes](CHANGELOG.md) · [v5.0.0 tag](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0) ·
+[product 5.0 DoD](docs/maintainers/product-5.0.0.md)). Prior major: [4.0.0 receipt](docs/maintainers/product-4.0.0.md).
 
 **5.0 draft lane (in-tree, opt-in, not the npm major yet):** offline draft extraction
 behind `carpeos v5` with **DeepSeek Direct** as the primary LLM path, always
@@ -111,12 +111,13 @@ policy version. Re-adjudication appends history rather than rewriting it.
 Neither adjudication nor held review automatically creates a Claim or an
 `AcceptanceDecision`.
 
-Product 3.2.0 is released as npm
-[`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos),
-annotated `v3.2.0`, with a non-draft, non-prerelease
-[GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0). It includes
-synthetic, evidence-only adjudication and knowledge-form evaluators, a synthetic retrieval
-evaluator, and the preview-only B0 policy reconciliation:
+Product **4.0.0** is the current public major
+([`@innocarpe/carpeos@4.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos) /
+[v4.0.0](https://github.com/innocarpe/CarpeOS/releases/tag/v4.0.0)): Product 4
+trust/evidence plane (evaluator, sealed evidence, dispatch-only workflows) on the
+package, with independent live release authority still out of band. Product **3.2.0**
+remains the adjudication foundation inside that package — synthetic, evidence-only
+evaluators and the preview-only B0 policy reconciliation:
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -401,33 +402,26 @@ Keep install **idempotent** and **out of the git tree** for private data.
 | **2.0.0** | **Adjudicated meaning** as the default product contract (`adj_v1`, promoted-only search, held review, doctor, smokes) | **Shipped** on npm / `v2.0.0` — operator-real MVP, not brain-level omniscience |
 | **3.0.0** | Retrieval-first graph/hybrid recall with cross-repository partitions and worktree facets | **Shipped** on npm / `v3.0.0` |
 | **3.1.0** | Additive **OKF v0.2 export projection** | **Shipped** as `@innocarpe/carpeos@3.1.0` / `v3.1.0` — export only, not an import path |
-| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **Shipped** as `@innocarpe/carpeos@3.2.0` / `v3.2.0`; public-safe global activation is recorded. B0 is preview-only and B1 apply/writer/receipt is deferred |
+| **3.2.0** | `adj_v3` precision/session de-noising, policy-aware held review, evidence-only quality evaluators, retrieval evaluator, and B0 reconciliation preview | **Shipped** as `@innocarpe/carpeos@3.2.0` / `v3.2.0`; retained inside later packages. B0 is preview-only and B1 apply/writer/receipt is deferred |
+| **4.0.0** | Product 4 governed evidence / trust plane (`P4_0`, base-owned evaluator, sealed evidence, publisher schemas, dispatch-only sandbox workflows) | **Shipped** as `@innocarpe/carpeos@4.0.0` / `v4.0.0`; live independent authority residual; B1 apply still deferred |
+| **5.0.0** | Opt-in Product 5 draft lane (`carpeos v5`, DeepSeek Direct primary, `canonical_effect: "none"`) | **Shipped on npm** as `@innocarpe/carpeos@5.0.0` / `v5.0.0`; not capture hot path; M8 release-authority seam still deferred |
 
-3.2 is released as npm `@innocarpe/carpeos@3.2.0`, annotated `v3.2.0`, with a non-draft,
-non-prerelease GitHub Release. `adj_v3` precision/session de-noising and policy-aware held
-review leave automatic Claim creation off, and no path creates an `AcceptanceDecision`. Its
-adjudication and knowledge-form evaluators are evidence-only, and its retrieval evaluator is
-synthetic. B0 `reconcile-policy` is preview-only and supports only `--from-policy`,
-`--to-policy`, `--trust-zone`, and `--limit`; B1 apply/writer/receipt remains deferred.
-Dogfood is synthetic and disposable. Hosted graph adapters and other roadmap work remain
-unshipped.
-Details: [product 2.0 residual risk](docs/maintainers/product-2.0.0.md) ·
-[product 3.0 DoD](docs/maintainers/product-3.0.0.md) ·
-[product 3.1 DoD](docs/maintainers/product-3.1.0.md) ·
-[product 3.2 DoD](docs/maintainers/product-3.2.0.md).
-Capacity / pack economics and long-horizon structure work continue under the
-[memory capacity master plan](docs/plans/k3-memory-capacity-master-plan.md); this
-does not change the shipped 3.0 retrieval product.
+Current npm latest is **5.0.0** (draft lane). Product **4.0.0** remains the trust/evidence
+foundation inside that package. Hosted graph adapters and other roadmap work remain unshipped.
+Details: [product 5.0 DoD](docs/maintainers/product-5.0.0.md) ·
+[product 4.0 receipt](docs/maintainers/product-4.0.0.md) ·
+[PRD-v5](docs/PRD-v5.md) · [PRD-v4](docs/PRD-v4.md) ·
+[major release surface](docs/maintainers/major-release-surface.md).
 
 ---
 
 ## What works today
 
-**Public release:** [`@innocarpe/carpeos@3.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v3.2.0) ·
-[CHANGELOG](CHANGELOG.md) ·
-[product 3.2 DoD](docs/maintainers/product-3.2.0.md)).
-Package publication and local installation do not imply a hosted deployment.
+**Public release:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [product 5.0 DoD](docs/maintainers/product-5.0.0.md) ·
+[product 4.0 receipt](docs/maintainers/product-4.0.0.md)).
+Package publication and local installation do not imply a hosted deployment or live
+Product 4 release authority.
 
 Default local loop (CI-gated):
 
@@ -450,7 +444,9 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
-| **3.2.0** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; `adj_v3` and evaluators; B0 `reconcile-policy` preview-only with B1 apply/writer/receipt deferred; public-safe global activation recorded |
+| **3.2.0** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0`; `adj_v3` and evaluators; B0 `reconcile-policy` preview-only with B1 apply/writer/receipt deferred |
+| **4.0.0 Product 4 trust/evidence plane** | **Shipped** — `@innocarpe/carpeos@4.0.0` / `v4.0.0`; live authority residual; dispatch-only trust workflows |
+| **5.0.0 Product 5 draft lane** | **Shipped on npm** — `@innocarpe/carpeos@5.0.0` / `v5.0.0`; opt-in `carpeos v5`; not capture hot path |
 | `carpeos setup` / one-stop install | npm package `@innocarpe/carpeos` |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |
@@ -458,6 +454,8 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | **3.0.0 product freeze** | **Shipped** — `v3.0.0` |
 | **3.1.0 public release** | **Shipped** — `@innocarpe/carpeos@3.1.0` / `v3.1.0` |
 | **3.2.0 public release** | **Shipped** — `@innocarpe/carpeos@3.2.0` / `v3.2.0` |
+| **4.0.0 public release** | **Shipped** — `@innocarpe/carpeos@4.0.0` / `v4.0.0` |
+| **5.0.0 public release** | **Shipped on npm** — `@innocarpe/carpeos@5.0.0` / `v5.0.0` (draft lane; GitHub Release may lag registry verify) |
 
 **NOT DEPLOYED:** no hosted Worker, D1/R2 production resources, hosted graph
 adapters/services, private vault adoption, or hosted MCP is proven by this
