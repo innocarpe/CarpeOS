@@ -331,13 +331,16 @@ function trustedEvidence(overrides = {}) {
   };
 }
 function sealedTrustedEvidence(overrides = {}) {
-  return sealTrustedEvidence({
-    trustedEvidence: trustedEvidence(overrides),
-    identity,
-    trustedPredicates: allPredicates(),
-    observations,
-    candidateReport,
-  });
+  return sealTrustedEvidence(
+    {
+      trustedEvidence: trustedEvidence(overrides),
+      identity,
+      trustedPredicates: allPredicates(),
+      observations,
+      candidateReport,
+    },
+    sealTrustedEvidence,
+  );
 }
 
 function evaluate(overrides = {}) {
@@ -764,6 +767,25 @@ test("M4 rejects caller-supplied all-true trusted predicates", () => {
     () => evaluateRawCandidate({ trustedPredicates: allPredicates() }),
     /predicate_refusal/,
   );
+});
+test("M4 refuses direct forged sealing without the internal capability", () => {
+  assert.throws(
+    () =>
+      sealTrustedEvidence({
+        trustedEvidence: trustedEvidence(),
+        identity,
+        trustedPredicates: allPredicates(),
+        observations,
+        candidateReport,
+      }),
+    /seal_capability_refusal/,
+  );
+
+  const refused = evaluate({ trustedEvidence: trustedEvidence() });
+  assert.equal(refused.status, "refused");
+  assert.equal(refused.success, false);
+  assert.equal(refused.code, "invalid_or_untrusted_evidence");
+  assert.match(refused.blockers.join("; "), /not sealed by base evaluator/);
 });
 test("M4 rejects direct caller all-true predicates and identity/provenance rewraps", () => {
   const arbitrary = evaluateCandidateEvidence({
