@@ -19,8 +19,8 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
 
-**최신 패키지:** [`@innocarpe/carpeos@6.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([변경 기록](CHANGELOG.md) · [`v6.1.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.1.0)).
+**최신 패키지:** [`@innocarpe/carpeos@6.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [`v6.2.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.2.0)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
@@ -269,7 +269,7 @@ carpeos setup show              # config.json 출력
 `--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
 `--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@6.1.0`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@6.2.0`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
 제품 마일스톤: [1.0 DoD](docs/maintainers/product-1.0.0.md) (파이프라인) ·
 [2.0 DoD](docs/maintainers/product-2.0.0.md) (판정) ·
@@ -367,7 +367,7 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 
 ## 제품 라인 (majors)
 
-현재 npm 패키지는 **`@innocarpe/carpeos@6.1.0`** (`v6.1.0`)입니다. adjudication + retrieval
+현재 npm 패키지는 **`@innocarpe/carpeos@6.2.0`** (`v6.2.0`)입니다. adjudication + retrieval
 운영 루프, Product 4 trust plane, opt-in Product 5 draft lane, **Product 6 hold-first
 Agentic Layer**가 포함됩니다.
 전체 major/minor thesis·DoD:
@@ -377,14 +377,15 @@ Agentic Layer**가 포함됩니다.
   [6.0.0](docs/maintainers/product-6.0.0.md), [5.0.0](docs/maintainers/product-5.0.0.md))
 
 잔여(초록 발명 금지): live Product 4 release authority 대역 외, B1 apply deferred,
-hosted graph/edge 미주장, V5는 capture hot path에 없음, Agentic P3–P6은 6.0.0 미주장.
+hosted graph/edge 미주장, V5는 capture hot path에 없음, Agentic P5–P6(draft Claims,
+GraphRAG ranking)은 6.2.0 미주장(P3 precision + P4 graph density는 6.1/6.2에 출시).
 
 ---
 
 ## 지금 구현된 것
 
-**공개 패키지:** [`@innocarpe/carpeos@6.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v6.1.0` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
+**공개 패키지:** [`@innocarpe/carpeos@6.2.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v6.2.0` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
 release authority를 뜻하지 **않습니다**.
 
 기본 로컬 루프 (CI 게이트):
@@ -411,7 +412,7 @@ hooks → 암호화 증거 → adjudicate (promote|hold|reject)
 | Product 3.x (adj_v3, OKF export, graph/hybrid recall, B0 preview) | **출시** — [product-3.2.0](docs/maintainers/product-3.2.0.md) |
 | Product 4 trust/evidence plane | **패키지에 출시** — [product-4.0.0](docs/maintainers/product-4.0.0.md); live authority residual |
 | Product 5 draft lane (`carpeos v5`) | **opt-in 출시** — [product-5.0.0](docs/maintainers/product-5.0.0.md); capture hot path 아님 |
-| Product 6 Agentic Layer (`carpeos agentic`) | **hold-first 출시** in 6.0 — [product-6.0.0](docs/maintainers/product-6.0.0.md); capture 이후 전용; P3–P6 residual |
+| Product 6 Agentic Layer (`carpeos agentic`) | **hold-first + P3/P4** in 6.0–6.2 — [product-6.0.0](docs/maintainers/product-6.0.0.md); capture 이후 전용; P5–P6 residual |
 | `carpeos setup` / one-stop install | 출시 (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
