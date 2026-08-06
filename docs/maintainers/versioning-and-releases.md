@@ -4,8 +4,7 @@ Status: maintainer policy for the public npm package and Git tags.
 
 This document is the source of truth for how CarpeOS versions are chosen, tagged,
 and published. Follow it before the first and every subsequent npm release.
-Current public release: **`@innocarpe/carpeos@6.3.0`** (Product 6 Agentic Layer: hold-first + P3 precision + P4 graph density + P5 draft Claims, on Product 5 draft lane + Product 4 trust plane). npm `6.0.0` was the honest hold-first major; `6.1.0` P3; `6.2.0` P4; `6.3.0` P5 draft Claims with zero auto AcceptanceDecision. Residual P6 GraphRAG remains. See [product-6.0.0.md](product-6.0.0.md), [product-5.0.0.md](product-5.0.0.md), and prior majors.
-
+Current public release: **`@innocarpe/carpeos@6.4.0`** (Product 6 Agentic Layer complete through P6 GraphRAG ranking: hold-first + P3 precision + P4 graph density + P5 draft Claims + typed promoted unit retrieval, on Product 5 draft lane + Product 4 trust plane). npm series: `6.0.0` hold-first major; `6.1.0` P3; `6.2.0` P4; `6.3.0` P5; `6.4.0` P6 offline GraphRAG query set. See [product-6.0.0.md](product-6.0.0.md), [product-5.0.0.md](product-5.0.0.md), and prior majors.
 Independent Product 4 live release authority remains out of band / fail-closed.
 Shipped `adj_v3` keeps automatic Claim creation off. B0 reconciliation is
 preview-only; B1 apply remains deferred. V5 is opt-in with `canonical_effect: "none"`.
