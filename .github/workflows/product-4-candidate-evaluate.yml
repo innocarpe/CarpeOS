@@ -16,10 +16,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # Job-level env cannot use the runner context (GitHub rejects runner.temp here).
     env:
-      CARPEOS_HOME: ${{ runner.temp }}/carpeos-product4
       CARPEOS_TRUST_ZONE: tz_synthetic
     steps:
+      - name: Configure disposable runner paths
+        run: |
+          echo "CARPEOS_HOME=$RUNNER_TEMP/carpeos-product4" >> "$GITHUB_ENV"
+
       - name: Check out candidate head C
         uses: actions/checkout@v7
         with:
