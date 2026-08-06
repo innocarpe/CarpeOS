@@ -17,17 +17,25 @@ import { ProviderBoundary } from "../src/provider.js";
 import type { RedactOk } from "../src/redaction.js";
 
 describe("provider boundary (fake-only)", () => {
-  it("defaults to DeepSeek Flash extract and rare Luna escalation", () => {
+  it("exposes DeepSeek Direct primary and optional OpenRouter/Luna routes", () => {
     const p = new ProviderBoundary();
-    expect(p.defaultExtractRoute()).toEqual({
-      slot: "extract_default",
-      provider: "openrouter",
-      model: "deepseek/deepseek-flash",
+    expect(p.deepseekDirectExtractRoute()).toMatchObject({
+      provider_id: "deepseek_direct",
+      model_id: "deepseek-v4-flash",
+      profile_id: "deepseek_direct_extract_v1",
     });
-    expect(p.rareEscalationRoute().model).toBe("openai/gpt-5.6-luna");
+    expect(p.openrouterDeepseekExtractRoute()).toMatchObject({
+      provider_id: "openrouter",
+      model_id: "deepseek/deepseek-v4-flash-0731",
+    });
+    expect(p.lunaEscalationRoute()).toMatchObject({
+      provider_id: "openrouter",
+      model_id: "openai/gpt-5.6-luna",
+      predeclared: true,
+    });
   });
 
-  it("blocks real network and serves fakes only", () => {
+  it("blocks real network and serves fakes only by default", async () => {
     const p = new ProviderBoundary({
       fakes: {
         extract: {
@@ -38,22 +46,22 @@ describe("provider boundary (fake-only)", () => {
         },
       },
     });
+    const route = p.deepseekDirectExtractRoute();
     const consent = {
       consent_id: "c1",
-      profile_id: "p1",
+      profile_id: route.profile_id,
       allow_network: true,
       allow_escalation: false,
       expires_at: null,
     };
-    const route = p.defaultExtractRoute();
     const preflight = {
-      profile_id: "p1",
+      profile_id: route.profile_id,
       pack_digest: "sha256:00",
       consent_id: "c1",
       route,
       trust_zone_id: "tz",
     };
-    const blocked = p.extract({
+    const blocked = await p.extract({
       consent,
       preflight,
       expectedPreflight: preflight,
@@ -61,17 +69,33 @@ describe("provider boundary (fake-only)", () => {
     });
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) expect(blocked.error).toBe("network_disabled");
+    expect(blocked.canonical_effect).toBe("none");
 
     const fakeRoute = p.fakeExtractRoute();
-    const fakePre = { ...preflight, route: fakeRoute };
-    const ok = p.extract({
-      consent: { ...consent, allow_network: false },
+    const fakePre = {
+      profile_id: fakeRoute.profile_id,
+      pack_digest: "sha256:00",
+      consent_id: "c1",
+      route: fakeRoute,
+      trust_zone_id: "tz",
+    };
+    const ok = await p.extract({
+      consent: {
+        consent_id: "c1",
+        profile_id: fakeRoute.profile_id,
+        allow_network: false,
+        allow_escalation: false,
+        expires_at: null,
+      },
       preflight: fakePre,
       expectedPreflight: fakePre,
       nowIso: "2026-08-06T00:00:00.000Z",
     });
     expect(ok.ok).toBe(true);
-    if (ok.ok) expect(ok.network_used).toBe(false);
+    if (ok.ok) {
+      expect(ok.network_used).toBe(false);
+      expect(ok.canonical_effect).toBe("none");
+    }
   });
 });
 
