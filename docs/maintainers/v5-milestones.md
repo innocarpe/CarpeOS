@@ -13,10 +13,11 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 | **V5-M5** Attempts/review/rollback | One-dispatch; incidents; V5-off rollback; no canonical writes | `src/attempts.ts` | **complete** |
 | **V5-M6** Telemetry | Signed admission model + local TELEMETRY_DB store + SQL migration | `src/telemetry.ts`, `src/telemetry-store.ts`, `migrations/telemetry/001_telemetry_initial.sql` | **complete (local)**; CF Worker deploy remains operator-optional |
 | **V5-M7** Evaluation | Frozen all-200 ledger; denominators; circuit breaker; V5-off | `src/evaluation.ts`, `src/evaluation-all200.ts`, `carpeos v5 eval-all200` | **complete** |
-| **V5-M8** Integration | Body-free accepted 4.0 seam | `src/integration.ts` | **deferred** (draft-lane readiness does not invent 4.0 acceptance) |
+| **V5-M8** Integration | Body-free 4.0 seam scan + final opt-in decision; accept only with independent release evidence | `src/m8-seam.ts`, `scripts/m8-decision.mjs`, `carpeos v5 m8` | **mechanism complete**; **release seam deferred** (install-smoke only today) |
 | **E2E pipeline** | redact→pack→extract→draft reduce→eval | `src/pipeline.ts`, `src/draft-reduce.ts`, `test/pipeline.test.ts` | **complete (offline)** |
-| **Operator CLI** | Opt-in `carpeos v5` (status/readiness/eval-all200/draft) | `apps/carpeos-cli` | **complete** (not capture-hook) |
+| **Operator CLI** | Opt-in `carpeos v5` (status/readiness/eval-all200/draft/m8) | `apps/carpeos-cli` | **complete** (not capture-hook) |
 | **ADR** | Draft-only + DeepSeek primary decision record | `docs/adr/0016-v5-draft-only-deepseek-primary.md` | **complete** |
+| **Product DoD** | Maintainer 5.0.0 definition of done | `docs/maintainers/product-5.0.0.md` | **complete (doc)** |
 
 ## Hard fences (do not violate)
 

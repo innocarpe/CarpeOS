@@ -46,6 +46,7 @@ import {
   runSyncCycle,
 } from "./cycle.js";
 import {
+  buildFinalV5Decision,
   createDraftPipelineDeps,
   decideM8,
   ProviderBoundary,
@@ -1370,14 +1371,14 @@ function runVersion(argv: readonly string[]): number {
 
 /**
  * V5 draft-only operator surface (opt-in). Never touches capture hot path or canonical write APIs.
- * Subcommands: status | readiness | eval-all200 | draft
+ * Subcommands: status | readiness | eval-all200 | draft | m8
  */
 async function runV5(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
   void env;
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "v5 requires a subcommand (status|readiness|eval-all200|draft). See: carpeos help v5",
+      "v5 requires a subcommand (status|readiness|eval-all200|draft|m8). See: carpeos help v5",
     );
   }
 
@@ -1519,6 +1520,23 @@ async function runV5(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<n
       });
       return result.ok ? 0 : 1;
     }
+    case "m8": {
+      if (rest.length > 0) {
+        throw new CliUsageError(`unexpected argument for v5 m8: ${rest[0]}`);
+      }
+      // Resolve monorepo root when running from apps/carpeos-cli/dist
+      const repoRoot = resolve(import.meta.dirname, "../../..");
+      const decision = buildFinalV5Decision({
+        repoRoot,
+        opt_in: true,
+      });
+      writeJson(process.stdout, {
+        ok: decision.draft_lane_shippable,
+        command: "v5.m8",
+        decision,
+      });
+      return decision.draft_lane_shippable ? 0 : 1;
+    }
     default:
       throw new CliUsageError(`unknown v5 subcommand: ${subcommand}\nRun: carpeos help v5`);
   }
@@ -1600,12 +1618,14 @@ USAGE
   carpeos v5 status
   carpeos v5 readiness
   carpeos v5 eval-all200
+  carpeos v5 m8
   carpeos v5 draft --envelope <path> [--pack-id <id>] [--allow-network]
 
 SUBCOMMANDS
   status         Print primary provider/model and fence summary (JSON)
   readiness      Draft-lane readiness + M7 all-200 summary + M8 deferred status
   eval-all200    Run frozen 200-case offline evaluation ledger
+  m8             Classify body-free 4.0 receipt refs + final draft-lane decision (no invented accept)
   draft          Run redact→pack→extract→reduce pipeline on a synthetic envelope file
                  Network stays off unless --allow-network (requires DEEPSEEK_API_KEY)
 

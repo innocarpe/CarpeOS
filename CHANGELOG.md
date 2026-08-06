@@ -18,6 +18,7 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
   `eval-all200`, `draft`). Always `canonical_effect: "none"`; not on the capture
   hot path; OpenRouter not required. See `docs/PRD-v5.md` and ADR 0016.
   npm major `5.0.0` is **not** cut until a separate release.
+- V5-M8 decision machinery and `artifacts/v5/m8/final-decision-receipt.json` (release seam deferred; draft lane shippable).
 
 ## [3.2.0] - 2026-08-04
 
