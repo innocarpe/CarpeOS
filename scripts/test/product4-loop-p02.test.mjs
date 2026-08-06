@@ -2,11 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildSixCommandLoopReceipt } from "../product4/command-loop.mjs";
-import { assertP02Receipt, buildP02Receipt, P02_COMMAND_LINE } from "../product4/p02-replay.mjs";
 import {
+  assertP02Fixture,
+  assertP02Receipt,
+  assertP02RunSemantics,
+  buildP02Receipt,
+  P02_COMMAND_LINE,
+} from "../product4/p02-replay.mjs";
+import { mutationProbeBetween } from "../product4/p02-runner.mjs";
+import {
+  digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
   PRODUCT4_CONTEXT,
   PRODUCT4_POLICY_SHA256,
+  readMaintenanceStudyFixture,
 } from "../product4/policy-identity.mjs";
 
 const steps = [1, 2, 3, 4, 6, 7].map((step) => ({
@@ -51,6 +60,83 @@ const mutationProbe = {
   outbox_rows: 0,
   protected_uploads: 0,
 };
+
+const emptyPlan = {
+  schema: "carpeos.policy-reconciliation-plan/v2",
+  trust_zone_id: "tz_synthetic",
+  from_policy: "adj_v1",
+  to_policy: "adj_v3",
+  limit: 100,
+  total_candidate_count: 0,
+  classified_count: 0,
+  truncated: false,
+  high_water: {
+    canonical_local_sequence_max: 1,
+    disposition_row_count: 0,
+    review_row_count: 0,
+    outbox_id_max: 0,
+    supersession_event_count: 0,
+  },
+  counts: {
+    eligible_write_count: 0,
+    eligible_noop_count: 0,
+    unsafe_unchanged_count: 0,
+    replace_count: 0,
+    invalidate_count: 0,
+    already_applied_count: 0,
+    reason_code_counts: [],
+  },
+  plan_admissible: true,
+  global_taint_reason_codes: [],
+  global_taint_component_ids: [],
+  global_taint_entry_ids: [],
+  entries: [],
+};
+const strictPlan = {
+  ...emptyPlan,
+  plan_digest: `sha256:${digestJson(emptyPlan)}`,
+};
+const strictRun = {
+  ...baseRun,
+  stdout_bytes: JSON.stringify(strictPlan),
+  plan_digest: strictPlan.plan_digest,
+  high_water: strictPlan.high_water,
+};
+const mutationTableKeys = [
+  "canonical_events",
+  "review_rows",
+  "disposition_rows",
+  "outbox_rows",
+  "protected_uploads",
+];
+
+function syntheticStoreObservation(canonicalRowDigests = ["a".repeat(64)], dataVersion) {
+  const highWater = {
+    canonical_local_sequence_max: canonicalRowDigests.length,
+    disposition_row_count: 0,
+    review_row_count: 0,
+    outbox_id_max: 0,
+    supersession_event_count: 0,
+  };
+  const tables = Object.fromEntries(
+    mutationTableKeys.map((key) => {
+      const rowDigests = key === "canonical_events" ? canonicalRowDigests : [];
+      return [
+        key,
+        {
+          count: rowDigests.length,
+          row_digests: rowDigests,
+          preimage_sha256: digestJson(rowDigests),
+        },
+      ];
+    }),
+  );
+  return {
+    highWater,
+    table_preimages: tables,
+    ...(dataVersion === undefined ? {} : { data_version: dataVersion }),
+  };
+}
 
 test("M2 validates exactly six commands and keeps template 5 recovery-only", () => {
   const receipt = buildSixCommandLoopReceipt({ steps });
@@ -139,4 +225,56 @@ test("M3 never fabricates an apply analogue", () => {
   });
   invalid.outcome = "applied";
   assert.throws(() => assertP02Receipt(invalid), /blocked_no_apply/);
+});
+
+test("M3 rejects omitted fixture seeds before any replay", () => {
+  const fixture = readMaintenanceStudyFixture();
+  fixture.disposable_store.canonical_events = [];
+  assert.throws(() => assertP02Fixture(fixture), /fixture_seed_missing/);
+});
+
+test("M3 independently recomputes the plan and refuses forged result semantics", () => {
+  assertP02RunSemantics(strictRun, { fixture: readMaintenanceStudyFixture(), label: "strictRun" });
+
+  const forgedPlan = { ...strictPlan, total_candidate_count: 1 };
+  const forged = {
+    ...strictRun,
+    stdout_bytes: JSON.stringify(forgedPlan),
+    plan_digest: `sha256:${digestJson(forgedPlan)}`,
+  };
+  assert.throws(
+    () =>
+      assertP02RunSemantics(forged, {
+        fixture: readMaintenanceStudyFixture(),
+        label: "forged",
+      }),
+    /result_mismatch|entry_identity_mismatch|plan_digest_mismatch/,
+  );
+
+  const forgedDigest = { ...strictRun, plan_digest: `sha256:${"f".repeat(64)}` };
+  assert.throws(
+    () =>
+      assertP02RunSemantics(forgedDigest, {
+        fixture: readMaintenanceStudyFixture(),
+        label: "forged_digest",
+      }),
+    /plan_digest_mismatch/,
+  );
+});
+
+test("M3 detects in-place updates despite unchanged table counts", () => {
+  const before = syntheticStoreObservation();
+  const between = syntheticStoreObservation(["b".repeat(64)]);
+  const after = syntheticStoreObservation();
+  const probe = mutationProbeBetween(before, between, after);
+  assert.equal(probe.canonical_events, 1);
+  assert.equal(probe.review_rows, 0);
+});
+
+test("M3 detects write-then-delete mutations while restoring final counts", () => {
+  const before = syntheticStoreObservation(["a".repeat(64)], 1);
+  const between = syntheticStoreObservation(["a".repeat(64)], 2);
+  const after = syntheticStoreObservation(["a".repeat(64)], 2);
+  const probe = mutationProbeBetween(before, between, after);
+  for (const key of mutationTableKeys) assert.equal(probe[key], 1);
 });

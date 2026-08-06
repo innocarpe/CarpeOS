@@ -1,4 +1,5 @@
 import {
+  assertFrozenProduct4Sources,
   digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
   PRODUCT4_CONTEXT,
@@ -116,6 +117,7 @@ export function promoteCandidateState({
 
 export function assertCandidateState(state) {
   if (!isRecord(state)) throwStateError("invalid_state", "candidate state must be an object");
+  assertFrozenProduct4Sources();
   const errors = [];
   assertExactKeys(state, STATE_KEYS, "state", errors);
   if (state.schema_version !== PRODUCT4_STATE_SCHEMA) errors.push("schema_version is invalid");
@@ -176,6 +178,7 @@ function transition(state, event) {
 
 function identityFromIntent(intentEnvelope) {
   if (!isRecord(intentEnvelope)) throwStateError("invalid_intent", "intent envelope is required");
+  assertFrozenProduct4Sources();
   const identity = {
     repository_id: intentEnvelope.repository_id,
     head_sha: intentEnvelope.head_sha,
@@ -238,6 +241,10 @@ function assertTransitionOrder(transitions, intent, state, errors) {
     errors.push("first transition must be base classification");
   if (first.to !== "pending_evidence" && first.to !== "not_applicable")
     errors.push("first transition must classify candidate intent");
+  if (first.to === "pending_evidence" && intent !== true)
+    errors.push("pending_evidence state requires intent=true");
+  if (first.to === "not_applicable" && intent !== false)
+    errors.push("not_applicable state requires intent=false");
   if (transitions.length === 1 && state !== first.to)
     errors.push("state does not match transition");
   if (transitions.length === 2) {
@@ -265,10 +272,12 @@ function assertEvidenceTuple(tuple, identity) {
     errors.push("evidence_tuple.fixture_sha256 mismatches fixture");
   if (tuple.intent_policy_sha256 !== identity.intent_policy_sha256)
     errors.push("evidence_tuple.intent_policy_sha256 mismatches P4_0");
-  if (tuple.context !== PRODUCT4_CONTEXT) errors.push("evidence_tuple.context is invalid");
+  if (tuple.context !== identity.context) errors.push("evidence_tuple.context is invalid");
   if (tuple.check_name !== PRODUCT4_CHECK_NAME) errors.push("evidence_tuple.check_name is invalid");
   if (typeof tuple.external_id !== "string" || tuple.external_id.length > 180)
     errors.push("evidence_tuple.external_id is invalid");
+  else if (tuple.external_id !== `carpeos-4.0.0:${identity.head_sha}:${identity.fixture_sha256}`)
+    errors.push("evidence_tuple.external_id is not bound to C and fixture");
   if (!SHA256.test(tuple.attestation_sha256 ?? ""))
     errors.push("evidence_tuple.attestation_sha256 is invalid");
   if (errors.length > 0) throwStateError("invalid_evidence", errors.join("; "));
