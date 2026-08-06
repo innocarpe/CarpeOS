@@ -23,9 +23,11 @@
   },
   "dependencies": {
     "@carpeos/local-store": "workspace:*",
+    "@carpeos/schema": "workspace:*",
     "@carpeos/v5": "workspace:*"
   },
   "devDependencies": {
+    "@carpeos/retrieval": "workspace:*",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
   }

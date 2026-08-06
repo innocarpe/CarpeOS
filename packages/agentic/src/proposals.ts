@@ -7,6 +7,7 @@ import { digestSha256, stableJson } from "./digest.js";
 import type { SqlDatabase } from "./sql.js";
 import {
   AGENTIC_POLICY_VERSION,
+  type AgenticEdgeProposal,
   type AgenticExtractCandidate,
   type AgenticGateResult,
 } from "./types.js";
@@ -21,6 +22,9 @@ export type AgenticProposalRecord = {
   cite_ok: boolean;
   secret_ok: boolean;
   verify_reason_codes: string[];
+  /** P4 structure/link edge proposals (materialize via provenance + graph rebuild). */
+  edges: AgenticEdgeProposal[];
+  structure_reason_codes: string[];
   gate: AgenticGateResult;
   policy_version: typeof AGENTIC_POLICY_VERSION;
   /** Always none until materialize (P2). */
@@ -78,6 +82,8 @@ export function putAgenticProposal(
     secret_ok: boolean;
     verify_reason_codes: string[];
     gate: AgenticGateResult;
+    edges?: readonly AgenticEdgeProposal[];
+    structure_reason_codes?: readonly string[];
     now?: Date;
   },
 ): AgenticProposalRecord {
@@ -98,6 +104,8 @@ export function putAgenticProposal(
     cite_ok: input.cite_ok,
     secret_ok: input.secret_ok,
     verify_reason_codes: input.verify_reason_codes,
+    edges: [...(input.edges ?? [])],
+    structure_reason_codes: [...(input.structure_reason_codes ?? [])],
     gate: input.gate,
     policy_version: AGENTIC_POLICY_VERSION,
     canonical_effect: "none",
@@ -133,7 +141,18 @@ export function getAgenticProposal(
   const row = db
     .prepare("SELECT proposal_json FROM agentic_proposals WHERE proposal_id = ?")
     .get(proposalId) as ProposalRow | undefined;
-  return row === undefined ? undefined : (JSON.parse(row.proposal_json) as AgenticProposalRecord);
+  return row === undefined ? undefined : normalizeProposal(JSON.parse(row.proposal_json));
+}
+
+/** Backfill edges fields for proposals written before P4. */
+function normalizeProposal(raw: AgenticProposalRecord): AgenticProposalRecord {
+  return {
+    ...raw,
+    edges: Array.isArray(raw.edges) ? raw.edges : [],
+    structure_reason_codes: Array.isArray(raw.structure_reason_codes)
+      ? raw.structure_reason_codes
+      : [],
+  };
 }
 
 export function listAgenticProposals(
@@ -162,7 +181,7 @@ export function listAgenticProposals(
   sql += ` ORDER BY created_at ASC, proposal_id ASC LIMIT ?`;
   params.push(limit);
   const rows = db.prepare(sql).all(...params) as ProposalRow[];
-  return rows.map((r) => JSON.parse(r.proposal_json) as AgenticProposalRecord);
+  return rows.map((r) => normalizeProposal(JSON.parse(r.proposal_json)));
 }
 
 /** Mark proposal materialized (P2); keeps record for idempotency. */

@@ -117,10 +117,16 @@ importers:
       '@carpeos/local-store':
         specifier: workspace:*
         version: link:../local-store
+      '@carpeos/schema':
+        specifier: workspace:*
+        version: link:../schema
       '@carpeos/v5':
         specifier: workspace:*
         version: link:../v5
     devDependencies:
+      '@carpeos/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
       typescript:
         specifier: ^5.9.2
         version: 5.9.3

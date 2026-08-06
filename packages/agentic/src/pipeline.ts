@@ -9,10 +9,12 @@ import { makeAgenticPackId, packAgenticEvidence } from "./pack.js";
 import {
   type AgenticProposalRecord,
   listAgenticProposals,
+  makeProposalId,
   putAgenticProposal,
 } from "./proposals.js";
 import type { SqlDatabase } from "./sql.js";
 import { type AgenticStageMode, runExtractStage, runTriageStage } from "./stages.js";
+import { structureAgenticLinks } from "./structure.js";
 import type { AgenticKnowledgeKind } from "./types.js";
 import { verifyExtractCandidate } from "./verify.js";
 
@@ -23,6 +25,12 @@ export type AgenticPipelineInput = {
   signal_text: string;
   /** Optional kind hint (fixtures). */
   hint_kind?: AgenticKnowledgeKind | null;
+  /** Evidence artifact id for derived_from artifact edges (P4). */
+  artifact_id?: string | null;
+  /** Subject / project for about edges (P4). */
+  subject_ref?: string | null;
+  /** Already-materialized meaning unit event ids for optional supports edges. */
+  sibling_unit_event_ids?: readonly string[];
   mode?: AgenticStageMode;
   allow_network?: boolean;
   allow_auto_promote?: boolean;
@@ -45,6 +53,7 @@ export type AgenticPipelineResult = {
     | "triage"
     | "extract"
     | "verify"
+    | "structure"
     | "gate"
     | "proposals"
     | "complete";
@@ -52,6 +61,8 @@ export type AgenticPipelineResult = {
   triage_decision: "keep" | "drop" | "need_context" | null;
   pack_digest: string | null;
   proposals: AgenticProposalRecord[];
+  /** Aggregate structure edge count across proposals (P4). */
+  structure_edge_count: number;
   reason_codes: string[];
   canonical_effect: "none";
   network_used: boolean;
@@ -73,6 +84,7 @@ export function runAgenticProposalPipeline(
     triage_decision: null,
     pack_digest: null,
     proposals: [],
+    structure_edge_count: 0,
     reason_codes: [],
     canonical_effect: "none",
     network_used: false,
@@ -173,14 +185,41 @@ export function runAgenticProposalPipeline(
   }
 
   const proposals: AgenticProposalRecord[] = [];
+  let structure_edge_count = 0;
   for (const candidate of extract.candidates) {
     const verified = verifyExtractCandidate(candidate, packed.pack_text);
+    // E6 structure/link before gate so gate reason trail can include lineage.
+    const unitRef = makeProposalId({
+      trust_zone_id: input.trust_zone_id,
+      source_event_id: input.source_event_id,
+      pack_digest: packed.pack_digest,
+      candidate,
+    });
+    const structured = structureAgenticLinks({
+      unit_ref: unitRef,
+      source_event_id: input.source_event_id,
+      artifact_id: input.artifact_id ?? null,
+      subject_ref: input.subject_ref ?? null,
+      candidate,
+      sibling_unit_event_ids: input.sibling_unit_event_ids ?? [],
+    });
+    structure_edge_count += structured.edges.length;
     const gate = evaluateAgenticGate({
       candidate,
       cite_ok: verified.cite_ok,
       secret_ok: verified.secret_ok,
       allow_auto_promote: input.allow_auto_promote === true,
     });
+    const gateWithStructure = {
+      ...gate,
+      reason_codes: [
+        ...gate.reason_codes,
+        ...structured.edges
+          .filter((e) => e.kind === "derived_from")
+          .map((e) => `edge:derived_from:${e.to_ref}`),
+        ...structured.edges.filter((e) => e.kind === "about").map((e) => `edge:about:${e.to_ref}`),
+      ],
+    };
     const proposal = putAgenticProposal(db, {
       trust_zone_id: input.trust_zone_id,
       source_event_id: input.source_event_id,
@@ -189,7 +228,9 @@ export function runAgenticProposalPipeline(
       cite_ok: verified.cite_ok,
       secret_ok: verified.secret_ok,
       verify_reason_codes: verified.reason_codes,
-      gate,
+      gate: gateWithStructure,
+      edges: structured.edges,
+      structure_reason_codes: structured.reason_codes,
       ...(input.now !== undefined ? { now: input.now } : {}),
     });
     if (proposal.canonical_effect !== "none") {
@@ -203,7 +244,8 @@ export function runAgenticProposalPipeline(
     ok: true,
     stage: "complete",
     proposals,
-    reason_codes: ["proposals_written"],
+    structure_edge_count,
+    reason_codes: ["proposals_written", `structure_edges:${structure_edge_count}`],
   };
 }
 
