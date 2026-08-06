@@ -109,6 +109,19 @@ importers:
         specifier: ^4.114.0
         version: 4.114.0(@cloudflare/workers-types@5.20260728.1)
 
+  packages/agentic:
+    dependencies:
+      '@carpeos/v5':
+        specifier: workspace:*
+        version: link:../v5
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@22.20.1)(vite@7.3.6(@types/node@22.20.1))
+
   packages/capture:
     dependencies:
       '@carpeos/schema':

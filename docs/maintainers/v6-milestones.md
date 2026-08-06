@@ -5,7 +5,7 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 
 | Milestone | Exit criteria | Evidence | Status |
 | --- | --- | --- | --- |
-| **V6-P0** Architecture freeze | ADR 0017 + PRD-v6 + DoD + architecture + scaffold + golden skeleton | docs + `packages/agentic` stub | **in progress (prep PRs)** |
+| **V6-P0** Architecture freeze | ADR 0017 + PRD-v6 + DoD + architecture + scaffold + golden skeleton | docs + `packages/agentic` + golden-12 | **prep PRs; mark complete when merged** |
 | **V6-P1** Proposal jobs | Durable jobs E1–E5; proposals `canonical_effect: none`; fake default | unit/integration tests | pending |
 | **V6-P2** Hold materialize | draft Observation + `agentic_v1` hold; human promote | CLI + store tests | pending |
 | **V6-P3** Narrow auto-promote | allowlist + E5 + precision ≥ 0.90 | eval receipt | pending |
