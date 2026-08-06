@@ -38,17 +38,6 @@ jobs:
           ref: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 11.16.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22.22.0
-          cache: pnpm
-
       - name: Download raw evidence as data
         uses: actions/download-artifact@v7
         with:
@@ -66,6 +55,19 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          cache-dependency-path: candidate/pnpm-lock.yaml
+
       - name: Move C into an external candidate workspace
         run: |
           mkdir -p "$CARPEOS_CANDIDATE_ROOT"
@@ -86,8 +88,17 @@ jobs:
       - name: Execute candidate build and CLI in a bounded bubblewrap sandbox
         run: |
           set -euo pipefail
-          node_dir="$(dirname "$(readlink -f "$(command -v node)")")"
-          pnpm_dir="$(dirname "$(dirname "$(readlink -f "$(command -v pnpm)")")")"
+          node_path="$(readlink -f "$(command -v node)")"
+          node_dir="$(dirname "$node_path")"
+          pnpm_command="$(command -v pnpm)"
+          pnpm_path="$(readlink -f "$pnpm_command")"
+          pnpm_bin_dir="$(dirname "$pnpm_command")"
+          pnpm_dir="$(dirname "$(dirname "$pnpm_path")")"
+          pnpm_store="$(pnpm store path --silent)"
+          test -x "$node_path"
+          test -x "$pnpm_path"
+          test -d "$pnpm_store"
+          test -n "$(find "$pnpm_store" -mindepth 1 -print -quit)"
           sandbox=(
             sudo
             -n
@@ -112,7 +123,7 @@ jobs:
             --setenv NODE_NO_WARNINGS 1
             --setenv NO_COLOR 1
             --setenv TZ UTC
-            --setenv PATH /usr/local/bin:/usr/bin:/bin
+            --setenv PATH "$node_dir:$pnpm_bin_dir:/usr/local/bin:/usr/bin:/bin"
             --cap-drop ALL
             --ro-bind /usr /usr
             --ro-bind /bin /bin
@@ -121,6 +132,8 @@ jobs:
             --ro-bind /etc /etc
             --ro-bind "$node_dir" "$node_dir"
             --ro-bind "$pnpm_dir" "$pnpm_dir"
+            --ro-bind "$pnpm_bin_dir" "$pnpm_bin_dir"
+            --ro-bind "$pnpm_store" /pnpm-store
             --
             setpriv
             --no-new-privs
@@ -136,7 +149,7 @@ jobs:
             cp -aL /candidate/. /work/
             chmod -R u+rwX /work
             cd /work
-            pnpm install --offline --frozen-lockfile --ignore-scripts
+            pnpm install --offline --frozen-store --frozen-lockfile --ignore-scripts --store-dir /pnpm-store
             pnpm --filter "@carpeos/cli..." build
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
             node -e "const fs=require(\"node:fs\"); const s=fs.readFileSync(\"/proc/self/status\",\"utf8\"); if (!s.includes(\"NoNewPrivs:\" + String.fromCharCode(9) + \"1\")) process.exit(23); fs.writeFileSync(\"/output/sandbox-probe.json\", JSON.stringify({backend:\"bubblewrap\", network:\"disabled\", candidate_inputs:\"read_only\", trusted_mounts:false, writable_paths:[\"/home\",\"/output\",\"/tmp\"], capabilities:\"dropped\", no_new_privileges:true, process_limit:64, memory_limit_mb:1024}));"
