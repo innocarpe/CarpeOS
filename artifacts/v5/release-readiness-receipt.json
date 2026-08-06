@@ -1,6 +1,6 @@
 {
   "schema": "carpeos.v5.release-readiness-receipt/v1",
-  "timestamp": "2026-08-06T10:55:00.000Z",
+  "timestamp": "2026-08-06T11:32:00.000Z",
   "target_version": "5.0.0",
   "from_version": "4.0.0",
   "tag": "v5.0.0",
@@ -12,40 +12,42 @@
   "openrouter_required": false,
   "capture_hot_path_wired": false,
   "canonical_effect": "none",
-  "product4_package_plane": {
+  "product4_public_ship": {
     "packages_carpeos_version_on_main": "4.0.0",
-    "changelog_section": "4.0.0",
-    "release_prep_pr": 242,
-    "git_tag_v4_0_0": "missing",
-    "npm_published_4_0_0": false,
-    "github_release_v4_0_0": "missing",
+    "git_tag_v4_0_0": "present",
+    "npm_published_4_0_0": true,
+    "github_release_v4_0_0": "present",
+    "npm_latest": "4.0.0",
+    "verified_at": "2026-08-06T11:32:00.000Z",
     "notes": [
-      "Product 4 code plane + package identity 4.0.0 are on origin/main after #242.",
-      "Public ship (tag/npm/GitHub Release) was not observed as of this receipt.",
-      "Package identity alone is not an M8 accepted release seam."
+      "Public 4.0.0 ship observed complete (tag + npm + GitHub Release).",
+      "Package identity / public ship is still not an M8 accepted release-authority seam."
     ]
   },
   "preflight": {
     "pnpm_check": "required_on_cut",
-    "m0_recompute": "required_on_cut",
-    "m8_decision": "required_on_cut",
-    "release_dry_run": "4.0.0 -> 5.0.0 verified post-4.0 package plane"
+    "m0_recompute": "pass_check_only",
+    "m8_decision": "deferred_draft_lane_shippable",
+    "v5_readiness": "ready_m8_deferred",
+    "v5_unit_tests": "74_pass",
+    "release_dry_run": "4.0.0 -> 5.0.0 (tag v5.0.0) verified"
   },
   "blockers_to_publish": [
     "maintainer_authorization_to_cut_and_push_tag",
-    "release_workflow_npm_token_on_tag_push",
-    "recommended_complete_public_4_0_0_tag_and_npm_before_5_0_0"
+    "release_workflow_npm_token_on_tag_push"
   ],
   "non_blockers": [
     "m8_release_seam_deferred_by_design",
     "cf_worker_telemetry_optional",
-    "draft_lane_code_complete_offline"
+    "draft_lane_code_complete_offline",
+    "public_4_0_0_ship_complete"
   ],
   "notes": [
     "Do not invent Product 4 release-authority acceptance for M8.",
-    "M8 remains deferred: only install-smoke + blocked release-gate receipts under artifacts/g008.",
-    "SemVer cut path is now 4.0.0 -> 5.0.0 (tag v5.0.0).",
-    "Push of main + tag v5.0.0 requires explicit maintainer OK.",
+    "M8 remains deferred: only install-smoke + blocked release-gate under artifacts/g008.",
+    "SemVer cut path: 4.0.0 -> 5.0.0 (tag v5.0.0).",
+    "Cut command (local): node scripts/release.mjs 5.0.0",
+    "Publish requires explicit maintainer OK: git push origin main && git push origin v5.0.0",
     "After publish, activate exact @innocarpe/carpeos@5.0.0 and run carpeos v5 readiness."
   ]
 }
