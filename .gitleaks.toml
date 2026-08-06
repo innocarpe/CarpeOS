@@ -24,4 +24,7 @@ regexes = [
   '''BEGIN PRIVATE KEY''',
   '''protected_plaintext_marker''',
   '''PRIVATE_MARKER''',
+  # Product 4 uses this non-secret observation-key identifier; the default
+  # generic-api-key rule otherwise flags the symbol name in historical diffs.
+  '''(?i)\bP02_KEYS\b''',
 ]
