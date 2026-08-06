@@ -3,6 +3,10 @@ name: Product 4 Candidate Evidence (unprivileged)
 # Trust plane (docs/maintainers/ci-policy.md): not a default PR required gate until
 # ownership/App activation. Auto-run only when Product 4 trust-plane paths change.
 # Unit/contract tests remain the PR quality gate for Product 4 logic on other PRs.
+#
+# Boundary: host steps only prepare trusted tooling, immutable candidate input, a
+# disposable mount layout, and an offline package store. Candidate install, build,
+# CLI init, and probe execution run only inside a bounded bubblewrap namespace.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -31,14 +35,19 @@ jobs:
     steps:
       - name: Configure disposable runner paths
         run: |
-          echo "CARPEOS_HOME=/tmp/carpeos-product4-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
-          echo "CARPEOS_SANDBOX_WORK=/tmp/product4-sandbox-work-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
-          echo "CARPEOS_SANDBOX_OUT=/tmp/product4-sandbox-out-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          {
+            echo "CARPEOS_HOME=/tmp/carpeos-product4-${GITHUB_RUN_ID}"
+            echo "CARPEOS_CANDIDATE_ROOT=/tmp/carpeos-product4-candidate-${GITHUB_RUN_ID}"
+            echo "CARPEOS_SANDBOX_WORK=/tmp/product4-sandbox-work-${GITHUB_RUN_ID}"
+            echo "CARPEOS_SANDBOX_OUT=/tmp/product4-sandbox-out-${GITHUB_RUN_ID}"
+          } >> "$GITHUB_ENV"
 
-      - name: Check out candidate head C
+      - name: Check out candidate head C into an isolated workspace
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up pnpm
@@ -51,15 +60,22 @@ jobs:
         with:
           node-version: 22.22.0
           cache: pnpm
+          cache-dependency-path: candidate/pnpm-lock.yaml
 
-      - name: Install dependencies without package scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Move C into an external candidate root
+        run: |
+          rm -rf "$CARPEOS_CANDIDATE_ROOT"
+          mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
+          mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
+          chmod 0777 "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
 
-      - name: Build the local CLI from C without privileged credentials
-        run: pnpm --filter '@carpeos/cli...' build
+      - name: Populate the offline package store without candidate lifecycle
+        # `pnpm fetch` only downloads into the host store. It does not install into
+        # the candidate tree, run package scripts, build, or initialize the CLI.
+        run: pnpm --dir "$CARPEOS_CANDIDATE_ROOT" fetch --frozen-lockfile
 
-      - name: Initialize a disposable synthetic store
-        run: node apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
+      - name: Freeze the immutable candidate root before sandbox execution
+        run: chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
 
       - name: Install the bubblewrap sandbox runtime
         run: |
@@ -67,24 +83,38 @@ jobs:
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y bubblewrap
           fi
-      - name: Establish the trusted sandbox receipt
+
+      - name: Execute candidate install build and CLI only inside bubblewrap
         run: |
           set -euo pipefail
-          mkdir -p "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
-          chmod -R a+rwX "$CARPEOS_HOME"
-          chmod 0777 "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
-          source_root="/tmp/product4-sandbox-source-${GITHUB_RUN_ID}"
-          rm -rf "$source_root"
-          mkdir -p "$source_root"
-          if ! cp -al "$GITHUB_WORKSPACE/." "$source_root/"; then
-            rm -rf "$source_root"
-            mkdir -p "$source_root"
-            cp -a "$GITHUB_WORKSPACE/." "$source_root/"
+          # setup-pnpm install prefix is not bindable under `sudo bwrap` on GHA
+          # ("Permission denied" on the action tool bin dir). Stage a self-contained
+          # node+pnpm prefix and a copy of the offline store under /var/tmp
+          # (not /tmp: sandbox uses --tmpfs /tmp).
+          tool_root="/var/tmp/product4-host-tools-${GITHUB_RUN_ID}"
+          staged_store="/var/tmp/product4-pnpm-store-${GITHUB_RUN_ID}"
+          rm -rf "$tool_root" "$staged_store"
+          mkdir -p "$tool_root/bin" "$staged_store"
+          node_src="$(readlink -f "$(command -v node)")"
+          node_dir="$(dirname "$node_src")"
+          cp -a "$node_src" "$tool_root/bin/node"
+          if [[ -x "$node_dir/npm" ]]; then
+            npm_cmd="$node_dir/npm"
+          else
+            npm_cmd="$(command -v npm)"
           fi
-          export CARPEOS_SANDBOX_SOURCE="$source_root"
-          echo "CARPEOS_SANDBOX_SOURCE=$source_root" >> "$GITHUB_ENV"
-          node_path="$(readlink -f "$(command -v node)")"
-          node_dir="$(dirname "$node_path")"
+          "$npm_cmd" install --global --prefix "$tool_root" pnpm@11.16.0
+          host_store="$(pnpm store path --silent)"
+          test -d "$host_store"
+          test -n "$(find "$host_store" -mindepth 1 -print -quit)"
+          # Full copy into a disposable tree with world rwx so the sandbox user
+          # can open/update pnpm's store SQLite index.
+          cp -a "$host_store"/. "$staged_store"/
+          chmod -R a+rwX "$tool_root" "$staged_store"
+          test -x "$tool_root/bin/node"
+          test -x "$tool_root/bin/pnpm"
+          test -d "$staged_store"
+          test -n "$(find "$staged_store" -mindepth 1 -print -quit)"
           sandbox=(
             sudo
             -n
@@ -94,7 +124,7 @@ jobs:
             --unshare-all
             --unshare-net
             --clearenv
-            --ro-bind "$CARPEOS_SANDBOX_SOURCE" /candidate
+            --ro-bind "$CARPEOS_CANDIDATE_ROOT" /candidate
             --bind "$CARPEOS_SANDBOX_WORK" /work
             --bind "$CARPEOS_HOME" /home
             --bind "$CARPEOS_SANDBOX_OUT" /output
@@ -102,53 +132,78 @@ jobs:
             --proc /proc
             --dev /dev
             --dir /run
-            --chdir /candidate
+            --chdir /work
             --setenv HOME /home
-            --setenv PATH /usr/local/bin:/usr/bin:/bin
+            --setenv CARPEOS_HOME /home
+            --setenv CARPEOS_TRUST_ZONE tz_synthetic
+            --setenv NODE_NO_WARNINGS 1
+            --setenv NO_COLOR 1
+            --setenv TZ UTC
+            # --clearenv strips host CI; pnpm aborts modules purge without TTY unless CI=true.
+            --setenv CI true
+            --setenv PATH "$tool_root/bin:/usr/local/bin:/usr/bin:/bin"
             --cap-drop ALL
             --ro-bind /usr /usr
             --ro-bind /bin /bin
             --ro-bind /lib /lib
             --ro-bind /lib64 /lib64
             --ro-bind /etc /etc
-            --ro-bind "$node_dir" "$node_dir"
+            --ro-bind "$tool_root" "$tool_root"
+            --bind "$staged_store" /pnpm-store
             --
             setpriv
             --no-new-privs
             --inh-caps=-all
             --ambient-caps=-all
             --
-            # Apply rlimits inside the sandbox. Host `ulimit` before `sudo bwrap`
-            # is reset by sudo, so the probe would observe unlimited RLIMIT_AS.
-            /bin/bash
-            --noprofile
-            --norc
-            -ceu
-            'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"'
-            product4-sandbox-limits
-            "$node_path"
-            /candidate/scripts/product4/sandbox-probe.mjs
-            /output/sandbox-probe.json
           )
-          "${sandbox[@]}"
-          # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
-          # the unprivileged host job can validate and seal the receipt.
-          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
-          tree_sha256="$(node scripts/product4/tree-digest.mjs "$CARPEOS_SANDBOX_SOURCE" HEAD)"
+          # Install/build need headroom. Contract rlimits apply only around the
+          # measured probe (sudo also resets any host-side ulimit).
+          "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
+            rm -rf /work/*
+            cp -RL --no-preserve=ownership /candidate/. /work/
+            find /work -mindepth 1 -exec chmod u+rwX {} +
+            cd /work
+            # Offline + frozen lockfile. Avoid --frozen-store (ReadOnlyStoreIndex fails
+            # to open index.db under this mount). CI=true + confirmModulesPurge defend
+            # ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY after --clearenv.
+            pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir /pnpm-store --config.confirmModulesPurge=false
+            pnpm --filter "@carpeos/cli..." build
+            node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
+            ulimit -u 64
+            ulimit -v 1048576
+            ulimit -f 102400
+            # Observed probe (not claim-only static JSON).
+            node scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
+          '
+          # sudo bwrap writes as root; reclaim for unprivileged host validation.
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_HOME"
+          sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
+          sudo -n chmod -R a-w "$CARPEOS_HOME"
+
+      - name: Emit sandbox receipt bound to immutable C
+        run: |
+          set -euo pipefail
+          tree_sha256="$(node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           export BASE_SHA="${{ github.event.pull_request.base.sha }}"
           export TREE_SHA256="$tree_sha256"
           export PROBE_PATH="$CARPEOS_SANDBOX_OUT/sandbox-probe.json"
-          export CANDIDATE_ROOT="$CARPEOS_SANDBOX_SOURCE"
+          export CANDIDATE_ROOT="$CARPEOS_CANDIDATE_ROOT"
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
-          import {
+          import { pathToFileURL } from "node:url";
+          import { resolve } from "node:path";
+
+          const runnerUrl = pathToFileURL(
+            resolve(process.env.CANDIDATE_ROOT, "scripts/product4/p02-runner.mjs"),
+          ).href;
+          const {
             assertSandboxProbeObservation,
             buildP02SandboxReceipt,
             sandboxProbeDigest,
-          } from "./scripts/product4/p02-runner.mjs";
-
+          } = await import(runnerUrl);
           const probe = assertSandboxProbeObservation(
             JSON.parse(readFileSync(process.env.PROBE_PATH, "utf8")),
           );
@@ -166,18 +221,22 @@ jobs:
           });
           NODE
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_OUT"
+
       - name: Replay the exact read-only P02 command twice
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/product4-artifacts"
-          NODE_NO_WARNINGS=1 node scripts/product4/p02-runner.mjs \
+          # Re-open home for the unprivileged raw producer seed writes.
+          sudo -n chmod -R a+rwX "$CARPEOS_HOME"
+          NODE_NO_WARNINGS=1 node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/p02-runner.mjs" \
             --home "$CARPEOS_HOME" \
-            --workspace-root "$CARPEOS_SANDBOX_SOURCE" \
-            --cli-root "$CARPEOS_SANDBOX_SOURCE" \
-            --candidate-root "$CARPEOS_SANDBOX_SOURCE" \
+            --workspace-root "$CARPEOS_SANDBOX_WORK" \
+            --cli-root "$CARPEOS_SANDBOX_WORK" \
+            --candidate-root "$CARPEOS_CANDIDATE_ROOT" \
             --sandbox-receipt "$CARPEOS_SANDBOX_OUT/sandbox-receipt.json" \
             --output "$RUNNER_TEMP/product4-artifacts/p02-receipt.json"
-          tree_sha256="$(node scripts/product4/tree-digest.mjs "$CARPEOS_SANDBOX_SOURCE" HEAD)"
-          node scripts/product4/raw-producer.mjs \
+          tree_sha256="$(node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
+          node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/raw-producer.mjs" \
             --p02 "$RUNNER_TEMP/product4-artifacts/p02-receipt.json" \
             --head-sha "${{ github.event.pull_request.head.sha }}" \
             --base-sha "${{ github.event.pull_request.base.sha }}" \

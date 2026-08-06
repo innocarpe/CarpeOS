@@ -70,35 +70,55 @@ jobs:
 
       - name: Move C into an external candidate workspace
         run: |
-          mkdir -p "$CARPEOS_CANDIDATE_ROOT"
+          # Rename into place (do not mkdir destination first or mv nests).
+          rm -rf "$CARPEOS_CANDIDATE_ROOT"
           mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
-          chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
           mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
           chmod 0777 "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
-      - name: Freeze trusted evaluator and raw inputs before candidate execution
+
+      - name: Populate the offline package store without candidate lifecycle
+        run: pnpm --dir "$CARPEOS_CANDIDATE_ROOT" fetch --frozen-lockfile
+
+      - name: Freeze candidate root and trusted inputs before sandbox execution
         run: |
+          chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
           chmod -R a-w "$GITHUB_WORKSPACE"
           chmod -R a-w "$RUNNER_TEMP/product4-raw"
+
       - name: Install the bubblewrap sandbox runtime
         run: |
           if ! command -v bwrap >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y bubblewrap
           fi
+
       - name: Execute candidate build and CLI in a bounded bubblewrap sandbox
         run: |
           set -euo pipefail
-          node_path="$(readlink -f "$(command -v node)")"
-          node_dir="$(dirname "$node_path")"
-          pnpm_command="$(command -v pnpm)"
-          pnpm_path="$(readlink -f "$pnpm_command")"
-          pnpm_bin_dir="$(dirname "$pnpm_command")"
-          pnpm_dir="$(dirname "$(dirname "$pnpm_path")")"
-          pnpm_store="$(pnpm store path --silent)"
-          test -x "$node_path"
-          test -x "$pnpm_path"
-          test -d "$pnpm_store"
-          test -n "$(find "$pnpm_store" -mindepth 1 -print -quit)"
+          # setup-pnpm install prefix is not bindable under `sudo bwrap` on GHA.
+          # Stage node+pnpm and a disposable store under /var/tmp.
+          tool_root="/var/tmp/product4-host-tools-${GITHUB_RUN_ID}"
+          staged_store="/var/tmp/product4-pnpm-store-${GITHUB_RUN_ID}"
+          rm -rf "$tool_root" "$staged_store"
+          mkdir -p "$tool_root/bin" "$staged_store"
+          node_src="$(readlink -f "$(command -v node)")"
+          node_dir="$(dirname "$node_src")"
+          cp -a "$node_src" "$tool_root/bin/node"
+          if [[ -x "$node_dir/npm" ]]; then
+            npm_cmd="$node_dir/npm"
+          else
+            npm_cmd="$(command -v npm)"
+          fi
+          "$npm_cmd" install --global --prefix "$tool_root" pnpm@11.16.0
+          host_store="$(pnpm store path --silent)"
+          test -d "$host_store"
+          test -n "$(find "$host_store" -mindepth 1 -print -quit)"
+          cp -a "$host_store"/. "$staged_store"/
+          chmod -R a+rwX "$tool_root" "$staged_store"
+          test -x "$tool_root/bin/node"
+          test -x "$tool_root/bin/pnpm"
+          test -d "$staged_store"
+          test -n "$(find "$staged_store" -mindepth 1 -print -quit)"
           sandbox=(
             sudo
             -n
@@ -123,17 +143,17 @@ jobs:
             --setenv NODE_NO_WARNINGS 1
             --setenv NO_COLOR 1
             --setenv TZ UTC
-            --setenv PATH "$node_dir:$pnpm_bin_dir:/usr/local/bin:/usr/bin:/bin"
+            # --clearenv strips host CI; pnpm aborts modules purge without TTY.
+            --setenv CI true
+            --setenv PATH "$tool_root/bin:/usr/local/bin:/usr/bin:/bin"
             --cap-drop ALL
             --ro-bind /usr /usr
             --ro-bind /bin /bin
             --ro-bind /lib /lib
             --ro-bind /lib64 /lib64
             --ro-bind /etc /etc
-            --ro-bind "$node_dir" "$node_dir"
-            --ro-bind "$pnpm_dir" "$pnpm_dir"
-            --ro-bind "$pnpm_bin_dir" "$pnpm_bin_dir"
-            --ro-bind "$pnpm_store" /pnpm-store
+            --ro-bind "$tool_root" "$tool_root"
+            --bind "$staged_store" /pnpm-store
             --
             setpriv
             --no-new-privs
@@ -141,26 +161,26 @@ jobs:
             --ambient-caps=-all
             --
           )
-          # rlimits must be set inside the namespace (after setpriv). Host ulimit
-          # before sudo bwrap is reset by sudo and is not observed by the probe.
+          # Contract rlimits only around the measured probe (not install/build).
           # --noprofile/--norc: bash -u must not source /etc/bash.bashrc (PS1).
           "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
+            rm -rf /work/*
+            cp -RL --no-preserve=ownership /candidate/. /work/
+            find /work -mindepth 1 -exec chmod u+rwX {} +
+            cd /work
+            pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir /pnpm-store --config.confirmModulesPurge=false
+            pnpm --filter "@carpeos/cli..." build
+            node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
             ulimit -u 64
             ulimit -v 1048576
             ulimit -f 102400
-            rm -rf /work/*
-            cp -aL /candidate/. /work/
-            chmod -R u+rwX /work
-            cd /work
-            pnpm install --offline --frozen-store --frozen-lockfile --ignore-scripts --store-dir /pnpm-store
-            pnpm --filter "@carpeos/cli..." build
-            node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
-            node /work/scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
+            node scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
           # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
           # the unprivileged host job can validate and seal the receipt.
           sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
+
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail
@@ -195,6 +215,7 @@ jobs:
           });
           NODE
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_OUT"
+
       - name: Recompute C-bound semantics from the trusted base
         run: |
           rm -rf "$RUNNER_TEMP/product4-attestation-out"
