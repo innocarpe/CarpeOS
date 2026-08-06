@@ -457,6 +457,8 @@ function relationshipToEdgeKind(relationship: string | undefined): GraphEdgeKind
       return "supports";
     case "contradicts":
       return "contradicts";
+    case "about":
+      return "about";
     case "supersedes":
       return "supersedes";
     default:
