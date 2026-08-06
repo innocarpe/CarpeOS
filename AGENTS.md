@@ -21,10 +21,14 @@ Use fictional, generic, synthetic examples only.
 
 ## Documentation Rules
 
-- `README.md` is the canonical English README — **operator front door**, not a
-  maintainer changelog dump. Keep it short: what / install / quick start / docs
-  links. Version archaeology, DoD tables, and agent install checklists belong in
-  `docs/maintainers/`, `CHANGELOG.md`, or this file — not stacked under the hero.
+- `README.md` is the canonical English README: agents and humans should learn
+  **what the product is, how it works, how to install, and what is shipped**.
+  Keep the **hero clean** (no contradictory status lines or DoD link farms).
+  Keep substantive sections (why, who, capabilities, install paths, status,
+  repo boundary). Do **not** gut those for line-count vanity.
+- Full product-line archaeology (every historical major row) and long agent
+  install essays belong in `docs/PRD.md` / `docs/maintainers/` / this file —
+  not as a second changelog under the hero.
 - `README.ko.md` should track the same substance in Korean.
 - Planned features must be described as planned.
 - Do not document commands as working unless they have been verified.
@@ -32,8 +36,8 @@ Use fictional, generic, synthetic examples only.
   complete until implementation and tests exist.
 - After every **MAJOR** package cut, complete
   `docs/maintainers/major-release-surface.md` and run
-  `node scripts/check-major-release-surface.mjs` (README still needs the current
-  `@innocarpe/carpeos@X.Y.Z` / `vX.Y.Z` pin once, cleanly).
+  `node scripts/check-major-release-surface.mjs` (README needs the current
+  `@innocarpe/carpeos@X.Y.Z` / `vX.Y.Z` pin, cleanly).
 
 ## Agent install (idempotent)
 
