@@ -85,24 +85,83 @@ test("M4 keeps the raw producer unprivileged and dispatch-only until activation"
   assert.match(source, /sudo -n chown -R "\$\(id -u\):\$\(id -g\)" "\$CARPEOS_SANDBOX_OUT"/);
 });
 
-test("M4 isolates base-owned evaluation from the untrusted candidate workspace", () => {
+test("M4 attestation binds both dispatch replay and workflow_run lineage", () => {
   const source = workflow("product-4-candidate-attest.yml");
-  // Not a PR path trigger; optional chain after manual evaluate / dispatch.
+  // The evaluate trust plane remains dispatch-only; attestation has no PR trigger.
   assert.match(source, /workflow_run:/);
+  assert.match(source, /workflows:\n\s+- Product 4 Candidate Evidence \(unprivileged\)/);
+  assert.match(source, /types: \[completed\]/);
   assert.match(source, /workflow_dispatch:/);
-  assert.doesNotMatch(source, /\non:\n {2}pull_request:/);
+  assert.match(source, /run_id:[\s\S]*required: true/);
+  assert.match(source, /head_sha:[\s\S]*required: true/);
+  assert.match(source, /base_sha:[\s\S]*required: true/);
+  assert.doesNotMatch(source, /\n\s+pull_request:/);
   assert.doesNotMatch(source, /pull_request_target/);
+  assert.doesNotMatch(source, /github\.event\.pull_request/);
+
+  // Automatic chaining accepts only a successful evaluate dispatch run; replay
+  // accepts the three required upstream identity inputs.
   assert.match(
     source,
-    /ref: \$\{\{ github\.event\.workflow_run\.pull_requests\[0\]\.base\.sha \}\}/,
+    /github\.event_name == 'workflow_dispatch'[\s\S]*github\.event_name == 'workflow_run'[\s\S]*github\.event\.workflow_run\.conclusion == 'success'[\s\S]*github\.event\.workflow_run\.event == 'workflow_dispatch'/,
   );
-  assert.match(source, /path: candidate/);
-  assert.match(source, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
-  assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
-  assert.match(source, /name: product4-raw-\$\{\{ github\.event\.workflow_run\.head_sha \}\}\n/);
+  assert.match(source, /EVENT_RUN_ID: \$\{\{ github\.event\.workflow_run\.id \}\}/);
+  assert.match(source, /EVENT_HEAD_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(
+    source,
+    /EVENT_REPOSITORY: \$\{\{ github\.event\.workflow_run\.repository\.full_name \}\}/,
+  );
+  assert.match(source, /INPUT_RUN_ID: \$\{\{ inputs\.run_id \}\}/);
+  assert.match(source, /INPUT_HEAD_SHA: \$\{\{ inputs\.head_sha \}\}/);
+  assert.match(source, /INPUT_BASE_SHA: \$\{\{ inputs\.base_sha \}\}/);
+  assert.match(source, /run_re='\^\[1-9\]\[0-9\]\*\$'/);
+  assert.match(source, /sha_re='\^\[0-9a-f\]\{40\}\$'/);
+  assert.match(source, /upstream run_id is malformed/);
+  assert.match(source, /upstream head_sha is malformed/);
+  assert.match(source, /upstream base_sha is malformed/);
+
+  // Metadata is verified with a read-only API call before any artifact access.
+  const metadataIndex = source.indexOf("Verify upstream evaluate run metadata");
+  const downloadIndex = source.indexOf("Download exact raw evidence");
+  const bindingIndex = source.indexOf("Bind raw report C/base");
+  const checkoutIndex = source.indexOf("Check out trusted evaluator base");
+  assert.ok(metadataIndex >= 0 && metadataIndex < downloadIndex);
+  assert.ok(downloadIndex < bindingIndex && bindingIndex < checkoutIndex);
+  const metadataStep = source.slice(metadataIndex, downloadIndex);
+  assert.match(metadataStep, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(metadataStep, /curl --fail --silent --show-error --request GET/);
+  assert.match(
+    metadataStep,
+    /\/repos\/\$PRODUCT4_UPSTREAM_REPOSITORY\/actions\/runs\/\$PRODUCT4_UPSTREAM_RUN_ID/,
+  );
+  assert.match(metadataStep, /\.id \| tostring\) == \$run_id/);
+  assert.match(metadataStep, /\.repository\.full_name == \$repository/);
+  assert.match(metadataStep, /\.name == \$workflow/);
+  assert.match(metadataStep, /\.status == "completed"/);
+  assert.match(metadataStep, /\.conclusion == "success"/);
+  assert.match(metadataStep, /\.event == \$event/);
+  assert.match(metadataStep, /\.head_sha == \$head_sha/);
+
+  // Artifact selection and all checkouts use the same normalized run/C/base/repo.
+  assert.match(source, /name: product4-raw-\$\{\{ steps\.normalize\.outputs\.head_sha \}\}/);
+  assert.match(source, /repository: \$\{\{ steps\.normalize\.outputs\.repository \}\}/);
+  assert.match(source, /run-id: \$\{\{ steps\.normalize\.outputs\.run_id \}\}/);
+  assert.match(source, /report_head=.*jq -er/);
+  assert.match(source, /report_base=.*jq -er/);
+  assert.match(source, /raw report head_sha is not bound to upstream C/);
+  assert.match(source, /raw report base_sha is not bound to upstream B/);
+  assert.match(source, /repository: \$\{\{ steps\.bind\.outputs\.repository \}\}/);
+  assert.match(source, /ref: \$\{\{ steps\.bind\.outputs\.base_sha \}\}/);
+  assert.match(source, /ref: \$\{\{ steps\.bind\.outputs\.head_sha \}\}/);
+  assert.match(source, /--head-sha "\$PRODUCT4_HEAD_SHA"/);
+  assert.match(source, /--base-sha "\$PRODUCT4_BASE_SHA"/);
+  assert.doesNotMatch(source, /product4-raw-\$\{\{ github\.event\.workflow_run/);
   assert.match(source, /name: product4-attestation\n/);
   assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
+  assert.match(source, /path: candidate/);
   assert.match(source, /persist-credentials: false/);
+
+  assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
   assert.match(source, /evaluator-runner\.mjs/);
   assert.match(
     evaluatorRunner(),
@@ -144,7 +203,8 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   // sudo bwrap leaves root-owned 0600 probe files; host must reclaim before read.
   assert.match(source, /sudo -n chown -R "\$\(id -u\):\$\(id -g\)" "\$CARPEOS_SANDBOX_OUT"/);
   assert.doesNotMatch(source, /--bind "\$HOME"/);
-  assert.doesNotMatch(source, /env:[\s\S]{0,160}github\.token/);
+  const candidateExecution = source.slice(source.indexOf("Execute candidate build"));
+  assert.doesNotMatch(candidateExecution, /github\.token|GH_TOKEN|Authorization/);
   assertNoJobLevelRunnerContext(source);
   assert.doesNotMatch(
     source,

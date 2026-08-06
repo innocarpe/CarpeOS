@@ -42,6 +42,14 @@ jobs:
             echo "CARPEOS_SANDBOX_CLI=/var/tmp/product4-sandbox-cli-${GITHUB_RUN_ID}"
             echo "CARPEOS_SANDBOX_OUT=/var/tmp/product4-sandbox-out-${GITHUB_RUN_ID}"
           } >> "$GITHUB_ENV"
+      - name: Validate dispatch C/B identity
+        run: |
+          set -euo pipefail
+          sha_re='^[0-9a-f]{40}$'
+          [[ "$PRODUCT4_HEAD_SHA" =~ $sha_re ]] ||
+            { echo "::error::dispatch head_sha is malformed" >&2; exit 1; }
+          [[ "$PRODUCT4_BASE_SHA" =~ $sha_re ]] ||
+            { echo "::error::dispatch base_sha is malformed" >&2; exit 1; }
 
       - name: Check out candidate head C
         uses: actions/checkout@v7
