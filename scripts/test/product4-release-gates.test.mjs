@@ -402,7 +402,7 @@ function releaseReceipts(manifest, candidate) {
   return { installSmoke, ancestry, releaseDiff, tagIdentity, approval };
 }
 
-test("M5 release gate binds C, R, P4_0, pack-once, ancestry, diff, approval, and authority", () => {
+test("M5 release gate defers self-asserted authority even when all synthetic receipts are present", () => {
   const candidate = candidateEvidence();
   const { directory, manifest, tarballPath } = manifestAndTarball();
   try {
@@ -424,10 +424,12 @@ test("M5 release gate binds C, R, P4_0, pack-once, ancestry, diff, approval, and
       releaseSha,
       observedAt: timestamp,
     });
-    assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
-    assert.equal(report.decision, "ready");
+    assert.equal(report.status, "blocked", JSON.stringify(report, null, 2));
+    assert.equal(report.decision, "defer");
     assert.equal(report.technical_release_blocking_claim, "none");
-    assert.equal(report.identity?.decision, "ready");
+    assert.equal(report.identity?.decision, "defer");
+    assert.ok(report.blockers.includes("release_authority_not_verified"));
+    assert.ok(report.blockers.includes("release_authority_bypass_unproven"));
     assertReleaseIdentity(report.identity);
   } finally {
     rmSync(directory, { recursive: true, force: true });

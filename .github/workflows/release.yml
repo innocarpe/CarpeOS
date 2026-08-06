@@ -70,6 +70,12 @@ jobs:
           TARBALL: ${{ steps.artifact.outputs.tarball }}
           PACKAGE_VERSION: ${{ steps.pkg.outputs.version }}
         run: |
+          RECEIPT_DIR="$RUNNER_TEMP/product4-receipts"
+          export RECEIPT_DIR
+          mkdir -p "$RECEIPT_DIR"
+          if [ -d artifacts/receipts ]; then
+            cp -R artifacts/receipts/. "$RECEIPT_DIR"
+          fi
           node scripts/pack-once.mjs assert-artifact --manifest "$MANIFEST" --tarball "$TARBALL"
           SMOKE_ROOT="$(mktemp -d "$RUNNER_TEMP/carpeos-release-smoke.XXXXXX")"
           cleanup() {
@@ -91,18 +97,60 @@ jobs:
           "$CLI" setup run --apply --home "$CARPEOS_HOME"
           "$CLI" setup doctor --home "$CARPEOS_HOME"
           node scripts/smoke-dogfood.mjs --cli "$CLI"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { digestJson } from "./scripts/product4/policy-identity.mjs";
+
+          const manifest = JSON.parse(readFileSync(process.env.MANIFEST, "utf8"));
+          const manifestDigest = digestJson(manifest);
+          const artifactSha256 = manifest.sha256.slice("sha256:".length);
+          const installDigest = digestJson({
+            artifact_sha256: artifactSha256,
+            manifest_digest: manifestDigest,
+            package_name: "@innocarpe/carpeos",
+            version: process.env.PACKAGE_VERSION,
+          });
+          const smokeDigest = digestJson({
+            install_digest: installDigest,
+            smoke: "passed",
+            version: process.env.PACKAGE_VERSION,
+          });
+          const unsigned = {
+            schema_version: "product4-install-smoke-v1",
+            receipt_type: "install_smoke",
+            status: "passed",
+            package_name: "@innocarpe/carpeos",
+            version: process.env.PACKAGE_VERSION,
+            manifest_digest: manifestDigest,
+            artifact_sha256: artifactSha256,
+            install_digest: installDigest,
+            smoke_digest: smokeDigest,
+            observed_at: new Date().toISOString(),
+          };
+          const receipt = { ...unsigned, receipt_digest: digestJson(unsigned) };
+          writeFileSync(
+            join(process.env.RECEIPT_DIR, "product4-install-smoke-v1.json"),
+            `${JSON.stringify(receipt, null, 2)}\n`,
+            "utf8",
+          );
+          NODE
 
       - name: Verify Product 4 release gates before registry configuration
         env:
           MANIFEST: ${{ steps.artifact.outputs.manifest }}
           TARBALL: ${{ steps.artifact.outputs.tarball }}
         run: |
+          RECEIPT_DIR="$RUNNER_TEMP/product4-receipts"
+          # Source receipts from --receipt-dir artifacts/receipts are copied into this temporary bundle.
           node scripts/verify-4.0-gates.mjs \
-            --receipt-dir artifacts/receipts \
+            --receipt-dir "$RECEIPT_DIR" \
             --manifest "$MANIFEST" \
             --tarball "$TARBALL" \
             --tag "$GITHUB_REF_NAME" \
             --release-sha "$GITHUB_SHA" \
+            --workflow-sha "$GITHUB_SHA" \
+            --verifier-sha "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/product4-release-gate.json"
 
       - name: Preserve the exact gated artifact

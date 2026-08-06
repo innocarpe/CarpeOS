@@ -187,6 +187,9 @@ export function verifyReleaseGates(input = {}) {
     authority: null,
     observed_at: observedAt,
   };
+  const expectedWorkflowSha =
+    input.workflowSha ?? input.currentWorkflowSha ?? input.releaseWorkflowSha ?? input.releaseSha;
+  const expectedVerifierSha = input.verifierSha ?? input.currentVerifierSha ?? expectedWorkflowSha;
 
   requireTimestamp(observedAt, blockers, "observed_at");
   const authority = checkReceipt(
@@ -197,8 +200,17 @@ export function verifyReleaseGates(input = {}) {
     assertReleaseAuthorityReceipt,
   );
   if (authority) {
-    report.authority = safeAuthorityReconciliation(authority, blockers);
+    report.authority = safeAuthorityReconciliation(authority, blockers, input.releaseGate);
     evidence.authority = authority.receipt_digest;
+    if (authority.workflow_policy.release_workflow_sha !== authority.workflow_policy.verifier_sha)
+      blockers.push("workflow_verifier_sha_drift");
+    if (
+      expectedWorkflowSha &&
+      authority.workflow_policy.release_workflow_sha !== expectedWorkflowSha
+    )
+      blockers.push("release_workflow_sha_mismatch");
+    if (expectedVerifierSha && authority.workflow_policy.verifier_sha !== expectedVerifierSha)
+      blockers.push("verifier_sha_mismatch");
     if (authority.status !== "verified") blockers.push("release_authority_not_verified");
     if (report.authority.status !== "procedural_ready")
       blockers.push("release_authority_bypass_unproven");
@@ -259,7 +271,8 @@ export function verifyReleaseGates(input = {}) {
       } catch (error) {
         blockers.push(`evaluator_attestation_invalid:${errorMessage(error)}`);
       }
-      if (evaluatorResult.attestation?.base_sha) baseSha = evaluatorResult.attestation.base_sha;
+      if (evaluatorResult.attestation?.provenance?.base_sha)
+        baseSha = evaluatorResult.attestation.provenance.base_sha;
     }
     if (evaluatorResult.policy_sha256 !== PRODUCT4_POLICY_SHA256)
       blockers.push("evaluator_policy_not_active");
@@ -445,7 +458,7 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.help) {
     process.stdout.write(
-      "Usage: node scripts/verify-4.0-gates.mjs --receipt-dir DIR --manifest FILE --tarball FILE --tag TAG --release-sha SHA [--output FILE]\n",
+      "Usage: node scripts/verify-4.0-gates.mjs --receipt-dir DIR --manifest FILE --tarball FILE --tag TAG --release-sha SHA --workflow-sha SHA --verifier-sha SHA [--output FILE]\n",
     );
     return 0;
   }
@@ -457,6 +470,8 @@ export function main(argv = process.argv.slice(2)) {
     tarballPath: options.tarball,
     tag: options.tag,
     releaseSha: options.releaseSha,
+    workflowSha: options.workflowSha,
+    verifierSha: options.verifierSha,
   });
   const output = `${JSON.stringify(report, null, 2)}\n`;
   if (options.output) writeFileSync(resolve(options.output), output, "utf8");
@@ -503,12 +518,9 @@ function checkReceipt(value, missingCode, label, blockers, assertion) {
   }
 }
 
-function safeAuthorityReconciliation(receipt, blockers) {
+function safeAuthorityReconciliation(receipt, blockers, releaseGate) {
   try {
-    const result = reconcileReleaseAuthority({
-      receipt,
-      releaseGate: { deleted: true, actor: "candidate_release_actor" },
-    });
+    const result = reconcileReleaseAuthority({ receipt, releaseGate });
     return result;
   } catch (error) {
     blockers.push(`release_authority_reconciliation_invalid:${errorMessage(error)}`);
@@ -786,6 +798,8 @@ function parseArgs(argv) {
     tarball: undefined,
     tag: undefined,
     releaseSha: undefined,
+    workflowSha: undefined,
+    verifierSha: undefined,
     output: undefined,
     help: false,
   };
@@ -801,6 +815,8 @@ function parseArgs(argv) {
       "--tarball": "tarball",
       "--tag": "tag",
       "--release-sha": "releaseSha",
+      "--workflow-sha": "workflowSha",
+      "--verifier-sha": "verifierSha",
       "--output": "output",
     }[arg];
     if (!name || index + 1 >= argv.length) throwGateError("usage", `missing value for ${arg}`);

@@ -27,7 +27,11 @@ import {
   PRODUCT4_POLICY_SHA256,
 } from "./policy-identity.mjs";
 import { buildRawCandidateReportFromP02 } from "./raw-producer.mjs";
-import { buildReleaseAuthorityReceipt, reconcileReleaseAuthority } from "./release-authority.mjs";
+import {
+  buildReleaseAuthorityEvidence,
+  buildReleaseAuthorityReceipt,
+  reconcileReleaseAuthority,
+} from "./release-authority.mjs";
 import { projectFixedContext, reconcileRulesetResponse } from "./ruleset-guard.mjs";
 
 export const DOGFOOD_SCHEMA = "product4-dogfood-receipt-v1";
@@ -395,18 +399,31 @@ function responseLoss() {
 }
 
 function gateDeletionBypass() {
-  const result = reconcileReleaseAuthority({
-    receipt: verifiedAuthority(),
-    releaseGate: { deleted: true, actor: "candidate_release_actor" },
-  });
+  const receipt = blockedAuthority();
+  const observation = {
+    gate_deleted: true,
+    gate_actor: "candidate_release_actor",
+    gate_actor_allowed: false,
+    gate_deleted_result: "denied",
+    tag_result: "denied",
+    credential_result: "denied",
+  };
+  const releaseGate = {
+    deleted: true,
+    actor: "candidate_release_actor",
+    observations: {
+      ...observation,
+      evidence_digest: digestJson({ ...observation, controller_ref: receipt.controller.ref }),
+    },
+  };
+  const result = reconcileReleaseAuthority({ receipt, releaseGate });
   if (
-    result.status !== "procedural_ready" ||
-    result.bypass.gate_deleted_result !== "denied" ||
-    result.bypass.tag_result !== "denied" ||
-    result.bypass.credential_result !== "denied"
+    result.status !== "blocked" ||
+    result.tag_capability !== "denied" ||
+    result.credential_capability !== "denied"
   )
     throwDogfoodError("release_bypass_accepted", "candidate bypass obtained release capability");
-  return "denied";
+  return "blocked";
 }
 
 function missingOwnership() {
