@@ -12,11 +12,13 @@ import {
   buildBypassObservation,
   buildReleaseAuthorityEvidence,
   buildReleaseAuthorityReceipt,
+  assertReleaseAuthorityReceipt,
   reconcileReleaseAuthority,
   simulateReleaseBypass,
 } from "../product4/release-authority.mjs";
 
 const timestamp = "2026-01-02T00:00:00Z";
+const verificationAt = "2026-01-02T00:30:00Z";
 const candidateSha = "a".repeat(40);
 const workflowSha = "b".repeat(40);
 const digest = "c".repeat(64);
@@ -228,6 +230,7 @@ function verifiedReceipt() {
     authorityEvidence: evidence,
     authorityVerifier: () => evidence,
     releaseRequest: request,
+    verificationAt,
   });
 }
 
@@ -313,6 +316,7 @@ test("keeps the runtime and schema nested authority contract aligned", () => {
 
 test("accepts only injected external proof with exact request, policy, and bypass bindings", () => {
   const verified = verifiedReceipt();
+  const request = verified.authority_evidence.request;
   assert.equal(verified.status, "verified");
   const observations = buildBypassObservation({
     receipt: verified,
@@ -326,6 +330,8 @@ test("accepts only injected external proof with exact request, policy, and bypas
   const reconciliation = reconcileReleaseAuthority({
     receipt: verified,
     releaseGate: { deleted: true, actor: "candidate_release_actor", observations },
+    expectedRequest: request,
+    verificationAt,
   });
   assert.equal(reconciliation.status, "procedural_ready");
   assert.equal(reconciliation.tag_capability, "controller_only");
@@ -369,6 +375,59 @@ test("rejects stale or mismatched injected authority proof", () => {
   assert.equal(mismatchedReceipt.status, "blocked_unknown");
 });
 
+test("checks expiry against verification time, including the exact boundary", () => {
+  const fields = verifiedFields();
+  const request = releaseRequest(fields);
+  const bypass = fields.bypass_rehearsal;
+  const expiredEvidence = externalEvidence(fields, request, bypass, {
+    freshness: {
+      observed_at: timestamp,
+      expires_at: verificationAt,
+      max_age_seconds: 3600,
+    },
+  });
+  const expired = buildReleaseAuthorityReceipt(fields, {
+    authorityEvidence: expiredEvidence,
+    authorityVerifier: () => expiredEvidence,
+    releaseRequest: request,
+    verificationAt,
+  });
+  assert.equal(expired.status, "blocked_unknown");
+  assert.ok(expired.blockers.includes("authority_evidence_invalid"));
+
+  const expiredUnsigned = { ...fields, authority_evidence: expiredEvidence };
+  const forgedVerified = {
+    ...expiredUnsigned,
+    receipt_digest: digestJson(expiredUnsigned),
+  };
+  assert.throws(
+    () =>
+      assertReleaseAuthorityReceipt(forgedVerified, {
+        expectedRequest: request,
+        verificationAt,
+      }),
+    /authority_evidence_expired/,
+  );
+
+  const futureEvidence = externalEvidence(fields, request, bypass, {
+    freshness: {
+      observed_at: timestamp,
+      expires_at: "2026-01-02T00:30:01Z",
+      max_age_seconds: 3600,
+    },
+  });
+  const future = buildReleaseAuthorityReceipt(fields, {
+    authorityEvidence: futureEvidence,
+    authorityVerifier: () => futureEvidence,
+    releaseRequest: request,
+    verificationAt,
+  });
+  assert.equal(future.status, "verified");
+  assert.doesNotThrow(() =>
+    assertReleaseAuthorityReceipt(future, { expectedRequest: request, verificationAt }),
+  );
+});
+
 test("rejects forged bypass denial even when the caller supplies a valid digest", () => {
   const verified = verifiedReceipt();
   const observations = buildBypassObservation({
@@ -385,6 +444,7 @@ test("rejects forged bypass denial even when the caller supplies a valid digest"
       simulateReleaseBypass({
         receipt: verified,
         releaseGate: { deleted: true, actor: "candidate_release_actor", observations },
+        verificationAt,
       }),
     /bypass_observation_unverified/,
   );

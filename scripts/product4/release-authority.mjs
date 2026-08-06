@@ -179,6 +179,7 @@ export function buildReleaseAuthorityReceipt(receipt, options = {}) {
   const normalized = { ...receipt };
   const expectedRequest =
     options.releaseRequest ?? options.release_request ?? options.expectedRequest;
+  const verificationAt = resolveVerificationAt(options, expectedRequest);
   let suppliedEvidence = options.authorityEvidence ?? options.externalEvidence;
   let verifierSupplied = false;
   const verifier =
@@ -194,11 +195,12 @@ export function buildReleaseAuthorityReceipt(receipt, options = {}) {
     try {
       const verification =
         verifier.length >= 2
-          ? verifier(normalized, expectedRequest, suppliedEvidence)
+          ? verifier(normalized, expectedRequest, suppliedEvidence, verificationAt)
           : verifier({
               receipt: normalized,
               request: expectedRequest,
               evidence: suppliedEvidence,
+              verificationAt,
             });
       const returnedEvidence = extractEvidence(verification);
       if (returnedEvidence !== undefined) suppliedEvidence = returnedEvidence;
@@ -221,6 +223,7 @@ export function buildReleaseAuthorityReceipt(receipt, options = {}) {
 
   const evidenceErrors = collectAuthorityEvidenceErrors(normalized.authority_evidence, normalized, {
     expectedRequest,
+    verificationAt,
     requireExternal: normalized.status === "verified",
     requireVerifierCallback: normalized.status === "verified",
     verifierSupplied,
@@ -238,12 +241,12 @@ export function buildReleaseAuthorityReceipt(receipt, options = {}) {
 
   assertReleaseAuthorityReceipt(
     { ...normalized, receipt_digest: undefined },
-    { allowMissingDigest: true, expectedRequest },
+    { allowMissingDigest: true, expectedRequest, verificationAt },
   );
   const unsigned = { ...normalized };
   delete unsigned.receipt_digest;
   const result = { ...unsigned, receipt_digest: digestJson(unsigned) };
-  return assertReleaseAuthorityReceipt(result, { expectedRequest });
+  return assertReleaseAuthorityReceipt(result, { expectedRequest, verificationAt });
 }
 
 /**
@@ -298,8 +301,10 @@ export function buildReleaseAuthorityEvidence(input = {}) {
 }
 
 export function assertReleaseAuthorityEvidence(evidence, receipt, options = {}) {
+  const verificationAt = resolveVerificationAt(options, options.expectedRequest);
   const errors = collectAuthorityEvidenceErrors(evidence, receipt, {
     ...options,
+    verificationAt,
     requireExternal: options.requireExternal ?? true,
     requireVerifierCallback: options.requireVerifierCallback ?? options.requireExternal ?? true,
   });
@@ -334,10 +339,14 @@ export function buildBypassObservation({ receipt, releaseGate = {}, results = {}
   return result;
 }
 
-export function assertReleaseAuthorityReceipt(
-  receipt,
-  { allowMissingDigest = false, expectedWorkflowSha, expectedVerifierSha, expectedRequest } = {},
-) {
+export function assertReleaseAuthorityReceipt(receipt, options = {}) {
+  const {
+    allowMissingDigest = false,
+    expectedWorkflowSha,
+    expectedVerifierSha,
+    expectedRequest,
+  } = options;
+  const verificationAt = resolveVerificationAt(options, expectedRequest);
   if (!isRecord(receipt)) throwAuthorityError("invalid_receipt", "authority receipt is required");
   const errors = [];
   if (Object.keys(receipt).some((key) => !RELEASE_AUTHORITY_KEYS.includes(key)))
@@ -371,6 +380,7 @@ export function assertReleaseAuthorityReceipt(
     errors.push(
       ...collectAuthorityEvidenceErrors(receipt.authority_evidence, receipt, {
         expectedRequest,
+        verificationAt,
         requireExternal: receipt.status === "verified",
       }),
     );
@@ -425,6 +435,7 @@ export function assertReleaseAuthorityReceipt(
     if (
       collectAuthorityEvidenceErrors(receipt.authority_evidence, receipt, {
         expectedRequest,
+        verificationAt,
         requireExternal: true,
       }).length > 0
     )
@@ -443,11 +454,22 @@ export function assertReleaseAuthorityReceipt(
   return receipt;
 }
 
-export function reconcileReleaseAuthority({ receipt, releaseGate } = {}) {
-  assertReleaseAuthorityReceipt(receipt);
+export function reconcileReleaseAuthority({
+  receipt,
+  releaseGate,
+  expectedRequest,
+  ...options
+} = {}) {
+  const verificationAt = resolveVerificationAt(options, expectedRequest);
+  assertReleaseAuthorityReceipt(receipt, { expectedRequest, verificationAt });
   let bypass;
   try {
-    bypass = simulateReleaseBypass({ receipt, releaseGate });
+    bypass = simulateReleaseBypass({
+      receipt,
+      releaseGate,
+      expectedRequest,
+      verificationAt,
+    });
   } catch (error) {
     const code = error instanceof ReleaseAuthorityError ? error.code : "bypass_observation_invalid";
     return {
@@ -499,8 +521,9 @@ export function reconcileReleaseAuthority({ receipt, releaseGate } = {}) {
   };
 }
 
-export function simulateReleaseBypass({ receipt, releaseGate } = {}) {
-  assertReleaseAuthorityReceipt(receipt);
+export function simulateReleaseBypass({ receipt, releaseGate, expectedRequest, ...options } = {}) {
+  const verificationAt = resolveVerificationAt(options, expectedRequest);
+  assertReleaseAuthorityReceipt(receipt, { expectedRequest, verificationAt });
   if (!isRecord(releaseGate)) {
     throwAuthorityError("bypass_observation_missing", "bypass observations are required");
   }
@@ -581,6 +604,7 @@ function collectAuthorityEvidenceErrors(
   receipt,
   {
     expectedRequest,
+    verificationAt,
     requireExternal = false,
     requireVerifierCallback = false,
     verifierSupplied = false,
@@ -591,6 +615,8 @@ function collectAuthorityEvidenceErrors(
     errors.push("authority evidence is required");
     return errors;
   }
+  if (requireExternal && !TIMESTAMP.test(verificationAt ?? ""))
+    errors.push("authority verification time is invalid");
   assertExactKeys(evidence, AUTHORITY_EVIDENCE_KEYS, "authority_evidence", errors);
   assertRequiredKeys(evidence, AUTHORITY_EVIDENCE_REQUIRED_KEYS, "authority_evidence", errors);
   if (evidence.schema_version !== AUTHORITY_EVIDENCE_SCHEMA)
@@ -698,6 +724,15 @@ function collectAuthorityEvidenceErrors(
       Date.parse(freshness.expires_at) <= Date.parse(freshness.observed_at)
     )
       errors.push("authority evidence expiry is not after observation");
+    if (
+      requireExternal &&
+      TIMESTAMP.test(freshness.expires_at ?? "") &&
+      TIMESTAMP.test(verificationAt ?? "") &&
+      Date.parse(freshness.expires_at) <= Date.parse(verificationAt)
+    )
+      errors.push(
+        "authority_evidence_expired: authority evidence expires at or before verification time",
+      );
   }
 
   const signaturePresent = evidence.signature !== undefined;
@@ -1293,6 +1328,38 @@ function stripKey(value, key) {
   const copy = { ...value };
   delete copy[key];
   return copy;
+}
+
+function resolveVerificationAt(options = {}, expectedRequest) {
+  const supplied =
+    options.verificationAt ??
+    options.verification_at ??
+    options.verificationTime ??
+    options.verification_time ??
+    options.currentVerificationAt ??
+    options.current_verification_at ??
+    options.currentVerificationTime ??
+    options.current_verification_time ??
+    options.currentTime ??
+    options.current_time ??
+    options.now ??
+    options.nowAt ??
+    options.verifiedAt ??
+    options.verified_at ??
+    expectedRequest?.verificationAt ??
+    expectedRequest?.verification_at ??
+    expectedRequest?.verificationTime ??
+    expectedRequest?.verification_time;
+  if (supplied === undefined) return new Date().toISOString().replace(".000Z", "Z");
+  if (supplied instanceof Date)
+    return Number.isFinite(supplied.getTime())
+      ? supplied.toISOString().replace(".000Z", "Z")
+      : supplied;
+  if (typeof supplied === "number")
+    return Number.isFinite(supplied)
+      ? new Date(supplied).toISOString().replace(".000Z", "Z")
+      : supplied;
+  return supplied;
 }
 
 function addSeconds(timestamp, seconds) {
