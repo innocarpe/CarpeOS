@@ -18,6 +18,7 @@ import {
   buildEvidenceReceipt,
   buildExactCheckQuery,
   normalizeCheckRunsResponse,
+  normalizeCheckSuitesResponse,
 } from "./github-evidence-api.mjs";
 import { assertP02Receipt, buildP02Receipt, P02_COMMAND_LINE } from "./p02-replay.mjs";
 import {
@@ -312,8 +313,16 @@ function duplicateApiResults() {
     repositoryPath: identity.repository_path,
     headSha: candidateSha,
   });
-  // Receipts require adapter-marked GitHub pages. Drive the same-id conflict through the
-  // real check-runs adapter so duplicate refusal still targets buildEvidenceReceipt.
+  // Receipts require independent suite+run adapter pages. Drive the same-id conflict through
+  // the real check-runs adapter so duplicate refusal still targets buildEvidenceReceipt.
+  const suitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [syntheticGitHubSuite(identity)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
   const successPage = normalizeCheckRunsResponse(
     {
       total_count: 2,
@@ -338,12 +347,28 @@ function duplicateApiResults() {
       buildEvidenceReceipt({
         query,
         identity,
-        pages: [successPage, failurePage],
+        pages: [suitePage, successPage, failurePage],
         observedAt: timestamp,
       }),
     "duplicate_refusal",
   );
   return "refused";
+}
+
+function syntheticGitHubSuite(identity) {
+  const repository = {
+    id: identity.repository_id,
+    full_name: identity.repository_path,
+  };
+  const app = { id: identity.app_id, name: "synthetic-product4-app" };
+  return {
+    id: 1,
+    repository,
+    head_sha: identity.head_sha,
+    app,
+    status: "completed",
+    conclusion: "success",
+  };
 }
 
 function syntheticGitHubRun(identity, id, conclusion) {
@@ -361,14 +386,7 @@ function syntheticGitHubRun(identity, id, conclusion) {
     external_id: identity.external_id,
     status: "completed",
     conclusion,
-    check_suite: {
-      id: 1,
-      repository,
-      head_sha: identity.head_sha,
-      app,
-      status: "completed",
-      conclusion: "success",
-    },
+    check_suite: syntheticGitHubSuite(identity),
   };
 }
 

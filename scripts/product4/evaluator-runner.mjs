@@ -555,7 +555,13 @@ function buildDuplicateObservation(input, identity) {
 function buildLostResponseObservation(input, identity) {
   assertExactObjectKeys(input, ["identity", "post", "patch"]);
   assertExactObjectKeys(input.post, ["matches"]);
-  assertExactObjectKeys(input.patch, ["matches", "pendingRun", "attemptedPatch", "retryCount"]);
+  assertExactObjectKeys(input.patch, [
+    "matches",
+    "pendingRun",
+    "attemptedPatch",
+    "retryCount",
+    "freshRun",
+  ]);
   const apiIdentity = assertApiIdentity(input.identity, identity);
   let postResult;
   let patchResult;
@@ -567,6 +573,8 @@ function buildLostResponseObservation(input, identity) {
       pendingRun: input.patch.pendingRun,
       attemptedPatch: input.patch.attemptedPatch,
       retryCount: input.patch.retryCount,
+      // Hardened API requires an independent fresh exact check-run GET result before retry.
+      freshRun: input.patch.freshRun,
     });
   } catch (error) {
     throwRunnerError(

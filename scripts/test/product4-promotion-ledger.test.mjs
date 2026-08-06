@@ -9,6 +9,7 @@ import {
   buildEvidenceReceipt,
   buildExactCheckQuery,
   normalizeCheckRunsResponse,
+  normalizeCheckSuitesResponse,
 } from "../product4/github-evidence-api.mjs";
 import {
   digestJson,
@@ -155,6 +156,10 @@ function apiEvidence() {
     conclusion: "success",
     check_suite: checkSuite,
   };
+  const suitePage = normalizeCheckSuitesResponse(
+    { total_count: 1, check_suites: [checkSuite], headers: { link: "" } },
+    { identity },
+  );
   const page = normalizeCheckRunsResponse(
     { total_count: 1, check_runs: [checkRun], headers: { link: "" } },
     { identity },
@@ -162,7 +167,7 @@ function apiEvidence() {
   return buildEvidenceReceipt({
     query,
     identity,
-    pages: [page],
+    pages: [suitePage, page],
     observedAt: timestamp,
   });
 }

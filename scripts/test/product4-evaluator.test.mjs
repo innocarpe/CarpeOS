@@ -26,6 +26,7 @@ import {
   buildEvidenceIdentity,
   buildExactCheckQuery,
   normalizeCheckRunsResponse,
+  normalizeCheckSuitesResponse,
 } from "../product4/github-evidence-api.mjs";
 import { buildP02SandboxReceipt, sandboxProbeDigest } from "../product4/p02-runner.mjs";
 import {
@@ -204,6 +205,10 @@ function protocolEvidenceInputs() {
     conclusion: "success",
     check_suite: suite,
   };
+  const suitePage = normalizeCheckSuitesResponse(
+    { total_count: 1, check_suites: [suite], headers: { link: "" } },
+    { identity: normalizedApiIdentity },
+  );
   const page = normalizeCheckRunsResponse(
     { total_count: 1, check_runs: [run], headers: { link: "" } },
     { identity: normalizedApiIdentity },
@@ -215,6 +220,7 @@ function protocolEvidenceInputs() {
   );
   const pendingRun = {
     id: 7,
+    suite_id: 1,
     repository_id: normalizedApiIdentity.repository_id,
     repository_path: normalizedApiIdentity.repository_path,
     head_sha: normalizedApiIdentity.head_sha,
@@ -243,12 +249,12 @@ function protocolEvidenceInputs() {
     loop: { receipt: buildSixCommandLoopReceipt({ steps }) },
     exact_c_api: {
       query,
-      pages: [page],
+      pages: [suitePage, page],
       identity: apiIdentity,
       observedAt: "2026-01-02T00:00:00Z",
     },
     duplicate_refusal: {
-      pages: [page, duplicatePage],
+      pages: [suitePage, page, duplicatePage],
       identity: apiIdentity,
     },
     lost_response_reconciliation: {
@@ -257,6 +263,8 @@ function protocolEvidenceInputs() {
       patch: {
         matches: [],
         pendingRun,
+        // Independent fresh GET still shows the same pending identity → retry_once.
+        freshRun: structuredClone(pendingRun),
         attemptedPatch: { status: "completed", conclusion: "success" },
         retryCount: 0,
       },
