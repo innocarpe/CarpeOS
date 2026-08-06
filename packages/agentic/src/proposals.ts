@@ -3,6 +3,7 @@
  * canonical_effect remains "none" until P2 materialize bridge.
  */
 
+import { AGENTIC_DRAFT_CLAIM_KINDS } from "./claims.js";
 import { digestSha256, stableJson } from "./digest.js";
 import type { SqlDatabase } from "./sql.js";
 import {
@@ -27,10 +28,13 @@ export type AgenticProposalRecord = {
   structure_reason_codes: string[];
   gate: AgenticGateResult;
   policy_version: typeof AGENTIC_POLICY_VERSION;
-  /** Always none until materialize (P2). */
+  /** Always none until materialize (P2/P5). */
   canonical_effect: "none";
   created_at: string;
+  /** Primary materialize event (Observation or Claim). */
   materialized_event_id: string | null;
+  /** P5: draft Claim event id when dual-written or claim-only. */
+  materialized_claim_event_id: string | null;
 };
 
 type ProposalRow = { proposal_json: string };
@@ -111,6 +115,7 @@ export function putAgenticProposal(
     canonical_effect: "none",
     created_at,
     materialized_event_id: null,
+    materialized_claim_event_id: null,
   };
   if (record.canonical_effect !== "none") {
     throw new Error("proposal records must have canonical_effect none until materialize");
@@ -152,6 +157,8 @@ function normalizeProposal(raw: AgenticProposalRecord): AgenticProposalRecord {
     structure_reason_codes: Array.isArray(raw.structure_reason_codes)
       ? raw.structure_reason_codes
       : [],
+    materialized_claim_event_id:
+      typeof raw.materialized_claim_event_id === "string" ? raw.materialized_claim_event_id : null,
   };
 }
 
@@ -184,10 +191,15 @@ export function listAgenticProposals(
   return rows.map((r) => normalizeProposal(JSON.parse(r.proposal_json)));
 }
 
-/** Mark proposal materialized (P2); keeps record for idempotency. */
+/** Mark proposal materialized (P2/P5); keeps record for idempotency. */
 export function markProposalMaterialized(
   db: SqlDatabase,
-  input: { proposalId: string; eventId: string; now?: Date },
+  input: {
+    proposalId: string;
+    eventId: string;
+    claimEventId?: string | null;
+    now?: Date;
+  },
 ): boolean {
   migrateAgenticProposals(db);
   const existing = getAgenticProposal(db, input.proposalId);
@@ -195,9 +207,11 @@ export function markProposalMaterialized(
   if (existing.materialized_event_id !== null) {
     return existing.materialized_event_id === input.eventId;
   }
+  const claimId = input.claimEventId ?? null;
   const updated: AgenticProposalRecord = {
     ...existing,
     materialized_event_id: input.eventId,
+    materialized_claim_event_id: claimId,
   };
   db.prepare(`
     UPDATE agentic_proposals
@@ -205,4 +219,20 @@ export function markProposalMaterialized(
     WHERE proposal_id = ?
   `).run(stableJson(updated), input.eventId, input.proposalId);
   return true;
+}
+
+/** List proposals that materialized a draft Claim (P5 operator surface). */
+export function listAgenticDraftClaimProposals(
+  db: SqlDatabase,
+  input: { trust_zone_id?: string; limit?: number } = {},
+): AgenticProposalRecord[] {
+  const rows = listAgenticProposals(db, {
+    ...(input.trust_zone_id !== undefined ? { trust_zone_id: input.trust_zone_id } : {}),
+    limit: input.limit ?? 50,
+  });
+  return rows.filter(
+    (p) =>
+      p.materialized_claim_event_id !== null ||
+      (p.materialized_event_id !== null && AGENTIC_DRAFT_CLAIM_KINDS.has(p.candidate.kind)),
+  );
 }

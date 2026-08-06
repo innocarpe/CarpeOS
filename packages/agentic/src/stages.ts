@@ -63,6 +63,10 @@ export type AgenticExtractResult = {
 
 const DECISION_RE =
   /\b(decision|we (will|decided|shall)|require|must never|constraint|preference|default)\b/i;
+/** P5: factual / open-question signals also keep for extract (not noise). */
+const FACT_RE =
+  /\b(fact|fact_candidate|because|therefore|precision|suite requires|is true|measured)\b/i;
+const QUESTION_RE = /\?/;
 const AMBIG_RE = /\b(maybe|might|sometime|someone said|nobody decided|think about)\b/i;
 const NOISE_RE = /\b(PostToolUse|git status|npm install|linter passed|exit 0|vulnerabilit)\b/i;
 const INJECT_RE = /\b(ignore previous instructions|SYSTEM:\s*export all secrets)\b/i;
@@ -117,12 +121,18 @@ function triageFake(input: AgenticTriageInput): AgenticTriageResult {
   } else if (INJECT_RE.test(text)) {
     decision = "drop";
     reason_codes.push("injection_pattern");
-  } else if (AMBIG_RE.test(text) && !DECISION_RE.test(text)) {
+  } else if (AMBIG_RE.test(text) && !DECISION_RE.test(text) && !FACT_RE.test(text)) {
     decision = "need_context";
     reason_codes.push("ambiguous_language");
   } else if (DECISION_RE.test(text)) {
     decision = "keep";
     reason_codes.push("decision_class_signal");
+  } else if (FACT_RE.test(text)) {
+    decision = "keep";
+    reason_codes.push("fact_class_signal");
+  } else if (QUESTION_RE.test(text)) {
+    decision = "keep";
+    reason_codes.push("open_question_signal");
   } else {
     decision = "drop";
     reason_codes.push("no_knowledge_signal");

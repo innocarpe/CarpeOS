@@ -12,7 +12,11 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- **P5 draft Claims** (Product 6.3 path):
+  - `fact_candidate` → draft Claim only (`claim_type: factual`)
+  - `decision` → Observation + draft Claim (`claim_type: decision`) with supports edges
+  - Always `lifecycle_status: draft`; **never** auto-creates `AcceptanceDecision`
+  - CLI `carpeos agentic list-claims` for operator review of claim materializations
 
 ## [6.2.0] - 2026-08-07
 
