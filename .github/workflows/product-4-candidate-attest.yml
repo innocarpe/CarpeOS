@@ -72,6 +72,7 @@ jobs:
           mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
           chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
           mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
+          chmod 0777 "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
       - name: Freeze trusted evaluator and raw inputs before candidate execution
         run: |
           chmod -R a-w "$GITHUB_WORKSPACE"

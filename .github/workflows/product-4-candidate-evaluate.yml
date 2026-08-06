@@ -71,6 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
+          chmod -R a+rwX "$CARPEOS_HOME"
+          chmod 0777 "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
           source_root="/tmp/product4-sandbox-source-${GITHUB_RUN_ID}"
           rm -rf "$source_root"
           mkdir -p "$source_root"
