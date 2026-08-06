@@ -10,6 +10,7 @@ export * from "./admit.js";
 export * from "./digest.js";
 export * from "./gate.js";
 export * from "./jobs.js";
+export * from "./materialize.js";
 export * from "./pack.js";
 export * from "./pipeline.js";
 export * from "./proposals.js";

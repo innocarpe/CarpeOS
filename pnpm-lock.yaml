@@ -111,6 +111,9 @@ importers:
 
   packages/agentic:
     dependencies:
+      '@carpeos/local-store':
+        specifier: workspace:*
+        version: link:../local-store
       '@carpeos/v5':
         specifier: workspace:*
         version: link:../v5

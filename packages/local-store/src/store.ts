@@ -2322,6 +2322,80 @@ export class LocalCaptureStore {
       throw error;
     }
   }
+  /**
+   * Record a knowledge disposition under an explicit policy_version (append-only).
+   * Used by Product 6 agentic_v1 hold/promote materialize and policy experiments.
+   * Never creates AcceptanceDecision. Idempotent on (source_event_id, policy_version).
+   */
+  recordKnowledgeDisposition(input: {
+    sourceEventId: string;
+    artifactId: string;
+    disposition: KnowledgeDisposition;
+    reasonCodes: readonly string[];
+    statement: string;
+    policyVersion: string;
+    scores?: AdjudicationResult["scores"];
+  }): { status: "written" | "replay"; disposition: StoredDispositionPublic } {
+    const sourceEventId = input.sourceEventId.trim();
+    const artifactId = input.artifactId.trim();
+    const policyVersion = normalizePolicyVersion(input.policyVersion);
+    const statement = input.statement.trim();
+    if (sourceEventId.length === 0) {
+      throw new Error("source event id is required");
+    }
+    if (artifactId.length === 0) {
+      throw new Error("artifact id is required");
+    }
+    if (statement.length === 0) {
+      throw new Error("statement is required");
+    }
+    if (!this.artifactExistsInZone(artifactId, this.trustZone.trust_zone_id)) {
+      throw new Error(`evidence artifact not found in trust zone: ${artifactId}`);
+    }
+    const existing = this.getDisposition(sourceEventId, policyVersion);
+    if (existing !== undefined) {
+      return {
+        status: "replay",
+        disposition: {
+          source_event_id: existing.source_event_id,
+          artifact_id: existing.artifact_id,
+          disposition: existing.disposition,
+          reason_codes: existing.reason_codes,
+          scores: existing.scores,
+          policy_version: existing.policy_version,
+          statement: existing.statement,
+          created_at: existing.created_at,
+        },
+      };
+    }
+    const scores = input.scores ?? { value: 0, durability: 0, risk: 0, noise: 0 };
+    const createdAt = this.clock.now().toISOString();
+    this.insertDisposition({
+      sourceEventId,
+      artifactId,
+      trustZoneId: this.trustZone.trust_zone_id,
+      disposition: input.disposition,
+      reasonCodes: input.reasonCodes,
+      scores,
+      policyVersion,
+      statement,
+      createdAt,
+    });
+    return {
+      status: "written",
+      disposition: {
+        source_event_id: sourceEventId,
+        artifact_id: artifactId,
+        disposition: input.disposition,
+        reason_codes: [...input.reasonCodes],
+        scores,
+        policy_version: policyVersion,
+        statement,
+        created_at: createdAt,
+      },
+    };
+  }
+
   listDispositionHistory(sourceEventId: string): StoredDispositionPublic[] {
     const normalized = sourceEventId.trim();
     if (normalized.length === 0) {
