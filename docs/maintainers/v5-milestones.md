@@ -13,7 +13,7 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 | **V5-M5** Attempts/review/rollback | One-dispatch; incidents; V5-off rollback; no canonical writes | `src/attempts.ts` | **complete** |
 | **V5-M6** Telemetry | Signed admission model + local TELEMETRY_DB store + SQL migration | `src/telemetry.ts`, `src/telemetry-store.ts`, `migrations/telemetry/001_telemetry_initial.sql` | **complete (local)**; CF Worker deploy remains operator-optional |
 | **V5-M7** Evaluation | Frozen all-200 ledger; denominators; circuit breaker; V5-off | `src/evaluation.ts`, `src/evaluation-all200.ts`, `carpeos v5 eval-all200` | **complete** |
-| **V5-M8** Integration | Body-free 4.0 seam scan + final opt-in decision; accept only with independent release evidence | `src/m8-seam.ts`, `scripts/m8-decision.mjs`, `carpeos v5 m8` | **mechanism complete**; **release seam deferred** (install-smoke only today) |
+| **V5-M8** Integration | Body-free 4.0 seam scan + final opt-in decision; accept only with independent release evidence | `src/m8-seam.ts`, `scripts/m8-decision.mjs`, `carpeos v5 m8` | **mechanism complete**; **release seam still deferred** after Product 4 package identity `4.0.0` on main (install-smoke only; no release-authority accept) |
 | **E2E pipeline** | redact→pack→extract→draft reduce→eval | `src/pipeline.ts`, `src/draft-reduce.ts`, `test/pipeline.test.ts` | **complete (offline)** |
 | **Operator CLI** | Opt-in `carpeos v5` (status/readiness/eval-all200/draft/m8) | `apps/carpeos-cli` | **complete** (not capture-hook) |
 | **ADR** | Draft-only + DeepSeek primary decision record | `docs/adr/0016-v5-draft-only-deepseek-primary.md` | **complete** |
@@ -26,6 +26,18 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 - No revocation probe / D1 lookup before signed in-memory admission.
 - No credentials or provider bodies in fixtures/receipts/logs.
 - Capture transaction must not perform LLM/network work.
+
+## Product 4.0 package plane (observed)
+
+| Item | Status (as of last maintainer verify) |
+| --- | --- |
+| `@innocarpe/carpeos` version on `main` | **4.0.0** (#242) |
+| `CHANGELOG` `[4.0.0]` | present |
+| Git tag `v4.0.0` / npm / GitHub Release | **missing** (npm still last published 3.2.0) |
+| M8 accepted release seam | **no** — do not invent from package identity |
+
+Recommended order: finish public **4.0.0** tag+npm, then cut **5.0.0**. Draft-lane
+code does not require M8 complete; public SemVer order does prefer 4 before 5.
 
 ## Provider notes
 

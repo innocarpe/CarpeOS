@@ -1,9 +1,20 @@
 # Product 5.0.0 — Definition of Done (maintainers)
 
-Status: **Draft-lane complete; ready for npm `5.0.0` cut when maintainer authorizes release**  
-M8 **release seam** remains deferred (install-smoke only; no invented 4.0 acceptance).
+Status: **Draft-lane complete; package base is `@innocarpe/carpeos@4.0.0` on `main`; ready for npm `5.0.0` cut when maintainer authorizes (prefer after public `v4.0.0` tag/npm)**  
+M8 **release seam** remains deferred (install-smoke only; no invented release-authority acceptance).
 
 Primary path: **DeepSeek Direct** (`deepseek-v4-flash`). OpenRouter not required.
+
+## Post-Product-4 alignment (2026-08-06)
+
+| Fact | Evidence |
+| --- | --- |
+| Product 4 **code plane** + package identity **4.0.0** on `main` | #242 `chore/release-v4.0.0`; `packages/carpeos/package.json` |
+| Public **tag / npm / GitHub Release** for 4.0.0 | **Not observed** as of last verify (`npm view` still 3.2.0; no `v4.0.0` tag) |
+| M8 full accept | **Still deferred** — package identity ≠ accepted body-free release-authority seam |
+| Draft lane shippable without M8 complete | `carpeos v5 m8` / `artifacts/v5/m8/final-decision-receipt.json` |
+
+Do not invent M8 green from package version alone.
 
 ## Thesis
 
@@ -29,7 +40,8 @@ Optional LLM-assisted extraction stays draft-only (`canonical_effect: "none"`), 
 
 | Condition | Outcome |
 | --- | --- |
-| Body-free **accepted release** evidence present | M8 may `accepted` |
+| Body-free **accepted release-authority / release-gate passed** evidence present | M8 may `accepted` |
+| Package identity `4.0.0` on main only | **Not** sufficient for M8 accept |
 | Only install-smoke / blocked release-gate | M8 **deferred** (not invented green) |
 | Present unaccepted seam forced as accepted | **Forbidden** |
 
@@ -49,11 +61,13 @@ Preflight (this worktree / main):
 
 ```sh
 git fetch origin && git status --short   # clean on main @ origin/main
+# Prefer public 4.0.0 complete first:
+#   git tag -l v4.0.0 && npm view @innocarpe/carpeos version   # expect 4.0.0
 pnpm check
-node packages/v5/scripts/m0-recompute.mjs
+node packages/v5/scripts/m0-recompute.mjs --check-only
 node packages/v5/scripts/m8-decision.mjs
 node apps/carpeos-cli/dist/index.js v5 readiness   # after build
-node scripts/release.mjs 5.0.0 --dry-run           # expect 3.2.0 -> 5.0.0
+node scripts/release.mjs 5.0.0 --dry-run           # expect 4.0.0 -> 5.0.0
 ```
 
 Cut (local only until push authorized):
@@ -84,15 +98,17 @@ carpeos help v5
 
 ### SemVer note
 
-Public package jumps **3.2.0 → 5.0.0** as an explicit product major for the V5 draft
-lane. Product 4 work remains an independent in-repo lane and is **not** a prerequisite
-npm `4.0.0` cut for this release.
+Public package cut is **4.0.0 → 5.0.0** for the V5 draft-lane product major.
+Product 4 **code plane** is already versioned `4.0.0` on `main` (#242). Completing
+the public `v4.0.0` tag + npm publish **before** `5.0.0` is recommended so SemVer
+order on npm matches main. M8 full accept still needs separate body-free
+release-authority evidence and is **not** implied by either package cut.
 
 ## Commands
 
 ```sh
 pnpm check
-node packages/v5/scripts/m0-recompute.mjs
+node packages/v5/scripts/m0-recompute.mjs --check-only
 node packages/v5/scripts/m8-decision.mjs
 # after monorepo CLI build:
 node apps/carpeos-cli/dist/index.js v5 readiness
