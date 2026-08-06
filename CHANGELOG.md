@@ -12,7 +12,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- **P3 narrow auto-promote (target 6.1.0):** offline precision suite ≥ 0.90 with zero
+  `must_not_promote` leaks; `carpeos agentic precision`; gate allowlist + E5 + confidence floor.
+  Enable product auto-promote only with explicit `--allow-auto-promote` (still never AcceptanceDecision).
 
 ## [6.0.0] - 2026-08-07
 
