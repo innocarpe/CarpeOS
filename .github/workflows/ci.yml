@@ -3,6 +3,8 @@ name: CI
 # Lanes (docs/maintainers/ci-policy.md / skills/carpeos-ci):
 # - PR lean: format/lint/build/typecheck/test/public-boundary via `pnpm check`
 # - Main full: same job continues with evals, smokes, and e2e (no second monorepo rebuild)
+# - Path filter: skip full monorepo work when only docs/meta surfaces change
+#   (job still reports Checks=success so required status checks stay green)
 on:
   pull_request:
   push:
@@ -11,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  # paths-filter needs pull-request metadata on fork PRs
+  pull-requests: read
 
 jobs:
   checks:
@@ -19,54 +23,112 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          # Need history so path filter can diff PR base…head / push before…after.
+          fetch-depth: 0
+
+      - name: Detect CI-relevant path changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # Run full Checks when any of these change. Everything else (README,
+          # most of docs/, root governance markdown, …) skips the monorepo work.
+          filters: |
+            ci:
+              - 'apps/**'
+              - 'packages/**'
+              - 'scripts/**'
+              - 'schemas/**'
+              - 'adapters/**'
+              - 'fixtures/**'
+              - 'artifacts/**'
+              - 'spec/**'
+              - 'skills/**'
+              - '.agents/**'
+              - '.github/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'biome.json'
+              - 'tsconfig.base.json'
+              - 'vitest.config.ts'
+              - 'Makefile'
+              - '**/*.{ts,tsx,js,mjs,cjs,cts,mts}'
+
+      - name: Skip full Checks (no CI-relevant paths)
+        if: steps.filter.outputs.ci != 'true'
+        run: |
+          echo "No apps/packages/scripts/schemas/… changes detected."
+          echo "Skipping pnpm install + pnpm check (and main-full extras)."
+          echo "Gitleaks still runs via secret-scan.yml."
 
       - name: Set up pnpm
+        if: steps.filter.outputs.ci == 'true'
         uses: pnpm/action-setup@v6
         with:
           version: 11.16.0
 
       - name: Set up Node.js
+        if: steps.filter.outputs.ci == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 22.22.0
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.filter.outputs.ci == 'true'
         run: pnpm install --frozen-lockfile
 
-      # --- PR lean (and main) ---
+      # --- PR lean (and main when code-relevant) ---
       - name: Run checks
+        if: steps.filter.outputs.ci == 'true'
         run: pnpm check
 
       # --- Main full only: deeper integration (packages already built by pnpm check) ---
       - name: Evaluate capture adjudication
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/capture eval:adjudication:built
 
       - name: Evaluate capture knowledge form
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/capture eval:knowledge-form:built
 
       - name: Evaluate retrieval
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/retrieval eval:retrieval
 
       - name: Run synthetic knowledge dogfood smoke
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:dogfood
 
       - name: Run MCP smoke (G5)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:mcp
 
       - name: Run product loop smoke (1.0)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:product
 
       - name: Run knowledge adjudication smoke (2.0 MVP)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:knowledge
 
       - name: Run sync worker G008 E2E
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.filter.outputs.ci == 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/sync-worker test:e2e

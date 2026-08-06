@@ -6,8 +6,7 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "../..");
 const ci = () => readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8");
 
-const MAIN_ONLY =
-  /if:\s*github\.event_name\s*==\s*'push'\s*&&\s*github\.ref\s*==\s*'refs\/heads\/main'/;
+const MAIN_ONLY = /github\.event_name\s*==\s*'push'\s*&&\s*github\.ref\s*==\s*'refs\/heads\/main'/;
 
 test("CI workflow keeps PR lean and main-full lanes", () => {
   const source = ci();
@@ -52,7 +51,7 @@ test("CI lean path does not run smokes without main-only guards", () => {
         lines[i],
       )
     ) {
-      const window = lines.slice(Math.max(0, i - 6), i + 1).join("\n");
+      const window = lines.slice(Math.max(0, i - 12), i + 1).join("\n");
       assert.match(
         window,
         MAIN_ONLY,
@@ -60,4 +59,28 @@ test("CI lean path does not run smokes without main-only guards", () => {
       );
     }
   }
+});
+
+test("CI path-filters monorepo work and keeps Checks job present", () => {
+  const source = ci();
+  // Required check name must stay so docs-only PRs are not blocked as "missing".
+  assert.match(source, /name:\s*Checks/);
+  assert.match(source, /dorny\/paths-filter@v3/);
+  assert.match(source, /filters:\s*\|\n\s+ci:/);
+  // Positive filter covers code planes; pure README/docs should not match alone.
+  for (const marker of [
+    "apps/**",
+    "packages/**",
+    "scripts/**",
+    "schemas/**",
+    ".github/**",
+    "package.json",
+    "pnpm-lock.yaml",
+  ]) {
+    assert.match(source, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  // Full install/check gated on filter output (skip path exists).
+  assert.match(source, /steps\.filter\.outputs\.ci\s*==\s*'true'/);
+  assert.match(source, /Skip full Checks \(no CI-relevant paths\)/);
+  assert.match(source, /if:\s*steps\.filter\.outputs\.ci\s*!=\s*'true'/);
 });
