@@ -79,7 +79,11 @@ Trigger on any of:
 
 - format, lint, build, typecheck, unit/contract tests, public-boundary  
   (commonly one step: `pnpm check` **if** it does not include smokes/e2e)
-- secret scan (`secret-scan.yml`)
+- **Path-filtered:** full monorepo work only when CI-relevant paths change
+  (see `ci.yml` `dorny/paths-filter`); docs/README-only PRs still report
+  job `Checks` as success so required checks do not block. Do **not** use
+  bare `paths-ignore` that skips the whole workflow.
+- secret scan (`secret-scan.yml`) — every PR (not path-skipped)
 
 ### Main full
 

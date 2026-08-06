@@ -33,14 +33,40 @@ CI does **not** exist to:
 
 | Lane | When | Purpose | Default budget (wall clock, ubuntu-latest, warm cache) |
 | --- | --- | --- | --- |
-| **PR lean** | every `pull_request` | merge-blocking quality | **target ≤ 2 min**, review required if **> 3 min** |
-| **Main full** | `push` to `main` (and optional scheduled) | deeper integration / smoke / e2e | **target ≤ 5 min**, review if **> 8 min** |
+| **PR lean** | `pull_request` with **CI-relevant paths** | merge-blocking quality | **target ≤ 2 min**, review required if **> 3 min** |
+| **Main full** | `push` to `main` with **CI-relevant paths** | deeper integration / smoke / e2e | **target ≤ 5 min**, review if **> 8 min** |
 | **Trust / release plane** | explicit product activation or release paths | Product 4 evidence, release authority | **not** default PR required; cost justified by the plane |
 | **Local** | agent / human **before push / PR** | parallel PR-lean preflight (`make preflight`) | target ≤ PR lean; fail closed locally |
 
 PR lean and Main full may share job definitions with `if:` conditions, or use
 separate jobs. Prefer **one workflow file with clear lanes** over copy-pasted
 workflows.
+
+### 2.0 Path filter (required-check safe)
+
+Full monorepo work (`pnpm install` + `pnpm check` + main-full extras) runs only
+when the change set touches **CI-relevant paths** (code / schemas / scripts /
+lockfile / workflows / …). See `.github/workflows/ci.yml` `dorny/paths-filter`
+filter `ci:`.
+
+| Change set example | Full Checks monorepo work | Job `Checks` status |
+| --- | --- | --- |
+| `apps/**`, `packages/**`, `scripts/**`, `schemas/**`, lockfile, workflows | **runs** | success/fail from `pnpm check` |
+| README / most of `docs/**` / root governance markdown only | **skipped** | **success** (explicit skip step; required check not missing) |
+
+Rules:
+
+1. **Do not** use top-level `on.pull_request.paths-ignore` alone for the Checks
+   job — skipped workflows leave required status checks **missing** and block
+   merges.
+2. Keep the job named **`Checks`** always present; gate expensive steps with
+   `if: steps.filter.outputs.ci == 'true'`.
+3. **Secret scan** (`secret-scan.yml`) stays on every PR/push (cheap; docs can
+   leak tokens).
+4. When editing the path list, update `scripts/test/ci-workflow.test.mjs` and
+   this section in the same PR.
+5. Local agents still run `make preflight` before PR when they touch code; pure
+   docs edits may skip monorepo preflight, but still must not invent claims.
 
 ### 2.1 Local preflight (mandatory before PR)
 
