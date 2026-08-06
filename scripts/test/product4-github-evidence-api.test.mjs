@@ -78,6 +78,12 @@ function githubRun(id, suiteId = 1, overrides = {}) {
 function documentedSuite(id, overrides = {}) {
   return {
     id,
+    repository: {
+      id: identity.repository_id,
+      full_name: identity.repository_path,
+    },
+    head_sha: identity.head_sha,
+    app: { id: identity.app_id, name: "synthetic-product4-app" },
     status: "completed",
     conclusion: "success",
     ...overrides,
@@ -87,9 +93,17 @@ function documentedSuite(id, overrides = {}) {
 function documentedRun(id, suiteId = 1, overrides = {}) {
   return {
     id,
+    repository: {
+      id: identity.repository_id,
+      full_name: identity.repository_path,
+    },
+    head_sha: identity.head_sha,
+    app: { id: identity.app_id, name: "synthetic-product4-app" },
+    name: identity.check_name,
+    external_id: identity.external_id,
     status: "completed",
     conclusion: "success",
-    check_suite: { id: suiteId },
+    check_suite: documentedSuite(suiteId),
     ...overrides,
   };
 }
@@ -232,7 +246,15 @@ test("M4 emits a strict exact-evidence receipt from verified GitHub-shaped pages
     repositoryPath: identity.repository_path,
     headSha,
   });
-  const pages = [normalizedRunPage([githubRun(11, 1), githubRun(12, 1)])];
+  const suitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [githubSuite(1)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  const pages = [suitePage, normalizedRunPage([githubRun(11, 1)])];
   const receipt = buildEvidenceReceipt({
     query,
     identity,
@@ -240,7 +262,7 @@ test("M4 emits a strict exact-evidence receipt from verified GitHub-shaped pages
     observedAt: "2026-01-02T00:00:00Z",
   });
   assert.equal(receipt.status, "verified");
-  assert.deepEqual(receipt.run_ids, [11, 12]);
+  assert.deepEqual(receipt.run_ids, [11]);
   assert.equal(receipt.suite_count, 1);
   assert.match(receipt.receipt_digest, /^[0-9a-f]{64}$/);
   assert.throws(
@@ -258,12 +280,106 @@ test("M4 emits a strict exact-evidence receipt from verified GitHub-shaped pages
     /bounded and non-empty/,
   );
 });
+test("M4 refuses missing suite enumeration, duplicate exact matches, partial pages, and nonterminal evidence", () => {
+  const query = buildExactCheckQuery({
+    repositoryPath: identity.repository_path,
+    headSha,
+  });
+  const runPage = normalizedRunPage([githubRun(12, 1)]);
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [runPage],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /incomplete_pagination|independent check-suites/,
+  );
+
+  const suitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [githubSuite(1)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [suitePage, normalizedRunPage([githubRun(12), githubRun(13)])],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /duplicate_refusal/,
+  );
+
+  const partialSuitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 2,
+      check_suites: [githubSuite(1)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [partialSuitePage, runPage],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /incomplete_pagination/,
+  );
+
+  const queuedRun = normalizedRunPage([githubRun(14, 1, { status: "queued", conclusion: null })]);
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [suitePage, queuedRun],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /terminal_refusal/,
+  );
+
+  const queuedSuitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [githubSuite(1, { status: "queued", conclusion: null })],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  assert.throws(
+    () =>
+      buildEvidenceReceipt({
+        query,
+        identity,
+        pages: [queuedSuitePage, runPage],
+        observedAt: "2026-01-02T00:00:00Z",
+      }),
+    /terminal_refusal/,
+  );
+});
 test("M4 binds C1 query fields to the normalized C2 identity", () => {
   const query = buildExactCheckQuery({
     repositoryPath: identity.repository_path,
     headSha,
   });
-  const pages = [normalizedRunPage([githubRun(31)])];
+  const suitePage = normalizeCheckSuitesResponse(
+    {
+      total_count: 1,
+      check_suites: [githubSuite(1)],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  const pages = [suitePage, normalizedRunPage([githubRun(31)])];
   const mismatches = [
     { ...query, path: `${identity.repository_path}/commits/${"b".repeat(40)}/check-runs` },
     {
@@ -459,7 +575,10 @@ test("M4 refuses foreign repository/App/C and missing check identity in real res
       code,
     );
   }
-  assert.doesNotThrow(() => assertRealCheckRun({ ...githubRun(57), app: undefined }, identity));
+  assert.throws(
+    () => assertRealCheckRun({ ...githubRun(57), app: undefined }, identity),
+    /App identity/,
+  );
 });
 
 test("M4 refuses pagination loops and deduplicates/caps adapted suites deterministically", async () => {
@@ -525,14 +644,12 @@ test("M4 requires a fresh exact pending-run GET before retrying a lost PATCH", (
       {
         total_count: 1,
         check_runs: [
-          {
-            id: pending.id,
+          documentedRun(pending.id, pending.suite_id, {
             status: "queued",
             conclusion: null,
-            check_suite: { id: pending.suite_id },
             output: pending.output,
             ...overrides,
-          },
+          }),
         ],
         headers: { link: "" },
       },
@@ -551,6 +668,8 @@ test("M4 requires a fresh exact pending-run GET before retrying a lost PATCH", (
   assert.equal(retried.status, "retry_once");
   assert.equal(retried.retry_allowed, true);
   assert.equal(requested.path, `${identity.repository_path}/check-runs/${pending.id}`);
+  assert.deepEqual(requested.query, {});
+  assert.equal(requested.identity.head_sha, identity.head_sha);
   assert.deepEqual(retried.retry_payload, patch);
 
   const payloadMismatch = reconcileLostPatch({
@@ -604,36 +723,34 @@ test("M4 reconciles lost POST/PATCH without blind duplicate writes", () => {
   const pending = {
     ...identity,
     ...run(21),
+    suite_id: 1,
     status: "queued",
   };
   const patch = { conclusion: "success", status: "completed" };
   const found = { ...pending, ...patch };
   assert.equal(reconcileLostPost({ matches: [found], identity }).status, "post_reconciled");
   assert.equal(reconcileLostPost({ matches: [], identity }).status, "post_indeterminate");
-  assert.equal(
-    reconcileLostPatch({
-      matches: [],
-      identity,
-      pendingRun: pending,
-      attemptedPatch: patch,
-      retryCount: 0,
-    }).status,
-    "retry_once",
+  assert.throws(
+    () =>
+      reconcileLostPatch({
+        matches: [],
+        identity,
+        pendingRun: pending,
+        attemptedPatch: patch,
+        retryCount: 0,
+      }),
+    /fresh_lookup_required/,
   );
-  assert.equal(
-    reconcileLostPatch({
-      matches: [],
-      identity,
-      pendingRun: pending,
-      attemptedPatch: patch,
-      retryCount: 1,
-    }).status,
-    "patch_indeterminate",
-  );
-  assert.equal(
-    reconcileLostPatch({ matches: [found], identity, pendingRun: pending, attemptedPatch: patch })
-      .status,
-    "patch_reconciled",
+  assert.throws(
+    () =>
+      reconcileLostPatch({
+        matches: [found],
+        identity,
+        pendingRun: pending,
+        attemptedPatch: patch,
+        retryCount: 1,
+      }),
+    /fresh_lookup_required/,
   );
   assert.throws(
     () => reconcileLostPost({ matches: [found, { ...found, id: 22 }], identity }),
