@@ -61,6 +61,12 @@ jobs:
       - name: Initialize a disposable synthetic store
         run: node apps/carpeos-cli/dist/index.js init --home "$CARPEOS_HOME" --trust-zone tz_synthetic
 
+      - name: Install the bubblewrap sandbox runtime
+        run: |
+          if ! command -v bwrap >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y bubblewrap
+          fi
       - name: Establish the trusted sandbox receipt
         run: |
           set -euo pipefail

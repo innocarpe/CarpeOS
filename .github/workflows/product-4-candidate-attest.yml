@@ -74,6 +74,12 @@ jobs:
         run: |
           chmod -R a-w "$GITHUB_WORKSPACE"
           chmod -R a-w "$RUNNER_TEMP/product4-raw"
+      - name: Install the bubblewrap sandbox runtime
+        run: |
+          if ! command -v bwrap >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y bubblewrap
+          fi
       - name: Execute candidate build and CLI in a bounded bubblewrap sandbox
         run: |
           set -euo pipefail
