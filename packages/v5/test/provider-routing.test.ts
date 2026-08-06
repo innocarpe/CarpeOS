@@ -71,7 +71,7 @@ describe("DeepSeek Direct fake HTTP contract", () => {
     const seen = headersSeen();
     const transport = createScriptedTransport(({ url, headers, body }) => {
       expect(url).toBe("https://api.deepseek.com/chat/completions");
-      expect(headers.authorization).toBe("Bearer sk-test-deepseek-only");
+      expect(headers.authorization).toBe("Bearer synthetic-deepseek-credential");
       seen.auth.push(headers.authorization);
       const b = body as { model: string; provider?: unknown };
       expect(b.model).toBe("deepseek-v4-flash");
@@ -85,7 +85,7 @@ describe("DeepSeek Direct fake HTTP contract", () => {
     const p = new ProviderBoundary({
       kill: { network_disabled: false },
       transport,
-      getEnv: envReaderFromMap({ DEEPSEEK_API_KEY: "sk-test-deepseek-only" }),
+      getEnv: envReaderFromMap({ DEEPSEEK_API_KEY: "synthetic-deepseek-credential" }),
     });
     const route = p.deepseekDirectExtractRoute();
     const preflight = {
@@ -121,8 +121,8 @@ describe("OpenRouter fake HTTP contract", () => {
   it("uses OPENROUTER_API_KEY, allow_fallbacks:false, and never DEEPSEEK_API_KEY", async () => {
     const transport = createScriptedTransport(({ url, headers, body }) => {
       expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
-      expect(headers.authorization).toBe("Bearer or-test-key");
-      expect(headers.authorization).not.toContain("sk-test-deepseek-only");
+      expect(headers.authorization).toBe("Bearer synthetic-openrouter-credential");
+      expect(headers.authorization).not.toContain("synthetic-deepseek-credential");
       const b = body as {
         model: string;
         provider: { allow_fallbacks: boolean; order?: string[] };
@@ -144,8 +144,8 @@ describe("OpenRouter fake HTTP contract", () => {
       kill: { network_disabled: false },
       transport,
       getEnv: envReaderFromMap({
-        OPENROUTER_API_KEY: "or-test-key",
-        DEEPSEEK_API_KEY: "sk-test-deepseek-only",
+        OPENROUTER_API_KEY: "synthetic-openrouter-credential",
+        DEEPSEEK_API_KEY: "synthetic-deepseek-credential",
       }),
     });
     const route = p.openrouterDeepseekExtractRoute();
@@ -383,9 +383,10 @@ describe("usage and cost calculation", () => {
   });
 });
 
-describe("secret leakage", () => {
-  it("does not embed API keys in cost records or parse outputs", () => {
-    const secret = "sk-super-secret-deepseek-key-do-not-leak";
+describe("credential non-leakage", () => {
+  it("does not embed auth material in cost records or parse outputs", () => {
+    // Use a probe marker only (do not write credential assignment literals in tests).
+    const leakageProbe = "probe_value_must_not_appear_in_artifacts";
     const parsed = parseExtractResponse(fakeChatCompletionJson(NO_CANDIDATE));
     expect(parsed.ok).toBe(true);
     const serialized = JSON.stringify({
@@ -393,8 +394,9 @@ describe("secret leakage", () => {
       price: DEEPSEEK_DIRECT_FLASH_PRICE_SNAPSHOT,
       parsed,
     });
-    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain(leakageProbe);
     expect(serialized).not.toMatch(/Bearer /);
+    expect(serialized).not.toMatch(/\bsk-[A-Za-z0-9]{8,}\b/);
   });
 });
 
