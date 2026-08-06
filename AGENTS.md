@@ -117,6 +117,27 @@ Install the skill into user harness dirs:
 ./scripts/install-pr-skill.sh
 ```
 
+## CI and checks (all harnesses)
+
+When editing GitHub Actions, `pnpm check` / smoke / e2e placement, Product 4
+candidate workflows, or anything that changes what runs on PR vs main:
+
+1. **Load and follow** `skills/carpeos-ci/SKILL.md` (Claude Code, Codex CLI,
+   Grok Build, and Gajae Code/GJC).
+2. Obey policy SSOT: `docs/maintainers/ci-policy.md`.
+3. Assign every check to a lane (`pr-lean` / `main-full` / `trust-release` /
+   `local-only`) and respect PR lean budgets (target ≤ 2 min; review if > 3 min).
+4. Prefer unit/contract tests over new workflows. Do not duplicate monorepo
+   build/test on PR. Do not use job-level `runner.*` in workflow `env`.
+5. Product 4 trust-plane GHA is not a default required PR gate until activation
+   policy says so.
+
+Install the skill into user harness dirs:
+
+```sh
+./scripts/install-ci-skill.sh
+```
+
 ## Verification Rules
 
 Before reporting completion:
