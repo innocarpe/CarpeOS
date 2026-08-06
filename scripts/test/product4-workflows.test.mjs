@@ -23,18 +23,18 @@ function assertNoJobLevelRunnerContext(source) {
   assert.match(source, /GITHUB_ENV/);
 }
 
-test("M4 keeps the raw producer unprivileged and bound to pull_request C", () => {
+test("M4 keeps the raw producer unprivileged and dispatch-only until activation", () => {
   const source = workflow("product-4-candidate-evaluate.yml");
-  // Trust plane is path-gated until activation (ci-policy), not every PR.
-  assert.match(source, /on:\n {2}pull_request:/);
-  assert.match(source, /paths:/);
-  assert.match(source, /scripts\/product4\/\*\*/);
+  // Trust plane is not a PR merge gate until activation (ci-policy).
+  assert.match(source, /on:\n {2}workflow_dispatch:/);
+  assert.doesNotMatch(source, /\non:\n {2}pull_request:/);
   assert.doesNotMatch(source, /pull_request_target/);
-  assert.match(source, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(source, /workflow_dispatch:[\s\S]*head_sha:/);
+  assert.match(source, /workflow_dispatch:[\s\S]*base_sha:/);
+  assert.match(source, /ref: \$\{\{ env\.PRODUCT4_HEAD_SHA \}\}/);
   assert.match(source, /path: candidate/);
   assert.match(source, /persist-credentials: false/);
   assert.match(source, /contents: read/);
-  assert.match(source, /pull-requests: read/);
   assert.doesNotMatch(
     source,
     /contents: write|checks: write|actions: write|id-token: write|secrets\./,
@@ -121,11 +121,15 @@ test("M4 keeps the raw producer unprivileged and bound to pull_request C", () =>
   assert.match(source, /--candidate-root "\$CARPEOS_CANDIDATE_ROOT"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_WORK"/);
   assert.match(source, /sudo -n chmod -R a-w "\$CARPEOS_SANDBOX_OUT"/);
+  assert.match(source, /name: product4-raw-\$\{\{ env\.PRODUCT4_HEAD_SHA \}\}/);
 });
 
 test("M4 isolates base-owned evaluation from the untrusted candidate workspace", () => {
   const source = workflow("product-4-candidate-attest.yml");
-  assert.match(source, /on:\n {2}workflow_run:/);
+  // Not a PR path trigger; optional chain after manual evaluate / dispatch.
+  assert.match(source, /workflow_run:/);
+  assert.match(source, /workflow_dispatch:/);
+  assert.doesNotMatch(source, /\non:\n {2}pull_request:/);
   assert.doesNotMatch(source, /pull_request_target/);
   assert.match(
     source,
@@ -204,7 +208,9 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
 
 test("M4 publisher has no candidate checkout and performs a data-only dry run", () => {
   const source = workflow("product-4-candidate-publish.yml");
-  assert.match(source, /on:\n {2}workflow_run:/);
+  assert.match(source, /workflow_run:/);
+  assert.match(source, /workflow_dispatch:/);
+  assert.doesNotMatch(source, /\non:\n {2}pull_request:/);
   assert.doesNotMatch(source, /pull_request_target|head_repository|path: candidate|candidate-root/);
   assert.match(source, /publisher-runner\.mjs/);
   assert.match(source, /name: product4-attestation\n/);

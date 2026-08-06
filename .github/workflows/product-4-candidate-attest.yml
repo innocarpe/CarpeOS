@@ -1,10 +1,13 @@
 name: Product 4 Candidate Attestation (base-owned)
 
+# Chained off evaluate when evaluate runs. Evaluate is workflow_dispatch-only
+# until trust-plane activation, so this does not run on ordinary PRs.
 on:
   workflow_run:
     workflows:
       - Product 4 Candidate Evidence (unprivileged)
     types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -1,10 +1,12 @@
 name: Product 4 Candidate Publication (data-only)
 
+# Chained off attest when the trust plane is exercised manually. Not a PR gate.
 on:
   workflow_run:
     workflows:
       - Product 4 Candidate Attestation (base-owned)
     types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -1,25 +1,24 @@
 name: Product 4 Candidate Evidence (unprivileged)
 
-# Trust plane (docs/maintainers/ci-policy.md): not a default PR required gate until
-# ownership/App activation. Auto-run only when Product 4 trust-plane paths change.
-# Unit/contract tests remain the PR quality gate for Product 4 logic on other PRs.
-#
-# Boundary: host steps only prepare trusted tooling, immutable candidate input, a
-# disposable mount layout, and an offline package store. Candidate install, build,
-# CLI init, and probe execution run only inside a bounded bubblewrap namespace.
+# Trust plane (docs/maintainers/ci-policy.md): NOT a PR merge gate until
+# ownership/App activation. Live bubblewrap evidence is workflow_dispatch-only
+# so PR lean stays at unit/contract + preflight cost.
+# Boundary: host prepares tooling/immutable C/disposable mounts only; candidate
+# install/build/init/probe run inside bubblewrap.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "scripts/product4/**"
-      - "scripts/test/product4-*.test.mjs"
-      - "schemas/product4*.json"
-      - "spec/product4/**"
-      - ".github/workflows/product-4-candidate-*.yml"
+  workflow_dispatch:
+    inputs:
+      head_sha:
+        description: Full candidate head SHA (40 hex)
+        required: true
+        type: string
+      base_sha:
+        description: Full base SHA (40 hex)
+        required: true
+        type: string
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   raw-evidence:
@@ -28,10 +27,11 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read
     # Job-level env cannot use the runner context (GitHub rejects runner.temp here).
     env:
       CARPEOS_TRUST_ZONE: tz_synthetic
+      PRODUCT4_HEAD_SHA: ${{ inputs.head_sha }}
+      PRODUCT4_BASE_SHA: ${{ inputs.base_sha }}
     steps:
       - name: Configure disposable runner paths
         run: |
@@ -45,7 +45,7 @@ jobs:
       - name: Check out candidate head C into an isolated workspace
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.PRODUCT4_HEAD_SHA }}
           path: candidate
           fetch-depth: 0
           persist-credentials: false
@@ -186,8 +186,8 @@ jobs:
           set -euo pipefail
           tree_sha256="$(node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
-          export HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          export BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          export HEAD_SHA="$PRODUCT4_HEAD_SHA"
+          export BASE_SHA="$PRODUCT4_BASE_SHA"
           export TREE_SHA256="$tree_sha256"
           export PROBE_PATH="$CARPEOS_SANDBOX_OUT/sandbox-probe.json"
           export CANDIDATE_ROOT="$CARPEOS_CANDIDATE_ROOT"
@@ -238,8 +238,8 @@ jobs:
           tree_sha256="$(node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
           node "$CARPEOS_CANDIDATE_ROOT/scripts/product4/raw-producer.mjs" \
             --p02 "$RUNNER_TEMP/product4-artifacts/p02-receipt.json" \
-            --head-sha "${{ github.event.pull_request.head.sha }}" \
-            --base-sha "${{ github.event.pull_request.base.sha }}" \
+            --head-sha "$PRODUCT4_HEAD_SHA" \
+            --base-sha "$PRODUCT4_BASE_SHA" \
             --tree-sha256 "$tree_sha256" \
             --workflow-sha "${{ github.workflow_sha }}" \
             --output "$RUNNER_TEMP/product4-artifacts/raw-report.json"
@@ -247,7 +247,7 @@ jobs:
       - name: Upload raw evidence as untrusted data
         uses: actions/upload-artifact@v6
         with:
-          name: product4-raw-${{ github.event.pull_request.head.sha }}
+          name: product4-raw-${{ env.PRODUCT4_HEAD_SHA }}
           path: ${{ runner.temp }}/product4-artifacts/raw-report.json
           if-no-files-found: error
           retention-days: 7

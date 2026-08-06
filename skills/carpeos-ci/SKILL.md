@@ -90,6 +90,8 @@ Trigger on any of:
 ### Trust / release
 
 - Product 4 evaluate → attest → publish chain per PRD trust separation
+- **Pre-activation default:** evaluate is `workflow_dispatch` only (not PR auto);
+  product4 unit/contract tests + preflight remain the PR quality gate
 - `release.yml` on release/tag paths only
 
 Full tables and anti-history: `docs/maintainers/ci-policy.md` §§2–6.

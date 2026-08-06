@@ -98,6 +98,11 @@ Product 4 workflows (`product-4-candidate-*.yml`) and release credential paths:
 - must not become required merge checks until ownership / App / ruleset
   activation receipts exist and the plane is intentionally turned on;
 - until then prefer **unit/contract tests** of the same logic over live GHA cost;
+- **current default (pre-activation):** evaluate is **`workflow_dispatch` only**
+  (no `pull_request` auto-run). Attest/publish are not PR path triggers.
+  Live bubblewrap evidence is optional/manual so PR lean stays at preflight
+  cost. Re-enable path-filtered `pull_request` only with an explicit activation
+  decision.
 - may be disabled, path-filtered, or `workflow_dispatch`-only without abandoning
   the Product 4 design (scripts + schemas remain the contract).
 
