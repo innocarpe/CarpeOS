@@ -19,8 +19,8 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
 
-**최신 패키지:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([변경 기록](CHANGELOG.md) · [`v5.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0)).
+**최신 패키지:** [`@innocarpe/carpeos@5.0.1`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [`v5.0.1`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.1)).
 
 선택 **draft lane** (`carpeos v5`): 오프라인 LLM 추출, 항상
 `canonical_effect: "none"`, capture hot path에 없음.
@@ -274,7 +274,7 @@ carpeos setup show              # config.json 출력
 `--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
 `--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@5.0.0`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@5.0.1`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
 제품 마일스톤: [1.0 DoD](docs/maintainers/product-1.0.0.md) (파이프라인) ·
 [2.0 DoD](docs/maintainers/product-2.0.0.md) (판정) ·
@@ -372,7 +372,7 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 
 ## 제품 라인 (majors)
 
-현재 npm 패키지는 **`@innocarpe/carpeos@5.0.0`** (`v5.0.0`)입니다. adjudication + retrieval
+현재 npm 패키지는 **`@innocarpe/carpeos@5.0.1`** (`v5.0.1`)입니다. adjudication + retrieval
 운영 루프, Product 4 trust/evidence plane, opt-in Product 5 draft lane이 포함됩니다.
 전체 major/minor thesis·DoD:
 
@@ -388,8 +388,8 @@ hosted graph/edge 미주장, V5는 capture hot path에 없음.
 
 ## 지금 구현된 것
 
-**공개 패키지:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v5.0.0` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
+**공개 패키지:** [`@innocarpe/carpeos@5.0.1`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v5.0.1` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
 release authority를 뜻하지 **않습니다**.
 
 기본 로컬 루프 (CI 게이트):

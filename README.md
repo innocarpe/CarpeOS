@@ -20,8 +20,8 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest package:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [`v5.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.0)).
+**Latest package:** [`@innocarpe/carpeos@5.0.1`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [`v5.0.1`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.1)).
 
 Optional **draft lane** (`carpeos v5`): offline LLM-assisted extraction, always
 `canonical_effect: "none"`, never on the capture hot path.
@@ -284,7 +284,7 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@5.0.0`. See [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@5.0.1`. See [CHANGELOG.md](CHANGELOG.md).
 Milestone DoDs (maintainers): [`docs/maintainers/`](docs/maintainers/) ·
 product index: [docs/PRD.md](docs/PRD.md).
 
@@ -382,7 +382,7 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 
 ## Product line (majors)
 
-Current npm package is **`@innocarpe/carpeos@5.0.0`** (`v5.0.0`): operator loop through
+Current npm package is **`@innocarpe/carpeos@5.0.1`** (`v5.0.1`): operator loop through
 adjudication + retrieval, plus Product 4 trust/evidence plane and opt-in Product 5 draft
 lane. Full major/minor thesis and DoD index:
 
@@ -398,8 +398,8 @@ B1 apply deferred; hosted graph/edge not claimed; V5 never on capture hot path.
 
 ## What works today
 
-**Public package:** [`@innocarpe/carpeos@5.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v5.0.0` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
+**Public package:** [`@innocarpe/carpeos@5.0.1`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v5.0.1` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
 live Product 4 release authority.
 
 Default local loop (CI-gated):
