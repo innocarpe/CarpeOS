@@ -36,11 +36,27 @@ CI does **not** exist to:
 | **PR lean** | every `pull_request` | merge-blocking quality | **target ≤ 2 min**, review required if **> 3 min** |
 | **Main full** | `push` to `main` (and optional scheduled) | deeper integration / smoke / e2e | **target ≤ 5 min**, review if **> 8 min** |
 | **Trust / release plane** | explicit product activation or release paths | Product 4 evidence, release authority | **not** default PR required; cost justified by the plane |
-| **Local** | agent / human before push | smallest relevant subset of the same commands | seconds–~1 min preferred |
+| **Local** | agent / human **before push / PR** | parallel PR-lean preflight (`make preflight`) | target ≤ PR lean; fail closed locally |
 
 PR lean and Main full may share job definitions with `if:` conditions, or use
 separate jobs. Prefer **one workflow file with clear lanes** over copy-pasted
 workflows.
+
+### 2.1 Local preflight (mandatory before PR)
+
+Agents and humans **must** run the local preflight gate before opening or
+updating a PR. GitHub Actions is not a free formatter.
+
+| Entry | Command | Notes |
+| --- | --- | --- |
+| Default | `make preflight` / `pnpm preflight` / `pnpm preflight:pr` | Parallel PR-lean: format∥lint∥public-boundary → build → typecheck∥test; merge-tree conflict probe vs `origin/main` |
+| Fix format drift | `make preflight-fix` | `biome format --write` then preflight |
+| Fast loop only | `make preflight-quick` | Not sufficient alone to open a PR |
+| Sequential CI twin | `pnpm check` | Exact CI Checks step order; slower than preflight |
+
+Implementation: `scripts/preflight.mjs`. Skills: `carpeos-pr` (hard gate),
+`carpeos-ci` (local verification). Preflight does **not** claim Linux-only
+parity (Product 4 bubblewrap sandbox, Gitleaks).
 
 ---
 

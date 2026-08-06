@@ -138,11 +138,31 @@ Install the skill into user harness dirs:
 ./scripts/install-ci-skill.sh
 ```
 
+## Local preflight before PR (all harnesses)
+
+**Do not use GitHub Actions as a format/lint/public-boundary linter.**
+
+Before `gh pr create`, push-for-review, or claiming a PR is ready:
+
+1. Run **`make preflight`** (or `pnpm preflight` / `pnpm preflight:pr`).
+2. Keep it green. On format drift: `make preflight-fix`.
+3. Record the command and `PREFLIGHT PASS` in the PR Validation table.
+4. Agent iteration may use `make preflight-quick`; that is **not** enough alone
+   to open a PR.
+5. Preflight covers PR-lean invariants in parallel and probes merge conflicts vs
+   `origin/main`. It does **not** replace Linux-only Product 4 bubblewrap or
+   Gitleaks — list those as explicit gaps when relevant.
+
+Implementation: `scripts/preflight.mjs`, Makefile targets `preflight*`,
+`package.json` scripts `preflight*`. Policy: `docs/maintainers/ci-policy.md`
+(Local lane). PR skill: `skills/carpeos-pr/SKILL.md`.
+
 ## Verification Rules
 
 Before reporting completion:
 
 - run the smallest relevant verification;
+- for any PR-ready claim: run `make preflight` (or `pnpm preflight`) and keep it green;
 - inspect `git status --short`;
 - confirm no private data or credentials were introduced;
-- state any verification gap clearly.
+- state any verification gap clearly (especially Linux-only GHA paths).
