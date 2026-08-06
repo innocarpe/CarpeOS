@@ -12,9 +12,23 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- **P3 narrow auto-promote (target 6.1.0):** offline precision suite ≥ 0.90 with zero
-  `must_not_promote` leaks; `carpeos agentic precision`; gate allowlist + E5 + confidence floor.
-  Enable product auto-promote only with explicit `--allow-auto-promote` (still never AcceptanceDecision).
+- (none yet — fold entries here before the next release)
+
+## [6.1.0] - 2026-08-07
+
+### Added
+
+- **P3 narrow auto-promote precision suite** (offline, fake stages):
+  - Precision ≥ 0.90 with zero `must_not_promote` leaks over golden-12.
+  - `carpeos agentic precision` for suite receipt.
+  - Gate: allowlist kinds + E5 + confidence floor when `--allow-auto-promote`.
+  - Default product path remains **hold-first**; auto-promote is explicit opt-in only.
+  - Still never creates automatic `AcceptanceDecision`.
+
+### Notes
+
+- Does not claim full Product 6 thesis (P4–P6 residual: links density, draft Claims, GraphRAG).
+
 
 ## [6.0.0] - 2026-08-07
 

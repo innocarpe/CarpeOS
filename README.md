@@ -20,8 +20,8 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest package:** [`@innocarpe/carpeos@6.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [`v6.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.0.0)).
+**Latest package:** [`@innocarpe/carpeos@6.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [`v6.1.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.1.0)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -281,7 +281,7 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@6.0.0`. See [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@6.1.0`. See [CHANGELOG.md](CHANGELOG.md).
 Milestone DoDs (maintainers): [`docs/maintainers/`](docs/maintainers/) ·
 product index: [docs/PRD.md](docs/PRD.md).
 
@@ -379,7 +379,7 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 
 ## Product line (majors)
 
-Current npm package is **`@innocarpe/carpeos@6.0.0`** (`v6.0.0`): operator loop through
+Current npm package is **`@innocarpe/carpeos@6.1.0`** (`v6.1.0`): operator loop through
 adjudication + retrieval, plus Product 4 trust plane, opt-in Product 5 draft lane, and
 **Product 6 hold-first Agentic Layer** (post-capture Flash brain; capture stays dumb).
 Full major/minor thesis and DoD index:
@@ -397,8 +397,8 @@ not claimed in 6.0.0.
 
 ## What works today
 
-**Public package:** [`@innocarpe/carpeos@6.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v6.0.0` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
+**Public package:** [`@innocarpe/carpeos@6.1.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v6.1.0` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
 live Product 4 release authority.
 
 Default local loop (CI-gated):
