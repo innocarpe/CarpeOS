@@ -74,6 +74,8 @@ jobs:
           node_path="$(readlink -f "$(command -v node)")"
           node_dir="$(dirname "$node_path")"
           sandbox=(
+            sudo
+            -n
             bwrap
             --die-with-parent
             --new-session
