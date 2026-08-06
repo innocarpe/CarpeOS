@@ -10,11 +10,12 @@ Primary path: **DeepSeek Direct** (`deepseek-v4-flash`). OpenRouter not required
 | Fact | Evidence |
 | --- | --- |
 | Product 4 **code plane** + package identity **4.0.0** on `main` | #242 `chore/release-v4.0.0`; `packages/carpeos/package.json` |
-| Public **tag / npm / GitHub Release** for 4.0.0 | **Not observed** as of last verify (`npm view` still 3.2.0; no `v4.0.0` tag) |
-| M8 full accept | **Still deferred** — package identity ≠ accepted body-free release-authority seam |
+| Public **tag / npm / GitHub Release** for 4.0.0 | **Complete** — `v4.0.0`, `npm view` = `4.0.0`, [GitHub Release](https://github.com/innocarpe/CarpeOS/releases/tag/v4.0.0) |
+| M8 full accept | **Still deferred** — public package ship ≠ accepted body-free release-authority seam |
 | Draft lane shippable without M8 complete | `carpeos v5 m8` / `artifacts/v5/m8/final-decision-receipt.json` |
+| 5.0.0 release dry-run | `4.0.0 -> 5.0.0 (tag v5.0.0)` — cut waits on maintainer authorization |
 
-Do not invent M8 green from package version alone.
+Do not invent M8 green from package version or public npm alone.
 
 ## Thesis
 
@@ -99,10 +100,9 @@ carpeos help v5
 ### SemVer note
 
 Public package cut is **4.0.0 → 5.0.0** for the V5 draft-lane product major.
-Product 4 **code plane** is already versioned `4.0.0` on `main` (#242). Completing
-the public `v4.0.0` tag + npm publish **before** `5.0.0` is recommended so SemVer
-order on npm matches main. M8 full accept still needs separate body-free
-release-authority evidence and is **not** implied by either package cut.
+Product 4 public ship **4.0.0** is complete (tag + npm + GitHub Release). M8 full
+accept still needs separate body-free release-authority evidence and is **not**
+implied by the 4.0 or 5.0 package cut.
 
 ## Commands
 

@@ -40,9 +40,8 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - This major is the **draft-lane** product cut. It does not claim hosted Cloudflare
   Worker telemetry deploy or a completed Product 4 release-authority seam.
-- Public package base on `main` is **4.0.0** (Product 4 code plane). Intended SemVer
-  cut for this major is **4.0.0 → 5.0.0**. Prefer finishing public `v4.0.0` tag/npm
-  before publishing `5.0.0` so registry order matches main.
+- Public package base is **4.0.0** (Product 4 shipped: tag + npm + GitHub Release).
+  Intended SemVer cut for this major is **4.0.0 → 5.0.0** when maintainer authorizes.
 
 ## [4.0.0] - 2026-08-06
 

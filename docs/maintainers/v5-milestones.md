@@ -33,11 +33,12 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 | --- | --- |
 | `@innocarpe/carpeos` version on `main` | **4.0.0** (#242) |
 | `CHANGELOG` `[4.0.0]` | present |
-| Git tag `v4.0.0` / npm / GitHub Release | **missing** (npm still last published 3.2.0) |
-| M8 accepted release seam | **no** — do not invent from package identity |
+| Git tag `v4.0.0` / npm / GitHub Release | **complete** (`npm latest` = 4.0.0) |
+| M8 accepted release seam | **no** — public ship ≠ release-authority accept |
+| 5.0.0 dry-run | **ready** (`4.0.0 -> 5.0.0`); cut needs maintainer OK |
 
-Recommended order: finish public **4.0.0** tag+npm, then cut **5.0.0**. Draft-lane
-code does not require M8 complete; public SemVer order does prefer 4 before 5.
+Draft-lane code does not require M8 complete. Next maintainer action: authorize
+`node scripts/release.mjs 5.0.0` + push `v5.0.0` when ready.
 
 ## Provider notes
 
