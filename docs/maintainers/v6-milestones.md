@@ -21,7 +21,7 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **E10 reconcile** | dedupe/contradict proposals; human hold path | `carpeos agentic reconcile` + unit tests | **complete** |
 | **Human accept/promote** | explicit human Claim AcceptanceDecision + held promote | `accept-claim` / `promote-held` | **complete** |
 | **Feed backfill** | historical Evidence → agentic feed | `carpeos agentic backfill` | **complete** |
-| **npm 6.5.0** | complete topology residuals | E10 + human review + backfill | **shipping** |
+| **npm 6.5.0** | complete topology residuals | E10 + human review + backfill | **complete** |
 
 ## Hard fences
 
