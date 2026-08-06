@@ -833,6 +833,7 @@ export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
     throwApiError("malformed_response", "evidence pages must be bounded and non-empty");
   if (pages.some((page) => page[ADAPTER_PAGE] !== true))
     throwApiError("malformed_response", "real GitHub adapter pages are required");
+  for (const page of pages) assertPage(page);
   assertCompleteAdapterPagination(pages);
   const exactRunMatchCount = assertIndependentAdapterShapes(pages);
   if (exactRunMatchCount > 1)
@@ -926,8 +927,7 @@ function assertIndependentAdapterShapes(pages) {
         Object.hasOwn(page, "suites") ||
         page.items.some(
           (suite) =>
-            isRecord(suite) &&
-            (Object.hasOwn(suite, "runs") || Object.hasOwn(suite, "check_runs")),
+            isRecord(suite) && (Object.hasOwn(suite, "runs") || Object.hasOwn(suite, "check_runs")),
         )
       )
         throwApiError(
