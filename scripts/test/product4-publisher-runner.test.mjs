@@ -132,17 +132,97 @@ test("M4 publisher consumes only a trusted attestation and records no live write
   const result = publishEvaluatorResult({
     evaluatorResult: evaluatorResult(),
     publisherWorkflowSha: "1".repeat(40),
+    expectedHeadSha: headSha,
+    expectedRunId: 42,
+    artifact: { name: "product4-attestation", run_id: 42 },
   });
   assert.equal(result.status, "blocked_no_live_authority");
   assert.equal(result.live_write, "not_attempted");
   assert.deepEqual(result.blockers, ["ownership_unknown", "activation_not_authorized"]);
 });
 
+test("M4 publisher keeps pure fixtures behind an explicit non-production mode", () => {
+  const result = publishEvaluatorResult({
+    evaluatorResult: evaluatorResult(),
+    publisherWorkflowSha: "1".repeat(40),
+    mode: "unit",
+  });
+  assert.equal(result.status, "blocked_no_live_authority");
+  assert.equal(result.live_write, "not_attempted");
+});
+
 test("M4 publisher refuses candidate-authored success fields", () => {
   const forged = evaluatorResult();
   forged.attestation = { ...forged.attestation, candidate_success: true };
   assert.throws(
-    () => publishEvaluatorResult({ evaluatorResult: forged, publisherWorkflowSha: "1".repeat(40) }),
+    () =>
+      publishEvaluatorResult({
+        evaluatorResult: forged,
+        publisherWorkflowSha: "1".repeat(40),
+        mode: "unit",
+      }),
     /invalid_attestation|not allowed/,
+  );
+});
+
+test("M4 publisher refuses production input without expected C", () => {
+  assert.throws(
+    () =>
+      publishEvaluatorResult({
+        evaluatorResult: evaluatorResult(),
+        publisherWorkflowSha: "1".repeat(40),
+        expectedRunId: 42,
+        artifact: { name: "product4-attestation", run_id: 42 },
+      }),
+    /expected head is required/,
+  );
+});
+
+test("M4 publisher refuses production input with mismatched C", () => {
+  assert.throws(
+    () =>
+      publishEvaluatorResult({
+        evaluatorResult: evaluatorResult(),
+        publisherWorkflowSha: "1".repeat(40),
+        expectedHeadSha: "9".repeat(40),
+        expectedRunId: 42,
+        artifact: { name: "product4-attestation", run_id: 42 },
+      }),
+    /not bound to triggering workflow C/,
+  );
+});
+
+test("M4 publisher refuses missing artifact identity, name, and run binding", () => {
+  assert.throws(
+    () =>
+      publishEvaluatorResult({
+        evaluatorResult: evaluatorResult(),
+        publisherWorkflowSha: "1".repeat(40),
+        expectedHeadSha: headSha,
+        expectedRunId: 42,
+      }),
+    /artifact identity is required/,
+  );
+  assert.throws(
+    () =>
+      publishEvaluatorResult({
+        evaluatorResult: evaluatorResult(),
+        publisherWorkflowSha: "1".repeat(40),
+        expectedHeadSha: headSha,
+        expectedRunId: 42,
+        artifact: { run_id: 42 },
+      }),
+    /artifact name is required/,
+  );
+  assert.throws(
+    () =>
+      publishEvaluatorResult({
+        evaluatorResult: evaluatorResult(),
+        publisherWorkflowSha: "1".repeat(40),
+        expectedHeadSha: headSha,
+        expectedRunId: 42,
+        artifact: { name: "product4-attestation" },
+      }),
+    /artifact run binding is required/,
   );
 });

@@ -8,11 +8,25 @@ import { PRODUCT4_CONTEXT, PRODUCT4_REPOSITORY_ID } from "./policy-identity.mjs"
 import { publishAttestation } from "./publisher.mjs";
 
 export const PUBLISHER_RESULT_SCHEMA = "product4-publisher-result-v1";
+export const PRODUCT4_ATTESTATION_ARTIFACT_NAME = "product4-attestation";
 const SHA1 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const RUN_ID = /^[1-9][0-9]*$/;
 
-export function publishEvaluatorResult({ evaluatorResult, publisherWorkflowSha, expectedHeadSha }) {
-  assertPublisherInput(evaluatorResult, { expectedHeadSha });
+export function publishEvaluatorResult({
+  evaluatorResult,
+  publisherWorkflowSha,
+  expectedHeadSha,
+  expectedRunId,
+  artifact,
+  mode = "production",
+}) {
+  assertPublisherInput(evaluatorResult, {
+    expectedHeadSha,
+    expectedRunId,
+    artifact,
+    mode,
+  });
   if (!SHA1.test(publisherWorkflowSha ?? "")) throw new Error("publisher workflow is invalid");
   if (evaluatorResult.status !== "trusted" || evaluatorResult.success !== true)
     throw new Error("publisher refuses a non-trusted evaluator result");
@@ -41,9 +55,21 @@ export function publishEvaluatorResult({ evaluatorResult, publisherWorkflowSha, 
   };
   return assertPublisherResult(result);
 }
-export function assertPublisherInput(evaluatorResult, { expectedHeadSha } = {}) {
+export function assertPublisherInput(
+  evaluatorResult,
+  { expectedHeadSha, expectedRunId, artifact, mode = "production" } = {},
+) {
   assertEvaluatorResult(evaluatorResult);
-  if (expectedHeadSha !== undefined) {
+  if (mode !== "production" && mode !== "unit") throw new Error("publisher input mode is invalid");
+  if (mode === "production") {
+    if (typeof expectedHeadSha !== "string" || expectedHeadSha.length === 0)
+      throw new Error("publisher expected head is required for production");
+    if (!SHA1.test(expectedHeadSha)) throw new Error("publisher expected head is invalid");
+    if (evaluatorResult.head_sha !== expectedHeadSha)
+      throw new Error("publisher input head is not bound to triggering workflow C");
+    const normalizedRunId = normalizeRunId(expectedRunId, "publisher expected workflow run");
+    assertArtifactBinding(artifact, normalizedRunId);
+  } else if (expectedHeadSha !== undefined) {
     if (!SHA1.test(expectedHeadSha)) throw new Error("publisher expected head is invalid");
     if (evaluatorResult.head_sha !== expectedHeadSha)
       throw new Error("publisher input head is not bound to triggering workflow C");
@@ -72,6 +98,30 @@ export function assertPublisherInput(evaluatorResult, { expectedHeadSha } = {}) 
   return evaluatorResult;
 }
 
+function assertArtifactBinding(artifact, expectedRunId) {
+  if (artifact === null || typeof artifact !== "object" || Array.isArray(artifact))
+    throw new Error("publisher artifact identity is required");
+  if (artifact.name === undefined || artifact.name === "")
+    throw new Error("publisher artifact name is required");
+  if (artifact.name !== PRODUCT4_ATTESTATION_ARTIFACT_NAME)
+    throw new Error("publisher artifact name is invalid");
+  if (artifact.run_id === undefined || artifact.run_id === "")
+    throw new Error("publisher artifact run binding is required");
+  const artifactRunId = normalizeRunId(artifact.run_id, "publisher artifact run binding");
+  if (artifactRunId !== expectedRunId)
+    throw new Error("publisher artifact run is not bound to triggering workflow run");
+}
+
+function normalizeRunId(value, label) {
+  if (value === undefined || value === null || value === "")
+    throw new Error(`${label} is required`);
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return value;
+  if (typeof value === "string" && RUN_ID.test(value)) {
+    const normalized = Number(value);
+    if (Number.isSafeInteger(normalized)) return normalized;
+  }
+  throw new Error(`${label} is invalid`);
+}
 export function assertPublisherResult(result) {
   if (result === null || typeof result !== "object" || Array.isArray(result))
     throw new Error("invalid publisher result");
@@ -115,7 +165,14 @@ export function assertPublisherResult(result) {
 
 function parseArgs(argv) {
   const values = {};
-  const allowed = new Set(["--evaluator-result", "--workflow-sha", "--head-sha", "--output"]);
+  const allowed = new Set([
+    "--evaluator-result",
+    "--workflow-sha",
+    "--head-sha",
+    "--run-id",
+    "--artifact-name",
+    "--output",
+  ]);
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (!allowed.has(flag)) throw new Error(`${flag} is not supported`);
@@ -125,7 +182,14 @@ function parseArgs(argv) {
     values[flag] = value;
     index += 1;
   }
-  for (const flag of ["--evaluator-result", "--workflow-sha", "--output"])
+  for (const flag of [
+    "--evaluator-result",
+    "--workflow-sha",
+    "--head-sha",
+    "--run-id",
+    "--artifact-name",
+    "--output",
+  ])
     if (values[flag] === undefined) throw new Error(`${flag} is required`);
   return values;
 }
@@ -137,6 +201,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       evaluatorResult: JSON.parse(readFileSync(resolve(args["--evaluator-result"]), "utf8")),
       publisherWorkflowSha: args["--workflow-sha"],
       expectedHeadSha: args["--head-sha"],
+      expectedRunId: args["--run-id"],
+      artifact: {
+        name: args["--artifact-name"],
+        run_id: args["--run-id"],
+      },
     });
     writeFileSync(resolve(args["--output"]), `${JSON.stringify(result, null, 2)}\n`, "utf8");
   } catch (error) {
