@@ -5,6 +5,8 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
 const workflow = (name) => readFileSync(resolve(root, ".github/workflows", name), "utf8");
+const evaluatorRunner = () =>
+  readFileSync(resolve(root, "scripts/product4/evaluator-runner.mjs"), "utf8");
 
 /**
  * GitHub Actions rejects `runner.*` in job-level `env` (invalid workflow file).
@@ -51,7 +53,10 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   const source = workflow("product-4-candidate-attest.yml");
   assert.match(source, /on:\n {2}workflow_run:/);
   assert.doesNotMatch(source, /pull_request_target/);
-  assert.match(source, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(
+    source,
+    /ref: \$\{\{ github\.event\.workflow_run\.pull_requests\[0\]\.base\.sha \}\}/,
+  );
   assert.match(source, /path: candidate/);
   assert.match(source, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
   assert.match(source, /apt-get install --no-install-recommends -y bubblewrap/);
@@ -60,6 +65,10 @@ test("M4 isolates base-owned evaluation from the untrusted candidate workspace",
   assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
   assert.match(source, /persist-credentials: false/);
   assert.match(source, /evaluator-runner\.mjs/);
+  assert.match(
+    evaluatorRunner(),
+    /const evaluation = evaluateCandidateEvidence\(\{[\s\S]*\n {4}trustedEvidence,\n {2}\}\);/,
+  );
   assert.match(source, /--candidate-root/);
   assert.doesNotMatch(source, /env:[\s\S]{0,160}github\.token/);
   assertNoJobLevelRunnerContext(source);
