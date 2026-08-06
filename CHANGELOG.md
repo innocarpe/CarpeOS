@@ -12,6 +12,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- (none yet — fold entries here before the next release)
+
+## [5.0.0] - 2026-08-06
+
+### Added
+
 - **Product 5.0 draft lane (opt-in)** behind `@carpeos/v5` and `carpeos v5`:
   - Offline contracts M0–M7: redaction, EvidencePack, reducer oracle, attempts/review
     sidecar, local TELEMETRY_DB store + SQL migration, frozen all-200 evaluation.
@@ -382,7 +388,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v5.0.0...HEAD
 [4.0.0]: https://github.com/innocarpe/carpeos/compare/v3.2.0...v4.0.0
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
@@ -398,3 +404,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [3.0.2]: https://github.com/innocarpe/carpeos/releases/tag/v3.0.2
 [3.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v3.1.0
 [3.2.0]: https://github.com/innocarpe/carpeos/releases/tag/v3.2.0
+[5.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v5.0.0
