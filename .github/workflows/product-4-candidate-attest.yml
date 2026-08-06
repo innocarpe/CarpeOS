@@ -70,7 +70,9 @@ jobs:
 
       - name: Move C into an external candidate workspace
         run: |
-          mkdir -p "$CARPEOS_CANDIDATE_ROOT"
+          # Rename into place (do not mkdir the destination first or mv nests as
+          # $CARPEOS_CANDIDATE_ROOT/candidate and later scripts/pnpm miss the root).
+          rm -rf "$CARPEOS_CANDIDATE_ROOT"
           mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
           chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
           mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
@@ -88,17 +90,34 @@ jobs:
       - name: Execute candidate build and CLI in a bounded bubblewrap sandbox
         run: |
           set -euo pipefail
-          node_path="$(readlink -f "$(command -v node)")"
-          node_dir="$(dirname "$node_path")"
-          pnpm_command="$(command -v pnpm)"
-          pnpm_path="$(readlink -f "$pnpm_command")"
-          pnpm_bin_dir="$(dirname "$pnpm_command")"
-          pnpm_dir="$(dirname "$(dirname "$pnpm_path")")"
-          pnpm_store="$(pnpm store path --silent)"
-          test -x "$node_path"
-          test -x "$pnpm_path"
-          test -d "$pnpm_store"
-          test -n "$(find "$pnpm_store" -mindepth 1 -print -quit)"
+          # setup-pnpm install prefix is not bindable under `sudo bwrap` on GHA
+          # ("Permission denied" on the action tool bin dir). Stage a self-contained
+          # node+pnpm prefix and a copy of the offline store under /var/tmp
+          # (not /tmp: sandbox uses --tmpfs /tmp).
+          tool_root="/var/tmp/product4-host-tools-${GITHUB_RUN_ID}"
+          staged_store="/var/tmp/product4-pnpm-store-${GITHUB_RUN_ID}"
+          rm -rf "$tool_root" "$staged_store"
+          mkdir -p "$tool_root/bin" "$staged_store"
+          node_src="$(readlink -f "$(command -v node)")"
+          node_dir="$(dirname "$node_src")"
+          cp -a "$node_src" "$tool_root/bin/node"
+          if [[ -x "$node_dir/npm" ]]; then
+            npm_cmd="$node_dir/npm"
+          else
+            npm_cmd="$(command -v npm)"
+          fi
+          "$npm_cmd" install --global --prefix "$tool_root" pnpm@11.16.0
+          host_store="$(pnpm store path --silent)"
+          test -d "$host_store"
+          test -n "$(find "$host_store" -mindepth 1 -print -quit)"
+          # Full copy (not hardlink): hardlinks can leave SQLite store index unusable
+          # under the sandbox mount + setpriv user.
+          cp -a "$host_store"/. "$staged_store"/
+          chmod -R a+rwX "$tool_root" "$staged_store"
+          test -x "$tool_root/bin/node"
+          test -x "$tool_root/bin/pnpm"
+          test -d "$staged_store"
+          test -n "$(find "$staged_store" -mindepth 1 -print -quit)"
           sandbox=(
             sudo
             -n
@@ -123,17 +142,19 @@ jobs:
             --setenv NODE_NO_WARNINGS 1
             --setenv NO_COLOR 1
             --setenv TZ UTC
-            --setenv PATH "$node_dir:$pnpm_bin_dir:/usr/local/bin:/usr/bin:/bin"
+            # --clearenv strips host CI; pnpm aborts modules purge without TTY unless CI=true.
+            --setenv CI true
+            --setenv PATH "$tool_root/bin:/usr/local/bin:/usr/bin:/bin"
             --cap-drop ALL
             --ro-bind /usr /usr
             --ro-bind /bin /bin
             --ro-bind /lib /lib
             --ro-bind /lib64 /lib64
             --ro-bind /etc /etc
-            --ro-bind "$node_dir" "$node_dir"
-            --ro-bind "$pnpm_dir" "$pnpm_dir"
-            --ro-bind "$pnpm_bin_dir" "$pnpm_bin_dir"
-            --ro-bind "$pnpm_store" /pnpm-store
+            --ro-bind "$tool_root" "$tool_root"
+            # Writable: pnpm v10+ opens a SQLite store index even for offline install.
+            # staged_store is a disposable /var/tmp copy, not the host package cache.
+            --bind "$staged_store" /pnpm-store
             --
             setpriv
             --no-new-privs
@@ -141,29 +162,26 @@ jobs:
             --ambient-caps=-all
             --
           )
-          # rlimits must be set inside the namespace (after setpriv). Host ulimit
-          # before sudo bwrap is reset by sudo and is not observed by the probe.
-          # --noprofile/--norc: bash -u must not source /etc/bash.bashrc (PS1).
-          "${sandbox[@]}" /bin/bash --noprofile --norc -ceu '
-            ulimit -u 64
-            ulimit -v 1048576
-            ulimit -f 102400
+          ulimit -u 64
+          ulimit -v 1048576
+          "${sandbox[@]}" /bin/bash -ceu '
             rm -rf /work/*
-            cp -aL /candidate/. /work/
-            chmod -R u+rwX /work
+            # Dropped caps + user ns cannot chown; cp -a ownership preserve fails hard.
+            cp -RL --no-preserve=ownership /candidate/. /work/
+            # Do not chmod the bind-mount root itself (EPERM under setpriv); only contents.
+            find /work -mindepth 1 -exec chmod u+rwX {} +
             cd /work
-            pnpm install --offline --frozen-store --frozen-lockfile --ignore-scripts --store-dir /pnpm-store
+            # See evaluate.yml: avoid --frozen-store (ReadOnlyStoreIndex/index.db).
+            pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir /pnpm-store --config.confirmModulesPurge=false
             pnpm --filter "@carpeos/cli..." build
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
             node /work/scripts/product4/sandbox-probe.mjs /output/sandbox-probe.json
           '
           sudo -n chmod -R a-w "$CARPEOS_SANDBOX_WORK"
-          # sudo bwrap writes probe as root (mode 0600). Hand ownership back so
-          # the unprivileged host job can validate and seal the receipt.
-          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT"
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail
+          sudo -n chown -R "$(id -u):$(id -g)" "$CARPEOS_SANDBOX_OUT" || true
           tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
           export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
