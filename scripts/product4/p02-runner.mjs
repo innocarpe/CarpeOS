@@ -763,6 +763,9 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "NODE_NO_WARNINGS",
     "1",
     "--setenv",
+    "NODE_OPTIONS",
+    "--disable-warning=ExperimentalWarning",
+    "--setenv",
     "NO_COLOR",
     "1",
     "--setenv",
@@ -784,6 +787,9 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
   }
   // Apply rlimits inside the sandbox after setpriv. Host-side ulimit before
   // `sudo bwrap` is reset by sudo and is not visible on /proc/self/limits.
+  // Keep AS high enough for V8 virtual reservation while still bounding the
+  // process; the probe still asserts the observed soft limit equals the
+  // contract (memory_limit_mb * 1MiB).
   bwrapArgs.push(
     "--",
     "setpriv",
