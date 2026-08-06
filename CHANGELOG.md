@@ -25,7 +25,7 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
     spend cap; credentials only via env / `~/.carpeos/v5-provider.env`.
   - M8 seam scan + final decision receipt
     (`artifacts/v5/m8/final-decision-receipt.json`): release seam **deferred** without
-    inventing Product 4 acceptance; draft lane remains shippable.
+    inventing Product 4 release-authority acceptance; draft lane remains shippable.
   - ADR 0016 (draft-only + DeepSeek primary), PRD-v5, product-5.0.0 DoD.
 
 ### Safety
@@ -40,6 +40,9 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - This major is the **draft-lane** product cut. It does not claim hosted Cloudflare
   Worker telemetry deploy or a completed Product 4 release-authority seam.
+- Public package base on `main` is **4.0.0** (Product 4 code plane). Intended SemVer
+  cut for this major is **4.0.0 → 5.0.0**. Prefer finishing public `v4.0.0` tag/npm
+  before publishing `5.0.0` so registry order matches main.
 
 ## [4.0.0] - 2026-08-06
 
