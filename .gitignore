@@ -16,6 +16,9 @@ build/
 .dev.vars
 *.local
 
+# Live V5 cost experiment ledgers if written under the worktree (default is ~/.carpeos/)
+artifacts/v5/cost-experiments/
+
 # CarpeOS runtime state and private data
 .omx/
 .carpeos/
