@@ -11,11 +11,16 @@ import {
   AGENTIC_PLANE,
   AGENTIC_POLICY_VERSION,
   countAgenticJobs,
+  createFlashSpendState,
   evaluateGoldenManifest,
+  getAgenticProposal,
+  listAgenticHeldProposals,
   listAgenticProposals,
   loadGoldenManifest,
+  materializeAgenticProposal,
   migrateAgenticJobs,
   migrateAgenticProposals,
+  processAgenticOnce,
   runAgenticProposalPipeline,
 } from "@carpeos/agentic";
 import { ADJUDICATION_POLICY_VERSION, isIdempotencyKey } from "@carpeos/capture";
@@ -147,7 +152,7 @@ export async function runCli(
       case "v5":
         return await runV5(rest, env);
       case "agentic":
-        return runAgentic(rest, env);
+        return await runAgentic(rest, env);
       case "setup":
       case "doctor":
         throw new CliUsageError(
@@ -1393,13 +1398,13 @@ function runVersion(argv: readonly string[]): number {
 
 /**
  * Product 6 agentic operator surface (post-capture brain). Never runs inside capture.
- * Subcommands: status | run | golden
+ * Subcommands: status | run | golden | list-held | materialize
  */
-function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|materialize). See: carpeos help agentic",
     );
   }
 
@@ -1462,13 +1467,17 @@ function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): number {
           home: { type: "string" },
           "trust-zone": { type: "string" },
           "project-id": { type: "string" },
-          once: { type: "boolean", default: false },
+          once: { type: "boolean", default: true },
           "allow-network": { type: "boolean", default: false },
+          materialize: { type: "boolean", default: true },
+          "allow-auto-promote": { type: "boolean", default: false },
+          "spend-cap-usd": { type: "string" },
           text: { type: "string" },
           "source-event-id": { type: "string" },
           "hook-event": { type: "string" },
           golden: { type: "boolean", default: false },
           "golden-path": { type: "string" },
+          limit: { type: "string" },
         },
         allowPositionals: false,
         strict: true,
@@ -1481,9 +1490,9 @@ function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       const runtimeDir = options.home ?? runtimeDirFromEnv(env);
       const agenticEnabled = env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off";
       const allowNetwork = parsed.values["allow-network"] === true;
-      if (allowNetwork) {
+      if (allowNetwork && !(env.DEEPSEEK_API_KEY ?? "").trim()) {
         throw new CliUsageError(
-          "agentic run --allow-network is reserved for operator Flash runs; this CLI build keeps network off by default. Use package tests/fake path or set an explicit live runner later.",
+          "agentic run --allow-network requires DEEPSEEK_API_KEY in the environment (never commit keys).",
         );
       }
       const db = openAgenticDb(runtimeDir);
@@ -1509,33 +1518,157 @@ function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): number {
         }
 
         const text = parsed.values.text;
-        if (text === undefined || text.trim().length === 0) {
-          throw new CliUsageError(
-            "agentic run requires --text <signal> or --golden (offline corpus). Network stays off unless a future live path is enabled.",
-          );
+        if (text !== undefined && text.trim().length > 0) {
+          // Manual one-shot on operator-provided text (no capture feed).
+          const trust_zone_id = options.trustZone ?? "tz_local_default";
+          const result = runAgenticProposalPipeline(db, {
+            trust_zone_id,
+            source_event_id: parsed.values["source-event-id"] ?? `evt_cli_${Date.now()}`,
+            hook_event_name: parsed.values["hook-event"] ?? "SessionEnd",
+            signal_text: text,
+            agentic_enabled: agenticEnabled,
+            mode: allowNetwork ? "flash" : "fake",
+            allow_network: allowNetwork,
+            allow_auto_promote: parsed.values["allow-auto-promote"] === true,
+          });
+          writeJson(process.stdout, {
+            ok: result.ok,
+            command: "agentic.run.text",
+            result,
+            model_id: AGENTIC_FLASH_MODEL_ID,
+            network_used: result.network_used,
+            canonical_effect: "none",
+          });
+          return result.ok ? 0 : 1;
         }
-        const trust_zone_id = options.trustZone ?? "tz_local_default";
-        const result = runAgenticProposalPipeline(db, {
-          trust_zone_id,
-          source_event_id: parsed.values["source-event-id"] ?? `evt_cli_${Date.now()}`,
-          hook_event_name: parsed.values["hook-event"] ?? "SessionEnd",
-          signal_text: text,
-          agentic_enabled: agenticEnabled,
-          mode: "fake",
-          allow_network: false,
-          allow_auto_promote: false,
+
+        // Default product path: drain capture feed + lease jobs + optional materialize.
+        const store = openStore(options, env);
+        try {
+          const spendCap = Number(parsed.values["spend-cap-usd"] ?? "1");
+          const limit = Number(parsed.values.limit ?? "20");
+          const report = await processAgenticOnce({
+            store,
+            agenticDb: db,
+            allow_network: allowNetwork,
+            agentic_enabled: agenticEnabled,
+            materialize: parsed.values.materialize !== false,
+            allow_auto_promote: parsed.values["allow-auto-promote"] === true,
+            limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20,
+            spend: createFlashSpendState({
+              spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
+            }),
+          });
+          writeJson(process.stdout, {
+            ok: report.ok,
+            command: "agentic.run",
+            once: true,
+            report,
+            model_id: AGENTIC_FLASH_MODEL_ID,
+            allow_network: allowNetwork,
+            network_used: report.network_used,
+          });
+          return report.ok ? 0 : 1;
+        } finally {
+          store.close();
+        }
+      } finally {
+        db.close();
+      }
+    }
+    case "list-held": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          limit: { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const db = openAgenticDb(runtimeDir);
+      try {
+        const limit = Number(parsed.values.limit ?? "50");
+        const held = listAgenticHeldProposals(
+          db,
+          options.trustZone,
+          Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50,
+        );
+        writeJson(process.stdout, {
+          ok: true,
+          command: "agentic.list-held",
+          policy_version: AGENTIC_POLICY_VERSION,
+          count: held.length,
+          proposals: held.map((p) => ({
+            proposal_id: p.proposal_id,
+            source_event_id: p.source_event_id,
+            kind: p.candidate.kind,
+            statement: p.candidate.statement,
+            gate: p.gate.decision,
+            reason_codes: p.gate.reason_codes,
+            materialized_event_id: p.materialized_event_id,
+          })),
+        });
+        return 0;
+      } finally {
+        db.close();
+      }
+    }
+    case "materialize": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "proposal-id": { type: "string" },
+          "artifact-id": { type: "string" },
+          "allow-promote": { type: "boolean", default: false },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const proposalId = parsed.values["proposal-id"];
+      const artifactId = parsed.values["artifact-id"];
+      if (proposalId === undefined || artifactId === undefined) {
+        throw new CliUsageError(
+          "agentic materialize requires --proposal-id <id> and --artifact-id <id>",
+        );
+      }
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const db = openAgenticDb(runtimeDir);
+      const store = openStore(options, env);
+      try {
+        const proposal = getAgenticProposal(db, proposalId);
+        if (proposal === undefined) {
+          throw new CliUsageError(`proposal not found: ${proposalId}`);
+        }
+        const mat = materializeAgenticProposal({
+          store,
+          agenticDb: db,
+          proposal,
+          artifact_id: artifactId,
+          allow_promote_materialize: parsed.values["allow-promote"] === true,
         });
         writeJson(process.stdout, {
-          ok: result.ok,
-          command: "agentic.run",
-          once: parsed.values.once === true,
-          result,
-          model_id: AGENTIC_FLASH_MODEL_ID,
-          network_used: false,
-          canonical_effect: "none",
+          ok: mat.ok,
+          command: "agentic.materialize",
+          result: mat,
         });
-        return result.ok ? 0 : 1;
+        return mat.ok ? 0 : 1;
       } finally {
+        store.close();
         db.close();
       }
     }
@@ -1843,20 +1976,25 @@ export function formatCommandHelp(command: string): string {
 
 USAGE
   carpeos agentic status [--home <path>] [--trust-zone <id>]
+  carpeos agentic run --once [--materialize] [--allow-network] [--limit N]
   carpeos agentic run --once --text <signal> [--hook-event SessionEnd]
   carpeos agentic run --once --golden [--golden-path <manifest.json>]
-  carpeos agentic golden [--path <manifest.json>] [--home <path>]
+  carpeos agentic golden [--path <manifest.json>]
+  carpeos agentic list-held [--limit N]
+  carpeos agentic materialize --proposal-id <id> --artifact-id <id> [--allow-promote]
 
 SUBCOMMANDS
-  status   Job + proposal counts; plane fences (Flash-only, no capture LLM)
-  run      Offline proposal pipeline (fake stages). --golden runs golden-12 corpus
-  golden   Evaluate fixtures/agentic/v1/golden-12 (or --path) offline
+  status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
+  run          Drain capture feed → stages → optional materialize (default product path)
+  golden       Evaluate fixtures/agentic/v1/golden-12 offline
+  list-held    List agentic_v1 hold proposals for human review
+  materialize  Materialize one proposal to draft Observation + disposition
 
 HARD FENCES
-  - Never runs inside capture-hook; no LLM in capture
-  - Real model id only: deepseek-v4-flash (live path operator-gated; default network off)
+  - Capture inserts feed only (no LLM/network/await in capture transaction)
+  - Real model id only: deepseek-v4-flash (live requires --allow-network + DEEPSEEK_API_KEY)
   - No automatic AcceptanceDecision
-  - Kill switch: CARPEOS_AGENTIC=0|off
+  - Kill switch: CARPEOS_AGENTIC=0|off (skips feed + runner)
   - Sidecar DB: <home>/agentic/agentic.sqlite
 
 See: docs/adr/0017-agentic-layer-write-time-knowledge.md, docs/maintainers/v6-milestones.md
