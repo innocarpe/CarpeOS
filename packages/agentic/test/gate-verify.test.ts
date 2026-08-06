@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluateAgenticGate } from "../src/gate.js";
-import { verifyExtractCandidate } from "../src/verify.js";
 import type { AgenticExtractCandidate } from "../src/types.js";
+import { verifyExtractCandidate } from "../src/verify.js";
 
 const pack = "We decided to require make preflight before every PR.";
 

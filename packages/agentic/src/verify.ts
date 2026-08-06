@@ -1,6 +1,6 @@
 import type { AgenticCitation, AgenticExtractCandidate } from "./types.js";
 
-const SECRETISH = /\b(api[_-]?key|secret|password|bearer\s+[a-z0-9._\-]+|sk-[a-z0-9]{10,})\b/i;
+const SECRETISH = /\b(api[_-]?key|secret|password|bearer\s+[a-z0-9._-]+|sk-[a-z0-9]{10,})\b/i;
 
 /**
  * Deterministic citation + secret checks (E5). No LLM.

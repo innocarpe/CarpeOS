@@ -1,13 +1,16 @@
 /**
- * @carpeos/agentic — Product 6 Agentic Layer (scaffold).
+ * @carpeos/agentic — Product 6 Agentic Layer.
  *
  * ADR 0017: post-capture write-time knowledge formation.
  * Model freeze: deepseek-v4-flash only for real calls.
- * Implementation of jobs/orchestrator lands in V6-P1+.
+ * P1a: durable job store + lease state machine + stage digests.
  */
 
-export * from "./types.js";
+export * from "./digest.js";
 export * from "./gate.js";
+export * from "./jobs.js";
+export type { SqlDatabase, SqlStatement } from "./sql.js";
+export * from "./types.js";
 export * from "./verify.js";
 
 export const AGENTIC_PLANE = {
