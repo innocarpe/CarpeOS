@@ -1,8 +1,17 @@
 name: Product 4 Candidate Evidence (unprivileged)
 
+# Trust plane (docs/maintainers/ci-policy.md): not a default PR required gate until
+# ownership/App activation. Auto-run only when Product 4 trust-plane paths change.
+# Unit/contract tests remain the PR quality gate for Product 4 logic on other PRs.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - "scripts/product4/**"
+      - "scripts/test/product4-*.test.mjs"
+      - "schemas/product4*.json"
+      - "spec/product4/**"
+      - ".github/workflows/product-4-candidate-*.yml"
 
 permissions:
   contents: read

@@ -1,5 +1,8 @@
 name: CI
 
+# Lanes (docs/maintainers/ci-policy.md / skills/carpeos-ci):
+# - PR lean: format/lint/build/typecheck/test/public-boundary via `pnpm check`
+# - Main full: same job continues with evals, smokes, and e2e (no second monorepo rebuild)
 on:
   pull_request:
   push:
@@ -31,29 +34,39 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # --- PR lean (and main) ---
       - name: Run checks
         run: pnpm check
-      - name: Build capture evaluators
-        run: pnpm --filter @carpeos/capture build
+
+      # --- Main full only: deeper integration (packages already built by pnpm check) ---
       - name: Evaluate capture adjudication
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/capture eval:adjudication:built
+
       - name: Evaluate capture knowledge form
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/capture eval:knowledge-form:built
 
-      - name: Build and evaluate retrieval
-        run: pnpm --filter @carpeos/retrieval build && pnpm --filter @carpeos/retrieval eval:retrieval
+      - name: Evaluate retrieval
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: pnpm --filter @carpeos/retrieval eval:retrieval
 
       - name: Run synthetic knowledge dogfood smoke
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:dogfood
 
       - name: Run MCP smoke (G5)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:mcp
 
       - name: Run product loop smoke (1.0)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:product
 
       - name: Run knowledge adjudication smoke (2.0 MVP)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm smoke:knowledge
 
       - name: Run sync worker G008 E2E
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @carpeos/sync-worker test:e2e

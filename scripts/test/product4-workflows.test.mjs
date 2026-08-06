@@ -23,7 +23,10 @@ function assertNoJobLevelRunnerContext(source) {
 
 test("M4 keeps the raw producer unprivileged and bound to pull_request C", () => {
   const source = workflow("product-4-candidate-evaluate.yml");
+  // Trust plane is path-gated until activation (ci-policy), not every PR.
   assert.match(source, /on:\n {2}pull_request:/);
+  assert.match(source, /paths:/);
+  assert.match(source, /scripts\/product4\/\*\*/);
   assert.doesNotMatch(source, /pull_request_target/);
   assert.match(source, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(source, /persist-credentials: false/);
