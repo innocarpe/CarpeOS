@@ -28,3 +28,4 @@ export * from "./pipeline.js";
 export * from "./evaluation.js";
 export * from "./evaluation-all200.js";
 export * from "./integration.js";
+export * from "./m8-seam.js";

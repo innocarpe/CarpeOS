@@ -22,6 +22,7 @@
     "test": "vitest run --passWithNoTests",
     "m0:recompute": "node scripts/m0-recompute.mjs",
     "cost:experiment:dry": "node scripts/live-cost-experiment.mjs --dry-run",
-    "cost:experiment": "node scripts/live-cost-experiment.mjs --allow-network"
+    "cost:experiment": "node scripts/live-cost-experiment.mjs --allow-network",
+    "m8:decision": "pnpm build && node scripts/m8-decision.mjs"
   }
 }

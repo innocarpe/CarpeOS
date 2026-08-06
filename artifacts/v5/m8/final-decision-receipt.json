@@ -1,0 +1,82 @@
+{
+  "schema": "carpeos.v5.final-decision-receipt/v1",
+  "timestamp": "2026-08-06T07:44:45.648Z",
+  "opt_in": true,
+  "draft_only": true,
+  "canonical_effect": "none",
+  "primary_provider": "deepseek_direct",
+  "primary_model": "deepseek-v4-flash",
+  "openrouter_required": false,
+  "capture_hot_path_wired": false,
+  "v5_off_release_path": {
+    "pass": true,
+    "errors": []
+  },
+  "m8": {
+    "schema": "carpeos.v5.m8-decision/v1",
+    "opt_in": true,
+    "draft_only": true,
+    "canonical_effect": "none",
+    "v5_off_release_path_verified": true,
+    "four_zero_seam": null,
+    "blockers": ["no accepted body-free 4.0 evidence seam"],
+    "status": "deferred"
+  },
+  "classified_receipts": [
+    {
+      "path": "artifacts/g008/product4-exact-install-receipt.json",
+      "exists": true,
+      "body_free": true,
+      "receipt_type": "product4_exact_install",
+      "status": "passed",
+      "accepted_as_release_seam": false,
+      "accepted_as_install_smoke": true,
+      "digest": "sha256:b50f050ca8a13d35e36a3ddaacda2703974caf767a1f0eb74287efef45aca44f",
+      "blockers": [],
+      "notes": ["install_smoke_passed_authority_not_attempted"]
+    },
+    {
+      "path": "artifacts/g008/product4-release-gate-defer-receipt.json",
+      "exists": true,
+      "body_free": true,
+      "receipt_type": "product4_release_gate",
+      "status": "blocked",
+      "accepted_as_release_seam": false,
+      "accepted_as_install_smoke": false,
+      "digest": "sha256:057062f88c405e1af0889a6833064e6b83940770d887edd01d825efcc231a918",
+      "blockers": [
+        "release_gate_deferred_or_blocked",
+        "gate:release_authority_missing",
+        "gate:ownership_receipt_missing",
+        "gate:ruleset_receipt_missing",
+        "gate:evaluator_result_missing",
+        "gate:promotion_ledger_missing",
+        "gate:install_smoke_missing",
+        "gate:release_ancestry_missing",
+        "gate:release_diff_missing",
+        "gate:tag_identity_missing",
+        "gate:release_approval_missing",
+        "gate:release_identity_incomplete"
+      ],
+      "notes": []
+    }
+  ],
+  "install_smoke_ref": {
+    "schema": "carpeos.v5.m8-body-free-receipt-ref/v1",
+    "path": "artifacts/g008/product4-exact-install-receipt.json",
+    "digest": "sha256:b50f050ca8a13d35e36a3ddaacda2703974caf767a1f0eb74287efef45aca44f",
+    "accepted": false
+  },
+  "selection_notes": [
+    "install_smoke_only:artifacts/g008/product4-exact-install-receipt.json;release_seam_absent",
+    "observed_blocked_gate:artifacts/g008/product4-release-gate-defer-receipt.json"
+  ],
+  "draft_lane_shippable": true,
+  "m8_complete": false,
+  "notes": [
+    "M8 full accept requires body-free accepted 4.0 release evidence; install-smoke alone is insufficient.",
+    "Draft-lane shippability does not require M8 complete.",
+    "No canonical authority expansion.",
+    "PRD-v4 remains independently releasable."
+  ]
+}
