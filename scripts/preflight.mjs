@@ -199,22 +199,33 @@ async function conflictProbe(base) {
   const mergeBase = await run("git", ["merge-base", base, "HEAD"], { label: "git merge-base" });
   if (!mergeBase.ok) return mergeBase;
   const baseSha = mergeBase.stdout.trim();
+  // Prefer modern merge-tree --write-tree (exit 1 on conflict) when available.
+  const modern = await run("git", ["merge-tree", "--write-tree", base, "HEAD"], {
+    label: "git merge-tree --write-tree",
+  });
+  if (modern.code === 0) {
+    return { ...modern, ok: true, label: "git merge-tree (clean)" };
+  }
+  if (modern.code === 1 && /CONFLICT/i.test(`${modern.stdout}\n${modern.stderr}`)) {
+    return {
+      ...modern,
+      ok: false,
+      label: "git merge-tree conflict probe",
+      stderr: `${modern.stderr}\nmerge-tree reports conflicts vs ${base}. Rebase onto ${base} before opening a PR.\n`,
+    };
+  }
+  // Older git: fall back to three-arg merge-tree and scan structured conflict headers only.
   const tree = await run("git", ["merge-tree", baseSha, base, "HEAD"], {
     label: "git merge-tree conflict probe",
   });
-  // merge-tree exits 0 even with conflicts; look for markers / "changed in both"
   const text = `${tree.stdout}\n${tree.stderr}`;
-  const hasConflict =
-    text.includes("changed in both") ||
-    text.includes("CONFLICT") ||
-    text.includes("<<<<<<<") ||
-    /<<<<<<< /m.test(text);
+  const hasConflict = /^changed in both\b/m.test(text) || /^CONFLICT \(/m.test(text);
   if (hasConflict) {
     return {
       ...tree,
       ok: false,
       code: 1,
-      stderr: `${tree.stderr}\nmerge-tree reports conflicts vs ${base}. Rebase/merge before opening a PR.\n`,
+      stderr: `${tree.stderr}\nmerge-tree reports conflicts vs ${base}. Rebase onto ${base} before opening a PR.\n`,
     };
   }
   return { ...tree, ok: true, label: "git merge-tree (clean)" };
