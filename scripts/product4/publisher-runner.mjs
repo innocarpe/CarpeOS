@@ -60,8 +60,7 @@ export function assertPublisherInput(
   { expectedHeadSha, expectedRunId, artifact, mode = "production" } = {},
 ) {
   assertEvaluatorResult(evaluatorResult);
-  if (mode !== "production" && mode !== "unit")
-    throw new Error("publisher input mode is invalid");
+  if (mode !== "production" && mode !== "unit") throw new Error("publisher input mode is invalid");
   if (mode === "production") {
     if (typeof expectedHeadSha !== "string" || expectedHeadSha.length === 0)
       throw new Error("publisher expected head is required for production");
