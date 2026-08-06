@@ -12,7 +12,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Product 5.0 draft lane (in-tree, opt-in): `@carpeos/v5` offline contracts,
+  DeepSeek Direct–primary provider boundary, draft pipeline, local TELEMETRY_DB,
+  M7 all-200 evaluation, and `carpeos v5` CLI (`status`, `readiness`,
+  `eval-all200`, `draft`). Always `canonical_effect: "none"`; not on the capture
+  hot path; OpenRouter not required. See `docs/PRD-v5.md` and ADR 0016.
+  npm major `5.0.0` is **not** cut until a separate release.
 
 ## [3.2.0] - 2026-08-04
 

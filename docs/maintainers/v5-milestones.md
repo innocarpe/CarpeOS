@@ -12,9 +12,11 @@ Status truth table for CarpeOS 5.0.0. Update only with test/receipt evidence.
 | **V5-M4** Provider boundary | DeepSeek Direct primary (`deepseek-v4-flash`); fake default when network off; no implicit fallback; live cost experiment | `src/provider*.ts`, `scripts/live-cost-experiment.mjs` | **complete** |
 | **V5-M5** Attempts/review/rollback | One-dispatch; incidents; V5-off rollback; no canonical writes | `src/attempts.ts` | **complete** |
 | **V5-M6** Telemetry | Signed admission model + local TELEMETRY_DB store + SQL migration | `src/telemetry.ts`, `src/telemetry-store.ts`, `migrations/telemetry/001_telemetry_initial.sql` | **complete (local)**; CF Worker deploy remains operator-optional |
-| **V5-M7** Evaluation | Frozen ledger; denominators; circuit breaker; V5-off | `src/evaluation.ts` | **complete** |
+| **V5-M7** Evaluation | Frozen all-200 ledger; denominators; circuit breaker; V5-off | `src/evaluation.ts`, `src/evaluation-all200.ts`, `carpeos v5 eval-all200` | **complete** |
 | **V5-M8** Integration | Body-free accepted 4.0 seam | `src/integration.ts` | **deferred** (draft-lane readiness does not invent 4.0 acceptance) |
 | **E2E pipeline** | redact→pack→extract→draft reduce→eval | `src/pipeline.ts`, `src/draft-reduce.ts`, `test/pipeline.test.ts` | **complete (offline)** |
+| **Operator CLI** | Opt-in `carpeos v5` (status/readiness/eval-all200/draft) | `apps/carpeos-cli` | **complete** (not capture-hook) |
+| **ADR** | Draft-only + DeepSeek primary decision record | `docs/adr/0016-v5-draft-only-deepseek-primary.md` | **complete** |
 
 ## Hard fences (do not violate)
 

@@ -49,6 +49,9 @@ importers:
       '@carpeos/sync-client':
         specifier: workspace:*
         version: link:../../packages/sync-client
+      '@carpeos/v5':
+        specifier: workspace:*
+        version: link:../../packages/v5
 
   apps/carpeos-mcp-server:
     dependencies:
