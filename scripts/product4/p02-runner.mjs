@@ -299,12 +299,10 @@ export function runP02Twice({
  * initialized through its supported CLI opener, then this boundary inserts the
  * fixture row once with append-only SQL. Reconciliation itself remains read-only.
  */
-export function seedDisposableFixture({ home, workspaceRoot, cliRoot, fixture, sandboxReceipt }) {
+export function seedDisposableFixture({ home, fixture }) {
   assertP02Fixture(fixture);
   const runtimeHome = resolve(home);
   const databasePath = resolve(runtimeHome, "carpeos.sqlite");
-  assertDisposableDatabasePath(databasePath, { allowMissing: true });
-  bootstrapStore({ home: runtimeHome, workspaceRoot, cliRoot, sandboxReceipt });
   assertDisposableDatabasePath(databasePath);
   const database = new DatabaseSync(databasePath);
   try {
@@ -386,43 +384,6 @@ export function seedDisposableFixture({ home, workspaceRoot, cliRoot, fixture, s
   const seeded = readStoreObservation(runtimeHome);
   assertSeedObservation(seeded, fixture);
   return seeded;
-}
-
-function bootstrapStore({ home, workspaceRoot, cliRoot, sandboxReceipt }) {
-  const result = runSandboxed({
-    home,
-    workspaceRoot,
-    cliRoot,
-    args: ["project", "identify", "--home", "/home", "--trust-zone", "tz_synthetic"],
-    sandboxReceipt,
-  });
-  if (result.error !== undefined || result.status !== 0) {
-    const stderr = result.stderr?.toString("utf8").trim();
-    throwRunnerError(
-      "fixture_store_bootstrap_failed",
-      [
-        result.error?.message ?? `store bootstrap exited with ${String(result.status)}`,
-        stderr === "" ? undefined : stderr,
-      ]
-        .filter(Boolean)
-        .join(": "),
-    );
-  }
-  let body;
-  try {
-    body = JSON.parse(result.stdout?.toString("utf8") ?? "");
-  } catch {
-    throwRunnerError("fixture_store_bootstrap_failed", "store bootstrap did not emit JSON");
-  }
-  if (
-    body === null ||
-    typeof body !== "object" ||
-    Array.isArray(body) ||
-    body.command !== "project identify" ||
-    body.trust_zone_id !== "tz_synthetic"
-  ) {
-    throwRunnerError("fixture_store_bootstrap_failed", "store bootstrap identity is invalid");
-  }
 }
 
 function runOnce(home, workspaceRoot, cliRoot, fixture, fixtureSha256, label, sandboxReceipt) {
