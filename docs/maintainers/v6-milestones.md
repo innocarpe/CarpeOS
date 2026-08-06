@@ -12,7 +12,8 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **V6-P4** Link / graph density | provenance edges → meaning_unit graph uplift | graph metrics test | pending |
 | **V6-P5** Draft Claims | decision/fact_candidate drafts; accept = 0 auto | Claim fixtures | pending |
 | **V6-P6** GraphRAG ranking | typed promoted units in ranking path | offline query set | pending |
-| **npm 6.0.0** | major surface + activation | release skill | pending |
+| **npm 6.0.0** | major surface + activation | hold-first cut + major-release-surface | **in cut** (see CHANGELOG / release receipt) |
+| **npm 6.1.x** | P3 narrow auto-promote | precision suite receipt | pending |
 
 ## Hard fences
 

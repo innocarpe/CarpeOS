@@ -20,8 +20,8 @@ Obsidian — all local-first.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest package:** [`@innocarpe/carpeos@5.0.1`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [`v5.0.1`](https://github.com/innocarpe/CarpeOS/releases/tag/v5.0.1)).
+**Latest package:** [`@innocarpe/carpeos@6.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [`v6.0.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.0.0)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -281,7 +281,7 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@5.0.1`. See [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@6.0.0`. See [CHANGELOG.md](CHANGELOG.md).
 Milestone DoDs (maintainers): [`docs/maintainers/`](docs/maintainers/) ·
 product index: [docs/PRD.md](docs/PRD.md).
 
@@ -379,24 +379,26 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 
 ## Product line (majors)
 
-Current npm package is **`@innocarpe/carpeos@5.0.1`** (`v5.0.1`): operator loop through
-adjudication + retrieval, plus Product 4 trust/evidence plane and opt-in Product 5 draft
-lane. Full major/minor thesis and DoD index:
+Current npm package is **`@innocarpe/carpeos@6.0.0`** (`v6.0.0`): operator loop through
+adjudication + retrieval, plus Product 4 trust plane, opt-in Product 5 draft lane, and
+**Product 6 hold-first Agentic Layer** (post-capture Flash brain; capture stays dumb).
+Full major/minor thesis and DoD index:
 
 - [docs/PRD.md](docs/PRD.md) — one PRD per major
 - [docs/maintainers/](docs/maintainers/) — `product-N.0.0.md` receipts (e.g.
-  [5.0.0](docs/maintainers/product-5.0.0.md), [4.0.0](docs/maintainers/product-4.0.0.md),
-  [3.2.0](docs/maintainers/product-3.2.0.md))
+  [6.0.0](docs/maintainers/product-6.0.0.md), [5.0.0](docs/maintainers/product-5.0.0.md))
 
 Honest residuals (do not invent green): live Product 4 release authority out of band;
-B1 apply deferred; hosted graph/edge not claimed; V5 never on capture hot path.
+B1 apply deferred; hosted graph/edge not claimed; V5 never on capture hot path;
+Agentic P3–P6 (narrow auto-promote, denser links, draft Claims, GraphRAG ranking)
+not claimed in 6.0.0.
 
 ---
 
 ## What works today
 
-**Public package:** [`@innocarpe/carpeos@5.0.1`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v5.0.1` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
+**Public package:** [`@innocarpe/carpeos@6.0.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v6.0.0` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
 live Product 4 release authority.
 
 Default local loop (CI-gated):
@@ -405,11 +407,16 @@ Default local loop (CI-gated):
 hooks → encrypted evidence → adjudicate (promote|hold|reject)
   → promoted meaning → retrieval-first graph/hybrid recall → MCP / CLI
   (+ local OKF v0.2 export, optional private sync, Obsidian projection)
+
+# Product 6 post-capture (optional; kill: CARPEOS_AGENTIC=off):
+capture → agentic_capture_feed (no LLM)
+  → carpeos agentic run --once --materialize
+  → agentic_v1 hold draft Observations (Flash-only when --allow-network)
 ```
 
 | Area | Status |
 | --- | --- |
-| Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md)) |
+| Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md), [ADR 0017](docs/adr/0017-agentic-layer-write-time-knowledge.md)) |
 | Local capture + outbox | Shipped |
 | Knowledge adjudication (`adj_v3`) | **Shipped** in 3.2 — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
 | Default retrieval | **Promoted/active only**; held opt-in |
@@ -423,6 +430,7 @@ hooks → encrypted evidence → adjudicate (promote|hold|reject)
 | Product 3.x (adj_v3, OKF export, graph/hybrid recall, B0 preview) | **Shipped** — see [product-3.2.0](docs/maintainers/product-3.2.0.md) |
 | Product 4 trust/evidence plane | **Shipped** in package — [product-4.0.0](docs/maintainers/product-4.0.0.md); live authority residual |
 | Product 5 draft lane (`carpeos v5`) | **Shipped** opt-in — [product-5.0.0](docs/maintainers/product-5.0.0.md); not capture hot path |
+| Product 6 Agentic Layer (`carpeos agentic`) | **Hold-first shipped** in 6.0 — [product-6.0.0](docs/maintainers/product-6.0.0.md); post-capture only; P3–P6 residual |
 | `carpeos setup` / one-stop install | Shipped (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |

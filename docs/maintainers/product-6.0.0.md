@@ -1,7 +1,7 @@
 # Product 6.0.0 — Definition of Done (maintainers)
 
-Status: **P2 hold-first product loop on main; npm still `@innocarpe/carpeos@5.0.1` until release cut**  
-Base package today: `@innocarpe/carpeos@5.0.1` (multi-host setup + V5 draft lane + agentic plane in monorepo).
+Status: **Hold-first Agentic Layer shipped as `@innocarpe/carpeos@6.0.0` (2026-08-07)**  
+Base package: multi-host setup + V5 draft lane + Product 6 agentic product loop on npm.
 
 **Model freeze:** DeepSeek Direct **`deepseek-v4-flash` only** for all real LLM stages.
 
@@ -41,12 +41,12 @@ A honest 6.0.0 cut requires **at least P2 complete** plus:
 - [x] Cite integrity on persist paths (E5 before proposal/materialize)
 - [x] Golden-12 green in package tests
 - [x] `agentic-off` / `agentic_feed: false` / `CARPEOS_AGENTIC=off` kill switches
-- [ ] CHANGELOG `[6.0.0]` honest about residuals (auto-promote may still be P3+)
-- [ ] Major release surface checker green for 6.0.0
-- [ ] Local activation of exact `@innocarpe/carpeos@6.0.0`
+- [x] CHANGELOG `[6.0.0]` honest about residuals (auto-promote may still be P3+)
+- [x] Major release surface checker green for 6.0.0 (at package bump time)
+- [ ] Local activation of exact `@innocarpe/carpeos@6.0.0` (post-publish maintainer smoke)
 
-**Preferred full thesis cut:** P3 green (narrow auto-promote) before calling 6.0
-“brain shipped.” If shipping earlier, label as **hold-first brain** in CHANGELOG.
+**This 6.0.0 cut is labeled hold-first brain** (not full thesis). Preferred follow-on:
+**6.1.x** when P3 narrow auto-promote + precision suite is green.
 
 ## Hard fences
 
