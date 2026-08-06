@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -128,7 +135,10 @@ export function assertSandboxProbeObservation(probe) {
     probe.memory_limit_mb !== P02_SANDBOX_CONTRACT.memory_limit_mb ||
     JSON.stringify(probe.writable_paths) !== JSON.stringify(P02_SANDBOX_CONTRACT.writable_paths)
   )
-    throwRunnerError("sandbox_probe_forged", "sandbox probe claims do not match the fixed contract");
+    throwRunnerError(
+      "sandbox_probe_forged",
+      "sandbox probe claims do not match the fixed contract",
+    );
 
   const evidence = probe.evidence;
   if (!isRecord(evidence))
@@ -155,10 +165,16 @@ export function assertSandboxProbeObservation(probe) {
     if (evidence.writable_path_results[path] !== true)
       throwRunnerError("sandbox_probe_forged", `writable path ${path} was not observed`);
   }
-  if (Object.keys(evidence.writable_path_results).length !== P02_SANDBOX_CONTRACT.writable_paths.length)
+  if (
+    Object.keys(evidence.writable_path_results).length !==
+    P02_SANDBOX_CONTRACT.writable_paths.length
+  )
     throwRunnerError("sandbox_probe_forged", "writable path observations are not exact");
   if (evidence.rlimit_nproc !== P02_SANDBOX_CONTRACT.process_limit)
-    throwRunnerError("sandbox_probe_forged", "process limit was not observed at the contract value");
+    throwRunnerError(
+      "sandbox_probe_forged",
+      "process limit was not observed at the contract value",
+    );
   if (evidence.rlimit_as_bytes !== MEMORY_LIMIT_BYTES)
     throwRunnerError("sandbox_probe_forged", "memory limit was not observed at the contract value");
   assertSha(evidence.proc_self_status_sha256, SHA256, "proc_self_status_sha256");
@@ -207,7 +223,9 @@ export function collectSandboxProbeObservation({
 
   let networkNamespace;
   try {
-    networkNamespace = realpathSync("/proc/self/ns/net");
+    // /proc/self/ns/net is a symlink whose target is "net:[inode]" — not a
+    // resolvable path. readlink preserves the observed namespace identity.
+    networkNamespace = readlinkSync("/proc/self/ns/net");
   } catch (error) {
     throwRunnerError(
       "sandbox_probe_unobserved",
@@ -235,12 +253,8 @@ export function collectSandboxProbeObservation({
     }
   }
 
-  const nprocMatch = limits.match(
-    /^Max processes\s+(\S+)\s+(\S+)\s+processes\s*$/m,
-  );
-  const asMatch = limits.match(
-    /^Max address space\s+(\S+)\s+(\S+)\s+bytes\s*$/m,
-  );
+  const nprocMatch = limits.match(/^Max processes\s+(\S+)\s+(\S+)\s+processes\s*$/m);
+  const asMatch = limits.match(/^Max address space\s+(\S+)\s+(\S+)\s+bytes\s*$/m);
   if (!nprocMatch || !asMatch)
     throwRunnerError("sandbox_probe_unobserved", "rlimit rows were not observed");
   const rlimitNproc = parseSoftLimit(nprocMatch[1], "process");
