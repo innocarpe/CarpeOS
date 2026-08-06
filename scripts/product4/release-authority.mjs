@@ -161,6 +161,7 @@ const VERIFICATION_METHODS = new Set([
   "independent_verifier_callback",
   "protected_controller_receipt",
 ]);
+const EXTERNAL_SIGNATURE_ALGORITHMS = new Set(["ed25519", "sigstore"]);
 const BYPASS_RESULTS = new Set(["denied", "unknown"]);
 
 export class ReleaseAuthorityError extends Error {
@@ -204,7 +205,7 @@ export function buildReleaseAuthorityReceipt(receipt, options = {}) {
             });
       const returnedEvidence = extractEvidence(verification);
       if (returnedEvidence !== undefined) suppliedEvidence = returnedEvidence;
-      verifierSupplied = returnedEvidence !== undefined || verification === true;
+      verifierSupplied = returnedEvidence !== undefined;
     } catch {
       suppliedEvidence = undefined;
       verifierSupplied = false;
@@ -819,10 +820,11 @@ function collectAuthorityEvidenceErrors(
       errors.push("self-asserted authority evidence cannot verify a receipt");
     if (
       evidence.verification_method === "independent_verifier_callback" &&
-      isRecord(evidence.signature) &&
-      evidence.signature.algorithm === "local_digest"
+      (typeof evidence.signature === "string" ||
+        (isRecord(evidence.signature) &&
+          !EXTERNAL_SIGNATURE_ALGORITHMS.has(evidence.signature.algorithm)))
     )
-      errors.push("local digest is not an external signature");
+      errors.push("independent verifier evidence requires an external signature");
     if (evidence.verification_method === "independent_verifier_callback" && !signaturePresent)
       errors.push("independent verifier evidence requires a signature");
     if (evidence.verification_method === "protected_controller_receipt" && !protectedPresent)

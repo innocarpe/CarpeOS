@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
@@ -9,10 +9,10 @@ import {
   PRODUCT4_POLICY_SHA256,
 } from "../product4/policy-identity.mjs";
 import {
+  assertReleaseAuthorityReceipt,
   buildBypassObservation,
   buildReleaseAuthorityEvidence,
   buildReleaseAuthorityReceipt,
-  assertReleaseAuthorityReceipt,
   reconcileReleaseAuthority,
   simulateReleaseBypass,
 } from "../product4/release-authority.mjs";
@@ -261,6 +261,41 @@ test("rejects a self-minted buildReleaseAuthorityEvidence digest", () => {
   assert.ok(receipt.blockers.includes("authority_evidence_invalid"));
   assert.equal(receipt.authority_evidence, undefined);
 });
+test("refuses callback-true and callback-reused local authority evidence", () => {
+  const fields = verifiedFields();
+  const request = releaseRequest(fields);
+  const bypass = fields.bypass_rehearsal;
+  const external = externalEvidence(fields, request, bypass);
+  const callbackOnly = buildReleaseAuthorityReceipt(
+    { ...fields, authority_evidence: external },
+    {
+      authorityVerifier: () => true,
+      releaseRequest: request,
+      verificationAt,
+    },
+  );
+  assert.equal(callbackOnly.status, "blocked_unknown");
+  assert.ok(callbackOnly.blockers.includes("authority_evidence_invalid"));
+  assert.equal(callbackOnly.authority_evidence, undefined);
+
+  const localEvidence = buildReleaseAuthorityEvidence({
+    receipt: fields,
+    candidate_sha: candidateSha,
+    release_sha: candidateSha,
+    version: "4.0.0",
+  });
+  const callbackLocal = buildReleaseAuthorityReceipt(
+    { ...fields, authority_evidence: localEvidence },
+    {
+      authorityVerifier: () => localEvidence,
+      releaseRequest: request,
+      verificationAt,
+    },
+  );
+  assert.equal(callbackLocal.status, "blocked_unknown");
+  assert.ok(callbackLocal.blockers.includes("authority_evidence_invalid"));
+  assert.equal(callbackLocal.authority_evidence, undefined);
+});
 
 test("keeps the runtime and schema nested authority contract aligned", () => {
   const schema = JSON.parse(
@@ -355,6 +390,7 @@ test("rejects stale or mismatched injected authority proof", () => {
     releaseRequest: request,
   });
   assert.equal(staleReceipt.status, "blocked_unknown");
+  assert.ok(staleReceipt.blockers.includes("authority_evidence_invalid"));
 
   const mismatched = externalEvidence(fields, request, bypass, {
     release: {
