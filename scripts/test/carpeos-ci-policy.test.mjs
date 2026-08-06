@@ -17,7 +17,8 @@ test("carpeos-ci policy SSOT and skill are present and cross-linked", () => {
 
   const policy = read(policyPath);
   const skill = read(skillPath);
-  const agents = read("Agents.md");
+  // Git tracks AGENTS.md; Linux CI is case-sensitive (macOS may alias Agents.md).
+  const agents = read("AGENTS.md");
 
   assert.match(policy, /PR lean/);
   assert.match(policy, /Main full/);
