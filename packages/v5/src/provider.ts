@@ -166,9 +166,9 @@ export class ProviderBoundary {
     };
   }
 
-  /** @deprecated Use deepseekDirectExtractRoute — kept for older tests as OpenRouter optional. */
+  /** Product default extract route: DeepSeek Direct (OpenRouter is optional, not required). */
   defaultExtractRoute(): ProviderRoute {
-    return this.openrouterDeepseekExtractRoute();
+    return this.deepseekDirectExtractRoute();
   }
 
   /** @deprecated Use lunaEscalationRoute */

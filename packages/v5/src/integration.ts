@@ -78,3 +78,56 @@ export function verifyV5OffReleasePath(input: {
   void input.telemetry_db_only;
   return { pass: errors.length === 0, errors };
 }
+
+/**
+ * Resolve a body-free 4.0 seam reference from a known artifact path.
+ * Does not invent acceptance: `accepted` must be supplied from independent 4.0 gates.
+ */
+export function resolveFourZeroSeamRef(input: {
+  path: string;
+  digest: string | null;
+  /** Only true when independent Product 4 verification accepted the receipt. */
+  accepted: boolean;
+}): BodyFreeReceiptRef {
+  return {
+    schema: "carpeos.v5.m8-body-free-receipt-ref/v1",
+    path: input.path,
+    digest: input.digest,
+    accepted: input.accepted,
+  };
+}
+
+/**
+ * Final V5 product readiness when M8 4.0 seam is still deferred:
+ * V5 draft lane can be complete offline without gating 4.0.
+ */
+export function v5DraftLaneReadiness(input: {
+  m0_pass: boolean;
+  pipeline_offline_pass: boolean;
+  deepseek_primary: boolean;
+  telemetry_local_store_pass: boolean;
+  v5_off_path_pass: boolean;
+  m8: V5M8Decision;
+}): {
+  schema: "carpeos.v5.draft-lane-readiness/v1";
+  ready: boolean;
+  m8_status: V5M8Decision["status"];
+  blockers: string[];
+  canonical_effect: "none";
+} {
+  const blockers: string[] = [];
+  if (!input.m0_pass) blockers.push("M0 not green");
+  if (!input.pipeline_offline_pass) blockers.push("draft pipeline offline not green");
+  if (!input.deepseek_primary) blockers.push("DeepSeek Direct is not primary extract route");
+  if (!input.telemetry_local_store_pass) blockers.push("local TELEMETRY_DB store not green");
+  if (!input.v5_off_path_pass) blockers.push("V5-off path not verified");
+  // M8 deferred is allowed for draft-lane readiness; blocked is not.
+  if (input.m8.status === "blocked") blockers.push(...input.m8.blockers.map((b) => `m8: ${b}`));
+  return {
+    schema: "carpeos.v5.draft-lane-readiness/v1",
+    ready: blockers.length === 0,
+    m8_status: input.m8.status,
+    blockers,
+    canonical_effect: "none",
+  };
+}
