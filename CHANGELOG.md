@@ -12,6 +12,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- (none yet — fold entries here before the next release)
+
+## [5.0.1] - 2026-08-06
+
+### Added
+
 - **Multi-host setup** for capture hooks and MCP beyond Claude / Codex / Grok:
   - GJC (Gajae Code): `~/.gjc/agent/hooks/carpeos-capture.ts` + `gjc mcp add`
   - Deep Code: `mcpServers.carpeos` in `~/.deepcode/settings.json` (secrets preserved)
@@ -395,7 +401,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v5.0.1...HEAD
 [4.0.0]: https://github.com/innocarpe/carpeos/compare/v3.2.0...v4.0.0
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
@@ -412,3 +418,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [3.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v3.1.0
 [3.2.0]: https://github.com/innocarpe/carpeos/releases/tag/v3.2.0
 [5.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v5.0.0
+[5.0.1]: https://github.com/innocarpe/carpeos/releases/tag/v5.0.1
