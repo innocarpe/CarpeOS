@@ -167,4 +167,3 @@ export function evaluateAutoPromotePrecisionFromPath(
 ): PrecisionSuiteReport {
   return evaluateAutoPromotePrecisionSuite(db, loadGoldenManifest(manifestPath), options);
 }
-
