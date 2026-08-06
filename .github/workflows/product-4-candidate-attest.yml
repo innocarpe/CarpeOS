@@ -19,12 +19,18 @@ jobs:
     permissions:
       contents: read
       actions: read
+    # Job-level env cannot use the runner context (GitHub rejects runner.temp here).
     env:
-      CARPEOS_HOME: ${{ runner.temp }}/carpeos-product4-evaluator
       CARPEOS_TRUST_ZONE: tz_synthetic
       PRODUCT4_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
-      CARPEOS_CANDIDATE_ROOT: ${{ runner.temp }}/carpeos-product4-candidate
     steps:
+      - name: Configure disposable runner paths
+        run: |
+          {
+            echo "CARPEOS_HOME=$RUNNER_TEMP/carpeos-product4-evaluator"
+            echo "CARPEOS_CANDIDATE_ROOT=$RUNNER_TEMP/carpeos-product4-candidate"
+          } >> "$GITHUB_ENV"
+
       - name: Check out trusted evaluator base
         uses: actions/checkout@v7
         with:
