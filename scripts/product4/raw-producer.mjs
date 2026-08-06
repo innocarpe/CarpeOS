@@ -267,10 +267,7 @@ export function buildRawCandidateReportFromP02({
   try {
     assertP02Receipt(p02Receipt);
   } catch (error) {
-    throwRawError(
-      "invalid_p02",
-      error instanceof Error ? error.message : "P02 receipt is invalid",
-    );
+    throwRawError("invalid_p02", error instanceof Error ? error.message : "P02 receipt is invalid");
   }
   const runs = [p02Receipt.run_a, p02Receipt.run_b];
   if (runs.some((run) => !isRecord(run)))
