@@ -581,7 +581,7 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     ...args,
   );
   const result = spawnSync(
-    "/bin/sh",
+    "/bin/bash",
     [
       "-ceu",
       'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',

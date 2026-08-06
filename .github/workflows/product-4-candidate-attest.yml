@@ -131,7 +131,7 @@ jobs:
           ulimit -u 64
           ulimit -v 1048576
           ulimit -f 102400
-          "${sandbox[@]}" /bin/sh -ceu '
+          "${sandbox[@]}" /bin/bash -ceu '
             rm -rf /work/*
             cp -aL /candidate/. /work/
             chmod -R u+rwX /work
