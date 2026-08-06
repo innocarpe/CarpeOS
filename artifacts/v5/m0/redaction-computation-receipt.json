@@ -1,0 +1,27 @@
+{
+  "schema": "carpeos.v5.m0-computation-receipt/v1",
+  "contract": "redact_v1",
+  "timestamp": "2026-08-06T05:51:46.710Z",
+  "runtime": {
+    "node": "v22.22.3",
+    "platform": "darwin",
+    "arch": "arm64",
+    "tool": "packages/v5/scripts/m0-recompute.mjs"
+  },
+  "canonical_input": {
+    "path": "fixtures/v5/m0/redact_v1_vectors.json",
+    "vector_count": 24
+  },
+  "canonicalization": {
+    "procedure": "RFC 8785-style sorted-key UTF-8 JCS over the exact 24-vector array; no wrapper reconstruction",
+    "jcs": "packages/v5/scripts/m0-recompute.mjs#jcs"
+  },
+  "command": "node packages/v5/scripts/m0-recompute.mjs  # redaction branch: sha256(jcs(vectors))",
+  "computed_value": "sha256:a020e5cbb35a3249c0e5060e2094aa225a14f99a193673249f6a461a5dfd6eeb",
+  "expected_value": "sha256:a020e5cbb35a3249c0e5060e2094aa225a14f99a193673249f6a461a5dfd6eeb",
+  "pass": true,
+  "notes": [
+    "P0 schema errors precede ordering/policy checks (enforced by vector expected fields).",
+    "Post-P0 policy errors use byte_offset:null in expected fixtures."
+  ]
+}

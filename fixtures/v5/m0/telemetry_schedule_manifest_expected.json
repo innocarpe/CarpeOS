@@ -1,0 +1,171 @@
+{
+  "schema": "telemetry-schedule-manifest/v1",
+  "allocation_count": 96,
+  "grant_count": 576,
+  "request_count": 576,
+  "snapshot_count": 30,
+  "allocation_manifest": "sha256:e525906cc32b62d7e5c5c1657a947eee32b172d77aac2b81b5215c196394256a",
+  "public_spki_der_b64": "MCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "counts": {
+    "new": 384,
+    "replay": 128,
+    "conflict": 32,
+    "expired": 32
+  },
+  "body_size_bytes": 16384,
+  "replay_equal": [true, true, true, true],
+  "conflict_diff_bytes": 1,
+  "expired": true,
+  "snapshot_manifest": [
+    {
+      "issued_at": "2026-08-06T00:00:00.000Z",
+      "digest": "sha256:379a95618279ccac4dba9cae15b526c59e3d8caa7b9e196a6cb86d09dc30cf10",
+      "signature": "ed25519:aj6XUka6OeVKxKBOJPuxIPo0UTTd+9+ofLChJWihPyVDQFmbCaL1KGNW3UqzJ3PzZs3zk53Pj10jm8jGivyqAQ=="
+    },
+    {
+      "issued_at": "2026-08-06T00:00:20.000Z",
+      "digest": "sha256:dda623cc4ded72514890ef23013a53e140abe81123c9b9018d2d9fdbeb4803f3",
+      "signature": "ed25519:KHRjPtUCDFusyn40+XU7SJZWY9HVSx7o1g7OidtSKfzp+fnUbKzaHlx+Vv+vnTlnjjeMG3slbcUx8DMMFsWuCA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:00:40.000Z",
+      "digest": "sha256:3f82edb59768f108f8d7d2cf159ffaa6645092d0dd83df628f6aaaa7142dab86",
+      "signature": "ed25519:nng7IwoyL147Xq9NelKN19SgF0rl5F755bW8wf7eSDfiiZigYzEt3R2euCSIhyPLyt9jUZWJ/2W8mobG7LhRBw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:01:00.000Z",
+      "digest": "sha256:8b78d2692dff3c6dfacf4e0e0265e1f6df17f2682c87ea4959623fd0e862ff77",
+      "signature": "ed25519:aLuGW5Tl6pBNuX51y9OrtmMr1tNWJUAaAkurWnBTLevcHwwsARlqMwk4rhf8pQWmJVwRmbqzcWkWrB9VaQzFAg=="
+    },
+    {
+      "issued_at": "2026-08-06T00:01:20.000Z",
+      "digest": "sha256:6b76ab794b4d50e75666d9085613ba52604cbbe51a1941a21ae9506053b023a8",
+      "signature": "ed25519:+RPq388qk0xhdEa2WnR2wOIYandmSwhj5C8QaaUq3DhVwJoLT2F3/r61Oda5d/1W8gtEee4EHiA0pc7lpGgQBg=="
+    },
+    {
+      "issued_at": "2026-08-06T00:01:40.000Z",
+      "digest": "sha256:de6fab6bd0f188fc63fcab6789cb63f3afedc042f1c3f3b13a8051cffab09b22",
+      "signature": "ed25519:QCJ3wg0XOYOZWTLRBOw90CjRPb4UvLGtUpizs3/ikee4+aNCWh6PqLqNjyQE9zve7RSWw2o8+iZNlmOIGzDxBw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:02:00.000Z",
+      "digest": "sha256:38c8f4dfdb78abc6b269c2c5e20d2ab7b46b925aec3110a54e2a9bc4a2aad580",
+      "signature": "ed25519:oFsCu/tipPf3MyfDc2gXL49JlEMtqV5cEKRIojq0/tuPJjBo4M2LCMlY0MQTfQkJxI4Zouqjz52pcJVYNRiUDA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:02:20.000Z",
+      "digest": "sha256:94cff1f4e43b7c1a22cb37d012d0c1420b4bf2681a93e794d8926110c8d1f848",
+      "signature": "ed25519:5Oz5OoRuleUGVPna9tyfGAuBP3RptyLQ/VxVFzuIPA9sNe37bnuTP6AiAd5SjGMeFX6qSFKIfRtWzTYm5T3LAw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:02:40.000Z",
+      "digest": "sha256:3a03078d78ee33eeabf299eeb5efb851a59133a923d50c9f4af752634bdfcccf",
+      "signature": "ed25519:GvlAOHkDH131HQ2Jg5RQcjQIgdj5CLDRgkPTDBA42Nl3yjmN8kHMPbrDPB+VR72SQKjTyJAPAOwbthh1TY9WCA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:03:00.000Z",
+      "digest": "sha256:f57061368576efbc75aedfaa14d99afba20afae755c53cc9d7340b4e9a160eb5",
+      "signature": "ed25519:l1CE8Hm+afuf10Djr3PLBu4SKAdlCvIx5Dq8AWVkTlNWY6WmxuvxAaXhwC6q5gVbZSbcoGBojh5n0Rk6LyxdBw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:03:20.000Z",
+      "digest": "sha256:93387f7f7af82e3f916d55cfc0f0437d89f7796603a0eac88f718e04bf9e5a07",
+      "signature": "ed25519:viMritAARsakiroKpU2wkeEXas1ckqQEA7gqAHX6lDte/pqknh+HZlpoUNLmy+hKh+Uz9hqfMDDMsT1r+HJmDg=="
+    },
+    {
+      "issued_at": "2026-08-06T00:03:40.000Z",
+      "digest": "sha256:bf7fd703af98cfcbff56dfa2c14bddda617f4f755b6330bcdd85931bf2d75683",
+      "signature": "ed25519:Wog+T+zXtSUXE2Td/wET8WxeUvBC73+kS/dafPMUKr3biCKXfsFbVNSfNy5zMibHDziAnaKhtkVRGIpfYJ1FCQ=="
+    },
+    {
+      "issued_at": "2026-08-06T00:04:00.000Z",
+      "digest": "sha256:efc9859ebed7b87cc809eb6f4d54b8054c957f11e710a0b6dfd07dbc37336cb8",
+      "signature": "ed25519:l1CClv39rf9YqzrMGBlLlWCk3WdShsvzNE4WeWD2VTnKq6c3kwoc3KqmdemTMBjLNRkis1gCkGvPyPiq76FyCg=="
+    },
+    {
+      "issued_at": "2026-08-06T00:04:20.000Z",
+      "digest": "sha256:5ed6fdd080ffb2d621d620e196ec0271aadeb393c1b53e6eb7f54f202a9be188",
+      "signature": "ed25519:yDAiW2FwQlo0FDkUaDBkPcOPcPCYgfzvEkhn79mewFvuWiaerWmyWDkww/K3GJKCnWFDFgFcsNwaXUZ5tDslAQ=="
+    },
+    {
+      "issued_at": "2026-08-06T00:04:40.000Z",
+      "digest": "sha256:0cdff39dd1a6516501bf8bd6bf494571ccce8a36fbbbfab960d3aa5e26faa051",
+      "signature": "ed25519:rjJE5lkP/amqzJkbnTWpFocQaCvAF+EPOmwOprxO/wPYasmuvwUUFboBI5zAjPteYOimo22KfGxqirGBHTFEAQ=="
+    },
+    {
+      "issued_at": "2026-08-06T00:05:00.000Z",
+      "digest": "sha256:95479e9ceb17ac9cc58926f78ac5bbb66661ecbcc7461fa20d920eb2bde3a962",
+      "signature": "ed25519:juZqKegO0LWVz6vODa2Urv2bCKhIap2Cfkx1nCdl59dBQaB7NGpEMGHNzBTPn4w6jAw5/cc4NhcJtcnL+6cICg=="
+    },
+    {
+      "issued_at": "2026-08-06T00:05:20.000Z",
+      "digest": "sha256:99b98ab80db4019a78797980b501deeb63c61540ae8ad92c9f052d7606f34f22",
+      "signature": "ed25519:f8dyvt/XHPFgE6cU+AQv2DyDDAwuK3CqrTd0zlRK/VTT4qIWZ05ktXV+mM+LZ9RnIYGqM+XVLwyNPpC0D5oGCw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:05:40.000Z",
+      "digest": "sha256:d30d5237dadcb31274e6d31247ab44780d126ac75a9d46ed9b13b2455b8600d9",
+      "signature": "ed25519:+hn0kj106/siZ9x/A/+lDIh59pDUEC9PSqzrVz7VB1J2zw6Iqr644c0IHOmq6iza60f+XfwQ3UlfCkzsfGihBA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:06:00.000Z",
+      "digest": "sha256:72fe458b897b2c116acf71e207c76620371991b82c9ae551051d30756b35f292",
+      "signature": "ed25519:bC8Bd+OgmhICclnLTyWVOaIYHLmoGyWC5UVUpShmhJgIA2gcjG5AVH9E2GUOwcrDPBL+tVMrEtoG6lJTCPIZAw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:06:20.000Z",
+      "digest": "sha256:d1aef0c6f2b42e667e04979fb74806b88f16e5dbb8d6827cd20f8b0c2eb7304b",
+      "signature": "ed25519:M6qKRqrAhoeEhG0Dvd1vNExWMQFsCi8iWrQnAU6RHCK3vB0UCUm5eBUzIWpZwCILIk2xETBnKe2ASJrCCdMaDA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:06:40.000Z",
+      "digest": "sha256:8a15232ae0e48e97cf034c829b2ebf480d2dfa7de68032e6c02b6e870b6687ef",
+      "signature": "ed25519:FsikRgBvkm+NWNuqbGM4rtCKGL1G8ezj6aMeoApNAhU6UeYNujA2WnT6UrE9OdTtCpdg9AwIOQ+x60Xc0hWIBA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:07:00.000Z",
+      "digest": "sha256:28ca3d63e12a9b4795aea5de5253889785abb2e0350fd3e2b01a9d6ebf389346",
+      "signature": "ed25519:R+UC7i09cZqky9+Z4pxY157DLGDNcbAlVDws7m5AqDG1GGTVSSUBUjH6dtS/QLPhCW9Ul8/06MbLCmg8FBnQAw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:07:20.000Z",
+      "digest": "sha256:1ba04cf90c10eb27fd941b73e8b596667eed285b19c39a696d0da9066eba12cc",
+      "signature": "ed25519:VhuDDvi/FKdz032DdE18HNx5BiIE0o1DhYQ5hUGdWAmMKOhq8beB567im0UEpVqAj4nIXt1qKqBSNPQASchOAA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:07:40.000Z",
+      "digest": "sha256:a600306f1aee709b0ac22f7c66f7bf957df2253b5fdfa201b9a6aceb1feb1544",
+      "signature": "ed25519:lsjmqBxJ/RlBQEXIVQaLqD9NVt0L4N95i90wpCFDRCYgGR0HQy/7T9DyPSghaGd6c4txnpcQtxZF/r0DpWyHDw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:08:00.000Z",
+      "digest": "sha256:c441d7e2bde0e9ab39693505a6f81e121e3892f8c928301dfd16094579ed69bb",
+      "signature": "ed25519:QWylSm69tklKpW2IfLgwipFeCToDWrKa8vagj840hHIwpdXLM5bajbFP9UmG8IrMO7d4GzDHcU2f6risaJnwAQ=="
+    },
+    {
+      "issued_at": "2026-08-06T00:08:20.000Z",
+      "digest": "sha256:3c2c27bd1bca4a5c898074e052a94bccd6e1e4242f468aa574af9977582dfc75",
+      "signature": "ed25519:GISHqVTs0nSRl1vhweSPHiVsgRgebQ0AR2AXATjgGL67AMhafQRbcNSsjYp/boLlY3xPv5T1eoHCzrq5bpn4BA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:08:40.000Z",
+      "digest": "sha256:f202f477f8e3359c75e60c96c65c7d82ab0362a1ee27b33f48b34fee8ad1339a",
+      "signature": "ed25519:lD4JX17SrJp3OH8C3lyCZTZOj5sjCT6px74ak6RE+g66hmDyQp9lBY7a1/R7VO3WSKC7brSzjI3bNkKorJB+Cw=="
+    },
+    {
+      "issued_at": "2026-08-06T00:09:00.000Z",
+      "digest": "sha256:7947b044cf6cdef281b261a0c62867708f79abb0c577d7afed00705fa1a31b47",
+      "signature": "ed25519:cDbYiZ0JKu3pNOtb34mSJ6duUL/23Wq73fluFGrGGBP8HcbdhlUuNO86FJ554lQgQNrlIEQKFLdMXtSUOiUeBA=="
+    },
+    {
+      "issued_at": "2026-08-06T00:09:20.000Z",
+      "digest": "sha256:29b9842cf2268b10be729b84efeea20f52c9d56e5e450bb3a86638eb9c2a16ab",
+      "signature": "ed25519:6yeN+LqJ5zsZJIsiCroWebjkMtzWbXD4G7ZHgjEjGls5XiRVBq2QqawCH92CY8fS//NCudHjQIrld2qqPEjFCQ=="
+    },
+    {
+      "issued_at": "2026-08-06T00:09:40.000Z",
+      "digest": "sha256:419d91ece3aee0af5b011504d9074f0c612400db270d2467a02a63fc7832a1ff",
+      "signature": "ed25519:VsajNnanZiReJySMnQgJXcq0OGYvyQ0xFvIQ/cMaipzOQIS5HKi5lgqij/dzbhUj1ZJ0RhJ5hQASNLq9IB4GAA=="
+    }
+  ]
+}

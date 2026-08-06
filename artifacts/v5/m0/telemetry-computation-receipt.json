@@ -1,0 +1,329 @@
+{
+  "schema": "carpeos.v5.m0-computation-receipt/v1",
+  "contract": "telemetry_admission_workload_v1",
+  "timestamp": "2026-08-06T05:51:49.815Z",
+  "runtime": {
+    "node": "v22.22.3",
+    "platform": "darwin",
+    "arch": "arm64",
+    "tool": "packages/v5/scripts/m0-recompute.mjs"
+  },
+  "canonical_input": {
+    "generator": "fixtures/v5/m0/telemetry_generator_normative.js",
+    "expected_manifest": "fixtures/v5/m0/telemetry_schedule_manifest_expected.json",
+    "synthetic_seed": "v5-contract-closure-20260806-synthetic-01"
+  },
+  "canonicalization": {
+    "procedure": "Normative generator JCS; allocation_manifest=sha256(JCS(ALLOCATIONS)); snapshot digests/signatures over JCS(unsigned snapshot) with fixed test Ed25519 key",
+    "jcs": "fixtures/v5/m0/telemetry_generator_normative.js#jcs"
+  },
+  "command": "node packages/v5/scripts/m0-recompute.mjs  # telemetry branch",
+  "computed": {
+    "allocation_manifest": "sha256:e525906cc32b62d7e5c5c1657a947eee32b172d77aac2b81b5215c196394256a",
+    "public_spki_der_b64": "MCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+    "allocation_count": 96,
+    "grant_count": 576,
+    "request_count": 576,
+    "snapshot_count": 30,
+    "counts": {
+      "new": 384,
+      "replay": 128,
+      "conflict": 32,
+      "expired": 32
+    },
+    "body_size_bytes_all_16384": true,
+    "signatures_verified": 30
+  },
+  "expected": {
+    "allocation_manifest": "sha256:e525906cc32b62d7e5c5c1657a947eee32b172d77aac2b81b5215c196394256a",
+    "public_spki_der_b64": "MCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+    "allocation_count": 96,
+    "grant_count": 576,
+    "request_count": 576,
+    "snapshot_count": 30,
+    "counts": {
+      "new": 384,
+      "replay": 128,
+      "conflict": 32,
+      "expired": 32
+    }
+  },
+  "snapshot_rows": [
+    {
+      "index": 0,
+      "issued_at": "2026-08-06T00:00:00.000Z",
+      "computed_digest": "sha256:379a95618279ccac4dba9cae15b526c59e3d8caa7b9e196a6cb86d09dc30cf10",
+      "expected_digest": "sha256:379a95618279ccac4dba9cae15b526c59e3d8caa7b9e196a6cb86d09dc30cf10",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 1,
+      "issued_at": "2026-08-06T00:00:20.000Z",
+      "computed_digest": "sha256:dda623cc4ded72514890ef23013a53e140abe81123c9b9018d2d9fdbeb4803f3",
+      "expected_digest": "sha256:dda623cc4ded72514890ef23013a53e140abe81123c9b9018d2d9fdbeb4803f3",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 2,
+      "issued_at": "2026-08-06T00:00:40.000Z",
+      "computed_digest": "sha256:3f82edb59768f108f8d7d2cf159ffaa6645092d0dd83df628f6aaaa7142dab86",
+      "expected_digest": "sha256:3f82edb59768f108f8d7d2cf159ffaa6645092d0dd83df628f6aaaa7142dab86",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 3,
+      "issued_at": "2026-08-06T00:01:00.000Z",
+      "computed_digest": "sha256:8b78d2692dff3c6dfacf4e0e0265e1f6df17f2682c87ea4959623fd0e862ff77",
+      "expected_digest": "sha256:8b78d2692dff3c6dfacf4e0e0265e1f6df17f2682c87ea4959623fd0e862ff77",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 4,
+      "issued_at": "2026-08-06T00:01:20.000Z",
+      "computed_digest": "sha256:6b76ab794b4d50e75666d9085613ba52604cbbe51a1941a21ae9506053b023a8",
+      "expected_digest": "sha256:6b76ab794b4d50e75666d9085613ba52604cbbe51a1941a21ae9506053b023a8",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 5,
+      "issued_at": "2026-08-06T00:01:40.000Z",
+      "computed_digest": "sha256:de6fab6bd0f188fc63fcab6789cb63f3afedc042f1c3f3b13a8051cffab09b22",
+      "expected_digest": "sha256:de6fab6bd0f188fc63fcab6789cb63f3afedc042f1c3f3b13a8051cffab09b22",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 6,
+      "issued_at": "2026-08-06T00:02:00.000Z",
+      "computed_digest": "sha256:38c8f4dfdb78abc6b269c2c5e20d2ab7b46b925aec3110a54e2a9bc4a2aad580",
+      "expected_digest": "sha256:38c8f4dfdb78abc6b269c2c5e20d2ab7b46b925aec3110a54e2a9bc4a2aad580",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 7,
+      "issued_at": "2026-08-06T00:02:20.000Z",
+      "computed_digest": "sha256:94cff1f4e43b7c1a22cb37d012d0c1420b4bf2681a93e794d8926110c8d1f848",
+      "expected_digest": "sha256:94cff1f4e43b7c1a22cb37d012d0c1420b4bf2681a93e794d8926110c8d1f848",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 8,
+      "issued_at": "2026-08-06T00:02:40.000Z",
+      "computed_digest": "sha256:3a03078d78ee33eeabf299eeb5efb851a59133a923d50c9f4af752634bdfcccf",
+      "expected_digest": "sha256:3a03078d78ee33eeabf299eeb5efb851a59133a923d50c9f4af752634bdfcccf",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 9,
+      "issued_at": "2026-08-06T00:03:00.000Z",
+      "computed_digest": "sha256:f57061368576efbc75aedfaa14d99afba20afae755c53cc9d7340b4e9a160eb5",
+      "expected_digest": "sha256:f57061368576efbc75aedfaa14d99afba20afae755c53cc9d7340b4e9a160eb5",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 10,
+      "issued_at": "2026-08-06T00:03:20.000Z",
+      "computed_digest": "sha256:93387f7f7af82e3f916d55cfc0f0437d89f7796603a0eac88f718e04bf9e5a07",
+      "expected_digest": "sha256:93387f7f7af82e3f916d55cfc0f0437d89f7796603a0eac88f718e04bf9e5a07",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 11,
+      "issued_at": "2026-08-06T00:03:40.000Z",
+      "computed_digest": "sha256:bf7fd703af98cfcbff56dfa2c14bddda617f4f755b6330bcdd85931bf2d75683",
+      "expected_digest": "sha256:bf7fd703af98cfcbff56dfa2c14bddda617f4f755b6330bcdd85931bf2d75683",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 12,
+      "issued_at": "2026-08-06T00:04:00.000Z",
+      "computed_digest": "sha256:efc9859ebed7b87cc809eb6f4d54b8054c957f11e710a0b6dfd07dbc37336cb8",
+      "expected_digest": "sha256:efc9859ebed7b87cc809eb6f4d54b8054c957f11e710a0b6dfd07dbc37336cb8",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 13,
+      "issued_at": "2026-08-06T00:04:20.000Z",
+      "computed_digest": "sha256:5ed6fdd080ffb2d621d620e196ec0271aadeb393c1b53e6eb7f54f202a9be188",
+      "expected_digest": "sha256:5ed6fdd080ffb2d621d620e196ec0271aadeb393c1b53e6eb7f54f202a9be188",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 14,
+      "issued_at": "2026-08-06T00:04:40.000Z",
+      "computed_digest": "sha256:0cdff39dd1a6516501bf8bd6bf494571ccce8a36fbbbfab960d3aa5e26faa051",
+      "expected_digest": "sha256:0cdff39dd1a6516501bf8bd6bf494571ccce8a36fbbbfab960d3aa5e26faa051",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 15,
+      "issued_at": "2026-08-06T00:05:00.000Z",
+      "computed_digest": "sha256:95479e9ceb17ac9cc58926f78ac5bbb66661ecbcc7461fa20d920eb2bde3a962",
+      "expected_digest": "sha256:95479e9ceb17ac9cc58926f78ac5bbb66661ecbcc7461fa20d920eb2bde3a962",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 16,
+      "issued_at": "2026-08-06T00:05:20.000Z",
+      "computed_digest": "sha256:99b98ab80db4019a78797980b501deeb63c61540ae8ad92c9f052d7606f34f22",
+      "expected_digest": "sha256:99b98ab80db4019a78797980b501deeb63c61540ae8ad92c9f052d7606f34f22",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 17,
+      "issued_at": "2026-08-06T00:05:40.000Z",
+      "computed_digest": "sha256:d30d5237dadcb31274e6d31247ab44780d126ac75a9d46ed9b13b2455b8600d9",
+      "expected_digest": "sha256:d30d5237dadcb31274e6d31247ab44780d126ac75a9d46ed9b13b2455b8600d9",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 18,
+      "issued_at": "2026-08-06T00:06:00.000Z",
+      "computed_digest": "sha256:72fe458b897b2c116acf71e207c76620371991b82c9ae551051d30756b35f292",
+      "expected_digest": "sha256:72fe458b897b2c116acf71e207c76620371991b82c9ae551051d30756b35f292",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 19,
+      "issued_at": "2026-08-06T00:06:20.000Z",
+      "computed_digest": "sha256:d1aef0c6f2b42e667e04979fb74806b88f16e5dbb8d6827cd20f8b0c2eb7304b",
+      "expected_digest": "sha256:d1aef0c6f2b42e667e04979fb74806b88f16e5dbb8d6827cd20f8b0c2eb7304b",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 20,
+      "issued_at": "2026-08-06T00:06:40.000Z",
+      "computed_digest": "sha256:8a15232ae0e48e97cf034c829b2ebf480d2dfa7de68032e6c02b6e870b6687ef",
+      "expected_digest": "sha256:8a15232ae0e48e97cf034c829b2ebf480d2dfa7de68032e6c02b6e870b6687ef",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 21,
+      "issued_at": "2026-08-06T00:07:00.000Z",
+      "computed_digest": "sha256:28ca3d63e12a9b4795aea5de5253889785abb2e0350fd3e2b01a9d6ebf389346",
+      "expected_digest": "sha256:28ca3d63e12a9b4795aea5de5253889785abb2e0350fd3e2b01a9d6ebf389346",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 22,
+      "issued_at": "2026-08-06T00:07:20.000Z",
+      "computed_digest": "sha256:1ba04cf90c10eb27fd941b73e8b596667eed285b19c39a696d0da9066eba12cc",
+      "expected_digest": "sha256:1ba04cf90c10eb27fd941b73e8b596667eed285b19c39a696d0da9066eba12cc",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 23,
+      "issued_at": "2026-08-06T00:07:40.000Z",
+      "computed_digest": "sha256:a600306f1aee709b0ac22f7c66f7bf957df2253b5fdfa201b9a6aceb1feb1544",
+      "expected_digest": "sha256:a600306f1aee709b0ac22f7c66f7bf957df2253b5fdfa201b9a6aceb1feb1544",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 24,
+      "issued_at": "2026-08-06T00:08:00.000Z",
+      "computed_digest": "sha256:c441d7e2bde0e9ab39693505a6f81e121e3892f8c928301dfd16094579ed69bb",
+      "expected_digest": "sha256:c441d7e2bde0e9ab39693505a6f81e121e3892f8c928301dfd16094579ed69bb",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 25,
+      "issued_at": "2026-08-06T00:08:20.000Z",
+      "computed_digest": "sha256:3c2c27bd1bca4a5c898074e052a94bccd6e1e4242f468aa574af9977582dfc75",
+      "expected_digest": "sha256:3c2c27bd1bca4a5c898074e052a94bccd6e1e4242f468aa574af9977582dfc75",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 26,
+      "issued_at": "2026-08-06T00:08:40.000Z",
+      "computed_digest": "sha256:f202f477f8e3359c75e60c96c65c7d82ab0362a1ee27b33f48b34fee8ad1339a",
+      "expected_digest": "sha256:f202f477f8e3359c75e60c96c65c7d82ab0362a1ee27b33f48b34fee8ad1339a",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 27,
+      "issued_at": "2026-08-06T00:09:00.000Z",
+      "computed_digest": "sha256:7947b044cf6cdef281b261a0c62867708f79abb0c577d7afed00705fa1a31b47",
+      "expected_digest": "sha256:7947b044cf6cdef281b261a0c62867708f79abb0c577d7afed00705fa1a31b47",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 28,
+      "issued_at": "2026-08-06T00:09:20.000Z",
+      "computed_digest": "sha256:29b9842cf2268b10be729b84efeea20f52c9d56e5e450bb3a86638eb9c2a16ab",
+      "expected_digest": "sha256:29b9842cf2268b10be729b84efeea20f52c9d56e5e450bb3a86638eb9c2a16ab",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    },
+    {
+      "index": 29,
+      "issued_at": "2026-08-06T00:09:40.000Z",
+      "computed_digest": "sha256:419d91ece3aee0af5b011504d9074f0c612400db270d2467a02a63fc7832a1ff",
+      "expected_digest": "sha256:419d91ece3aee0af5b011504d9074f0c612400db270d2467a02a63fc7832a1ff",
+      "digest_match": true,
+      "signature_match": true,
+      "signature_verified": true
+    }
+  ],
+  "pass": true,
+  "privacy": {
+    "credentials": "none — fixed synthetic test key only",
+    "provider_bodies": "none",
+    "private_paths": "none"
+  }
+}

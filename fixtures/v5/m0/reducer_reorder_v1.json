@@ -1,0 +1,263 @@
+{
+  "fixture": "reorder_v1",
+  "fixture_input": {
+    "scope": "scope_fixture_reorder",
+    "run_id": "run_fixture_reorder",
+    "proposal_run_key": "prun_fixture_reorder",
+    "attempt_p0": "att_fixture_reorder_p0",
+    "attempt_p1": "att_fixture_reorder_p1",
+    "candidate": "cand_fixture_reorder",
+    "synthesis": "syn_fixture_reorder",
+    "proposal": "prop_fixture_reorder",
+    "row": "row_fixture_reorder",
+    "transition": "tr_fixture_reorder",
+    "digest_namespace": "fixture_input_excluded_from_projection",
+    "identity_derivation": "generated_from_frozen_b1_formulas",
+    "human_labels_are_nonproduction": true,
+    "scope_members": {
+      "artifact_id": "artifact_685fd3edcde7a968",
+      "config_identity": "cfg_863f118295406d26",
+      "evaluation_identity": "eval_42c1a9fa650b530a",
+      "operation": "extract",
+      "pack_digest": "sha256:af91201bd28243aae73fc3d39001b982e21584411a4f74223c05da9c4828ef56",
+      "pack_id": "pack_61c3b117e5d60473",
+      "proposal_policy_version": "proposal_policy_v1",
+      "redaction_policy_id": "redact_v1",
+      "selected_model_id": "model_synthetic_primary",
+      "source_event_id": "event_63f07eec4a92e278",
+      "trust_zone_id": "tz_5d43e7620b286505"
+    },
+    "segment_bindings": {
+      "seg_fixture_reorder": "seg_45def89e864c69c2"
+    },
+    "profile_digest_binding": "fixture_input:profile_reorder"
+  },
+  "run_record": {
+    "schema": "carpeos.llm-run/v1",
+    "run_id": "run_c5632a0d9d4606a2",
+    "run_scope_key": "scope_b0ba7d0aff9c3d07",
+    "run_ordinal": 0,
+    "proposal_run_key": "prun_c5632a0d9d4606a2",
+    "operation": "extract",
+    "selected_model_id": "model_synthetic_primary",
+    "attempt_ids": ["att_e760d585c88916a3", "att_5a0c5df2b08e4f8f"],
+    "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+    "status": "draft",
+    "reason_code": "selected_primary",
+    "config_identity": "cfg_863f118295406d26",
+    "evaluation_identity": "eval_42c1a9fa650b530a",
+    "redaction_policy_id": "redact_v1",
+    "pack_id": "pack_61c3b117e5d60473",
+    "pack_digest": "sha256:af91201bd28243aae73fc3d39001b982e21584411a4f74223c05da9c4828ef56",
+    "canonical_input_digest": "sha256:973d884606bcee31110f6d80eba7cf8a778448a7087c6fec2c936707d0eef23f",
+    "audit_envelope": {
+      "created_at": "2026-08-06T00:00:00Z",
+      "updated_at": "2026-08-06T00:00:00Z",
+      "actor_ref": null,
+      "trace_ref": null
+    }
+  },
+  "attempt_records": [
+    {
+      "schema": "carpeos.llm-attempt/v1",
+      "attempt_id": "att_5a0c5df2b08e4f8f",
+      "run_scope_key": "scope_b0ba7d0aff9c3d07",
+      "run_ordinal": 0,
+      "attempt_ordinal": 0,
+      "attempt_role": "primary",
+      "attempt_role_rank": 0,
+      "source_event_id": "event_63f07eec4a92e278",
+      "artifact_id": "artifact_685fd3edcde7a968",
+      "trust_zone_id": "tz_5d43e7620b286505",
+      "operation": "extract",
+      "provider_id": "synthetic",
+      "model_id": "model_synthetic_primary",
+      "adapter_version": "adapter_synthetic_v1",
+      "profile_id": "profile_97fdbd0c51dc5333",
+      "profile_digest": "sha256:701d7c990ed8af35340c3289c565d397ac745125415f4d1ab723048466652b11",
+      "config_identity": "cfg_863f118295406d26",
+      "evaluation_identity": "eval_42c1a9fa650b530a",
+      "redaction_policy_id": "redact_v1",
+      "pack_id": "pack_61c3b117e5d60473",
+      "pack_digest": "sha256:af91201bd28243aae73fc3d39001b982e21584411a4f74223c05da9c4828ef56",
+      "state": "completed",
+      "result": {
+        "schema": "carpeos.llm-extract/v1",
+        "result": "candidates",
+        "candidates": [
+          {
+            "quote_kind": "decision",
+            "segment_id": "seg_45def89e864c69c2",
+            "start": 0,
+            "end": 1,
+            "text": "X"
+          }
+        ],
+        "citations": [
+          {
+            "segment_id": "seg_45def89e864c69c2",
+            "start": 0,
+            "end": 1
+          }
+        ]
+      },
+      "result_digest": "sha256:e945e5e5c7728612c1aa5ac4a21d4b35da1a9359be9614d202a04160382c78d2",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    },
+    {
+      "schema": "carpeos.llm-attempt/v1",
+      "attempt_id": "att_e760d585c88916a3",
+      "run_scope_key": "scope_b0ba7d0aff9c3d07",
+      "run_ordinal": 0,
+      "attempt_ordinal": 1,
+      "attempt_role": "primary",
+      "attempt_role_rank": 0,
+      "source_event_id": "event_63f07eec4a92e278",
+      "artifact_id": "artifact_685fd3edcde7a968",
+      "trust_zone_id": "tz_5d43e7620b286505",
+      "operation": "extract",
+      "provider_id": "synthetic",
+      "model_id": "model_synthetic_primary",
+      "adapter_version": "adapter_synthetic_v1",
+      "profile_id": "profile_97fdbd0c51dc5333",
+      "profile_digest": "sha256:701d7c990ed8af35340c3289c565d397ac745125415f4d1ab723048466652b11",
+      "config_identity": "cfg_863f118295406d26",
+      "evaluation_identity": "eval_42c1a9fa650b530a",
+      "redaction_policy_id": "redact_v1",
+      "pack_id": "pack_61c3b117e5d60473",
+      "pack_digest": "sha256:af91201bd28243aae73fc3d39001b982e21584411a4f74223c05da9c4828ef56",
+      "state": "completed",
+      "result": {
+        "schema": "carpeos.llm-extract/v1",
+        "result": "candidates",
+        "candidates": [
+          {
+            "quote_kind": "decision",
+            "segment_id": "seg_45def89e864c69c2",
+            "start": 0,
+            "end": 1,
+            "text": "X"
+          }
+        ],
+        "citations": [
+          {
+            "segment_id": "seg_45def89e864c69c2",
+            "start": 0,
+            "end": 1
+          }
+        ]
+      },
+      "result_digest": "sha256:e945e5e5c7728612c1aa5ac4a21d4b35da1a9359be9614d202a04160382c78d2",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "schema": "carpeos.local-candidate/v1",
+      "candidate_id": "cand_f55e1441fdf010f7",
+      "run_id": "run_c5632a0d9d4606a2",
+      "quote_kind": "decision",
+      "quote_kind_rank": 0,
+      "segment_id": "seg_45def89e864c69c2",
+      "segment_ordinal": 0,
+      "start": 0,
+      "end": 1,
+      "normalized_text": "X",
+      "citation_key": {
+        "segment_id": "seg_45def89e864c69c2",
+        "start": 0,
+        "end": 1
+      },
+      "source_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+      "candidate_digest": "sha256:dab927fbcca5978bbbf2142113c75c780c74a94da358eed41c2509ca31db6312"
+    }
+  ],
+  "synthesis": {
+    "schema": "carpeos.local-synthesis/v1",
+    "synthesis_id": "syn_91c5a2f8d939b20f",
+    "run_id": "run_c5632a0d9d4606a2",
+    "draft_text": "X",
+    "citations": [
+      {
+        "segment_id": "seg_45def89e864c69c2",
+        "start": 0,
+        "end": 1
+      }
+    ],
+    "source_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+    "synthesis_digest": "sha256:bc93b9211ebf18fce4693b199ab6b33930b7b7d7b798def332c72bd246130e96"
+  },
+  "prior": null,
+  "output": {
+    "schema": "carpeos.reducer-output/v1",
+    "run_scope_key": "scope_b0ba7d0aff9c3d07",
+    "run_ordinal": 0,
+    "run_id": "run_c5632a0d9d4606a2",
+    "proposal_id": "prop_79b69b237ae7e4f7",
+    "status": "draft",
+    "reason_code": "selected_primary",
+    "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+    "selected_candidate_ids": ["cand_f55e1441fdf010f7"],
+    "synthesis_id": "syn_91c5a2f8d939b20f",
+    "proposal_row": {
+      "schema": "carpeos.proposal-row/v1",
+      "row_id": "row_c509844f6f005e5a",
+      "run_scope_key": "scope_b0ba7d0aff9c3d07",
+      "run_ordinal": 0,
+      "proposal_id": "prop_79b69b237ae7e4f7",
+      "status": "draft",
+      "reason_code": "selected_primary",
+      "transition_seq": 0,
+      "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+      "selected_candidate_ids": ["cand_f55e1441fdf010f7"],
+      "synthesis_id": "syn_91c5a2f8d939b20f",
+      "canonical_effect": "none",
+      "audit_envelope": {
+        "created_at": "2026-08-06T00:00:00Z",
+        "updated_at": "2026-08-06T00:00:00Z",
+        "actor_ref": null,
+        "trace_ref": null
+      }
+    },
+    "transitions": [
+      {
+        "schema": "carpeos.proposal-transition/v1",
+        "transition_id": "tr_8249e1c028d6a94f",
+        "run_scope_key": "scope_b0ba7d0aff9c3d07",
+        "run_ordinal": 0,
+        "proposal_id": "prop_79b69b237ae7e4f7",
+        "transition_seq": 0,
+        "from_status": "draft",
+        "to_status": "draft",
+        "reason_code": "selected_primary",
+        "review_key": null,
+        "canonical_effect": "none",
+        "audit_envelope": {
+          "created_at": "2026-08-06T00:00:00Z",
+          "updated_at": "2026-08-06T00:00:00Z",
+          "actor_ref": null,
+          "trace_ref": null
+        }
+      }
+    ],
+    "prior": null
+  },
+  "expected": {
+    "status": "draft",
+    "reason_code": "selected_primary",
+    "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+    "selected_candidate_ids": ["cand_f55e1441fdf010f7"],
+    "synthesis_id": "syn_91c5a2f8d939b20f",
+    "output_sha256": "ee7f8e42019cb4f0e3318869cfa7dd9263b7fa5e2a0a7613b882bd06994dc8ea"
+  }
+}

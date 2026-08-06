@@ -1,0 +1,654 @@
+[
+  {
+    "id": "v_outer_utf8",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "/w==",
+    "decoded_inner_b64": null,
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": null,
+        "byte_offset": 0
+      }
+    }
+  },
+  {
+    "id": "v_outer_json",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "QA==",
+    "decoded_inner_b64": null,
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": null,
+        "byte_offset": 0
+      }
+    }
+  },
+  {
+    "id": "v_outer_base64",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiQEBAPSJ9",
+    "decoded_inner_b64": null,
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": null,
+        "byte_offset": 53
+      }
+    }
+  },
+  {
+    "id": "v_inner_malformed",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZUE9PSJ9",
+    "decoded_inner_b64": "eA==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 0
+      }
+    }
+  },
+  {
+    "id": "v_inner_utf8",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiLy84PSJ9",
+    "decoded_inner_b64": "//8=",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 0
+      }
+    }
+  },
+  {
+    "id": "v_schema",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKM2NtOXVaeTkyTVNJc0ltOXlaR2x1WVd3aU9qQXNJbXRwYm1RaU9pSmtiMk4xYldWdWRDSXNJbVpwWld4a0lqb2laRzlqZFcxbGJuUXVkR2wwYkdVaUxDSnRaV1JwWVNJNkluUmxlSFFpTENKMmFYTnBZbWxzYVhSNUlqb2lkbWx6YVdKc1pTSXNJbVZ5WVhOMWNtVWlPaUp3Y21WelpXNTBJaXdpZG1Gc2RXVmZZalkwSWpvaVUwZFdjMkpIT0QwaWZRPT0ifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJ3cm9uZy92MSIsIm9yZGluYWwiOjAsImtpbmQiOiJkb2N1bWVudCIsImZpZWxkIjoiZG9jdW1lbnQudGl0bGUiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiU0dWc2JHOD0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 11
+      }
+    }
+  },
+  {
+    "id": "v_type",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvaU1DSXNJbXRwYm1RaU9pSmtiMk4xYldWdWRDSXNJbVpwWld4a0lqb2laRzlqZFcxbGJuUXVkR2wwYkdVaUxDSnRaV1JwWVNJNkluUmxlSFFpTENKMmFYTnBZbWxzYVhSNUlqb2lkbWx6YVdKc1pTSXNJbVZ5WVhOMWNtVWlPaUp3Y21WelpXNTBJaXdpZG1Gc2RXVmZZalkwSWpvaVUwZFdjMkpIT0QwaWZRPT0ifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjoiMCIsImtpbmQiOiJkb2N1bWVudCIsImZpZWxkIjoiZG9jdW1lbnQudGl0bGUiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiU0dWc2JHOD0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 47
+      }
+    }
+  },
+  {
+    "id": "v_unknown_field",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuVnVhMjV2ZDI0aUxDSnRaV1JwWVNJNkluUmxlSFFpTENKMmFYTnBZbWxzYVhSNUlqb2lkbWx6YVdKc1pTSXNJbVZ5WVhOMWNtVWlPaUp3Y21WelpXNTBJaXdpZG1Gc2RXVmZZalkwSWpvaVUwZFdjMkpIT0QwaWZRPT0ifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnVua25vd24iLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiU0dWc2JHOD0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 76
+      }
+    }
+  },
+  {
+    "id": "v_invalid_pair",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKdlkzSWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pVTBkV2MySkhPRDBpZlE9PSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJvY3IiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiU0dWc2JHOD0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 101
+      }
+    }
+  },
+  {
+    "id": "v_invalid_ordinal",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvdE1Td2lhMmx1WkNJNkltUnZZM1Z0Wlc1MElpd2labWxsYkdRaU9pSmtiMk4xYldWdWRDNTBhWFJzWlNJc0ltMWxaR2xoSWpvaWRHVjRkQ0lzSW5acGMybGlhV3hwZEhraU9pSjJhWE5wWW14bElpd2laWEpoYzNWeVpTSTZJbkJ5WlhObGJuUWlMQ0oyWVd4MVpWOWlOalFpT2lKVFIxWnpZa2M0UFNKOSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjotMSwia2luZCI6ImRvY3VtZW50IiwiZmllbGQiOiJkb2N1bWVudC50aXRsZSIsIm1lZGlhIjoidGV4dCIsInZpc2liaWxpdHkiOiJ2aXNpYmxlIiwiZXJhc3VyZSI6InByZXNlbnQiLCJ2YWx1ZV9iNjQiOiJTR1ZzYkc4PSJ9",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 47
+      }
+    }
+  },
+  {
+    "id": "v_duplicate_key",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSnZjbVJwYm1Gc0lqb3dMQ0ptYVdWc1pDSTZJbVJ2WTNWdFpXNTBMblJwZEd4bElpd2liV1ZrYVdFaU9pSjBaWGgwSWl3aWRtbHphV0pwYkdsMGVTSTZJblpwYzJsaWJHVWlMQ0psY21GemRYSmxJam9pY0hKbGMyVnVkQ0lzSW5aaGJIVmxYMkkyTkNJNklsTkhWbk5pUnpnOUluMD0ifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJvcmRpbmFsIjowLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoicHJlc2VudCIsInZhbHVlX2I2NCI6IlNHVnNiRzg9In0=",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 0,
+        "byte_offset": 67
+      }
+    }
+  },
+  {
+    "id": "v_duplicate_ordinal",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkluWnBjMmxpYkdVaUxDSmxjbUZ6ZFhKbElqb2ljSEpsYzJWdWRDSXNJblpoYkhWbFgySTJOQ0k2SWxkQlBUMGlmUXA3SW5OamFHVnRZU0k2SW1OaGNuQmxiM011Y21Wa1lXTjBMWEpsWTI5eVpDOTJNU0lzSW05eVpHbHVZV3dpT2pBc0ltdHBibVFpT2lKdFpYTnpZV2RsSWl3aVptbGxiR1FpT2lKdFpYTnpZV2RsTG5OMVltcGxZM1FpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pVjFFOVBTSjkifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoicHJlc2VudCIsInZhbHVlX2I2NCI6IldBPT0ifQp7InNjaGVtYSI6ImNhcnBlb3MucmVkYWN0LXJlY29yZC92MSIsIm9yZGluYWwiOjAsImtpbmQiOiJtZXNzYWdlIiwiZmllbGQiOiJtZXNzYWdlLnN1YmplY3QiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiV1E9PSJ9",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_record_schema",
+        "record_index": 1,
+        "byte_offset": 217
+      }
+    }
+  },
+  {
+    "id": "v_hidden",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkltaHBaR1JsYmlJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pVTBkV2MySkhPRDBpZlE9PSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6ImhpZGRlbiIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiU0dWc2JHOD0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_visibility_hidden",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_erased",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkluWnBjMmxpYkdVaUxDSmxjbUZ6ZFhKbElqb2laWEpoYzJWa0lpd2lkbUZzZFdWZllqWTBJam9pVTBkV2MySkhPRDBpZlE9PSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoiZXJhc2VkIiwidmFsdWVfYjY0IjoiU0dWc2JHOD0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_erased",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_secret",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExtSnZaSGtpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pWXpKemRGRlZSa0pSVlVaQ1VWVkdRbEZWUmtKUlZVWkNVVlZHUWxGVlJrSlJWVVpDVVZWR1FsRlJQVDBpZlE9PSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LmJvZHkiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiYzJzdFFVRkJRVUZCUVVGQlFVRkJRVUZCUVVGQlFVRkJRVUZCUVVGQlFRPT0ifQ==",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_secret",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_path",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExtSnZaSGtpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pVEROU2RHTkRPWHBhVjA1NVdsaFJQU0o5In0=",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LmJvZHkiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiTDNSdGNDOXpaV055WlhRPSJ9",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_path_or_uri",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_structured",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExtSnZaSGtpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pWlhsS05FbHFiM2htVVQwOUluMD0ifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LmJvZHkiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiZXlKNElqb3hmUT09In0=",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_structured",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_tool",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExtSnZaSGtpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pWlROU2RtSXllR1paTWtaellraE9PU0o5In0=",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LmJvZHkiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiZTNSdmIyeGZZMkZzYkhOOSJ9",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_tool_payload",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_injection",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExtSnZaSGtpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pWVZka2RXSXpTbXhKU0VKNVdsaGFjR0l6Vm5wSlIyeDFZek5TZVdSWFRqQmhWemwxWTNjOVBTSjkifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LmJvZHkiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiYVdkdWIzSmxJSEJ5WlhacGIzVnpJR2x1YzNSeWRXTjBhVzl1Y3c9PSJ9",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_prompt_injection",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_unsupported",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExtRjFkR2h2Y2lJc0ltMWxaR2xoSWpvaWRHVjRkQ0lzSW5acGMybGlhV3hwZEhraU9pSjJhWE5wWW14bElpd2laWEpoYzNWeVpTSTZJbkJ5WlhObGJuUWlMQ0oyWVd4MVpWOWlOalFpT2lKWFFUMDlJbjA9In0=",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LmF1dGhvciIsIm1lZGlhIjoidGV4dCIsInZpc2liaWxpdHkiOiJ2aXNpYmxlIiwiZXJhc3VyZSI6InByZXNlbnQiLCJ2YWx1ZV9iNjQiOiJXQT09In0=",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_unsupported_field",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_nfc_lf",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkluWnBjMmxpYkdVaUxDSmxjbUZ6ZFhKbElqb2ljSEpsYzJWdWRDSXNJblpoYkhWbFgySTJOQ0k2SW5jMmEwNURhMFU5SW4wPSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoicHJlc2VudCIsInZhbHVlX2I2NCI6Inc2a05Da0U9In0=",
+    "expected": {
+      "ok": true,
+      "pack": {
+        "field_count": 1,
+        "scalar_count": 3,
+        "utf8_bytes": 4
+      },
+      "records": [
+        {
+          "field": "document.title",
+          "kind": "document",
+          "normalized": "é\nA",
+          "ordinal": 0,
+          "record_index": 0,
+          "segments": [
+            {
+              "bytes_b64": "w6kKQQ==",
+              "end": 3,
+              "id": "seg_fixture_nfc_lf_0",
+              "scalar_count": 3,
+              "start": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "v_multi",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_default_v1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkluWnBjMmxpYkdVaUxDSmxjbUZ6ZFhKbElqb2ljSEpsYzJWdWRDSXNJblpoYkhWbFgySTJOQ0k2SWxkQlBUMGlmUXA3SW5OamFHVnRZU0k2SW1OaGNuQmxiM011Y21Wa1lXTjBMWEpsWTI5eVpDOTJNU0lzSW05eVpHbHVZV3dpT2pFc0ltdHBibVFpT2lKdFpYTnpZV2RsSWl3aVptbGxiR1FpT2lKdFpYTnpZV2RsTG5OMVltcGxZM1FpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pVjFFOVBTSjkifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoicHJlc2VudCIsInZhbHVlX2I2NCI6IldBPT0ifQp7InNjaGVtYSI6ImNhcnBlb3MucmVkYWN0LXJlY29yZC92MSIsIm9yZGluYWwiOjEsImtpbmQiOiJtZXNzYWdlIiwiZmllbGQiOiJtZXNzYWdlLnN1YmplY3QiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiV1E9PSJ9",
+    "expected": {
+      "ok": true,
+      "pack": {
+        "field_count": 2,
+        "scalar_count": 2,
+        "utf8_bytes": 2
+      },
+      "records": [
+        {
+          "field": "document.title",
+          "kind": "document",
+          "normalized": "X",
+          "ordinal": 0,
+          "record_index": 0,
+          "segments": [
+            {
+              "bytes_b64": "WA==",
+              "end": 1,
+              "id": "seg_fixture_multi_0",
+              "scalar_count": 1,
+              "start": 0
+            }
+          ]
+        },
+        {
+          "field": "message.subject",
+          "kind": "message",
+          "normalized": "Y",
+          "ordinal": 1,
+          "record_index": 1,
+          "segments": [
+            {
+              "bytes_b64": "WQ==",
+              "end": 1,
+              "id": "seg_fixture_multi_1",
+              "scalar_count": 1,
+              "start": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "v_field_count",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_fixture_field_count_1",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 24576,
+      "pack_scalars": 12000,
+      "field_count": 1,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkluWnBjMmxpYkdVaUxDSmxjbUZ6ZFhKbElqb2ljSEpsYzJWdWRDSXNJblpoYkhWbFgySTJOQ0k2SWxkQlBUMGlmUXA3SW5OamFHVnRZU0k2SW1OaGNuQmxiM011Y21Wa1lXTjBMWEpsWTI5eVpDOTJNU0lzSW05eVpHbHVZV3dpT2pFc0ltdHBibVFpT2lKdFpYTnpZV2RsSWl3aVptbGxiR1FpT2lKdFpYTnpZV2RsTG5OMVltcGxZM1FpTENKdFpXUnBZU0k2SW5SbGVIUWlMQ0oyYVhOcFltbHNhWFI1SWpvaWRtbHphV0pzWlNJc0ltVnlZWE4xY21VaU9pSndjbVZ6Wlc1MElpd2lkbUZzZFdWZllqWTBJam9pVjFFOVBTSjkifQ==",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoicHJlc2VudCIsInZhbHVlX2I2NCI6IldBPT0ifQp7InNjaGVtYSI6ImNhcnBlb3MucmVkYWN0LXJlY29yZC92MSIsIm9yZGluYWwiOjEsImtpbmQiOiJtZXNzYWdlIiwiZmllbGQiOiJtZXNzYWdlLnN1YmplY3QiLCJtZWRpYSI6InRleHQiLCJ2aXNpYmlsaXR5IjoidmlzaWJsZSIsImVyYXN1cmUiOiJwcmVzZW50IiwidmFsdWVfYjY0IjoiV1E9PSJ9",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_field_count",
+        "record_index": 1,
+        "byte_offset": null
+      }
+    }
+  },
+  {
+    "id": "v_pack_bytes",
+    "pack_id": "pack-v5-synth-01",
+    "profile_id": "redact_fixture_pack_bytes_4",
+    "profile_limits": {
+      "field_utf8_bytes": 12288,
+      "field_scalars": 6000,
+      "pack_utf8_bytes": 4,
+      "pack_scalars": 12000,
+      "field_count": 8,
+      "segment_count": 16,
+      "segment_scalars": 240,
+      "segment_utf8_bytes": 2048
+    },
+    "raw_outer_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1lbnZlbG9wZS92MSIsInJlY29yZHNfYjY0IjoiZXlKelkyaGxiV0VpT2lKallYSndaVzl6TG5KbFpHRmpkQzF5WldOdmNtUXZkakVpTENKdmNtUnBibUZzSWpvd0xDSnJhVzVrSWpvaVpHOWpkVzFsYm5RaUxDSm1hV1ZzWkNJNkltUnZZM1Z0Wlc1MExuUnBkR3hsSWl3aWJXVmthV0VpT2lKMFpYaDBJaXdpZG1semFXSnBiR2wwZVNJNkluWnBjMmxpYkdVaUxDSmxjbUZ6ZFhKbElqb2ljSEpsYzJWdWRDSXNJblpoYkhWbFgySTJOQ0k2SWxOSFZuTmlSemc5SW4wPSJ9",
+    "decoded_inner_b64": "eyJzY2hlbWEiOiJjYXJwZW9zLnJlZGFjdC1yZWNvcmQvdjEiLCJvcmRpbmFsIjowLCJraW5kIjoiZG9jdW1lbnQiLCJmaWVsZCI6ImRvY3VtZW50LnRpdGxlIiwibWVkaWEiOiJ0ZXh0IiwidmlzaWJpbGl0eSI6InZpc2libGUiLCJlcmFzdXJlIjoicHJlc2VudCIsInZhbHVlX2I2NCI6IlNHVnNiRzg9In0=",
+    "expected": {
+      "ok": false,
+      "error": {
+        "code": "redact_pack_bytes",
+        "record_index": 0,
+        "byte_offset": null
+      }
+    }
+  }
+]

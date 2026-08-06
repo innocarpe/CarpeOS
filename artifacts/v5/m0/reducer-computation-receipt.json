@@ -1,0 +1,63 @@
+{
+  "schema": "carpeos.v5.m0-computation-receipt/v1",
+  "contract": "proposal_reduce_v1",
+  "timestamp": "2026-08-06T05:51:46.713Z",
+  "runtime": {
+    "node": "v22.22.3",
+    "platform": "darwin",
+    "arch": "arm64",
+    "tool": "packages/v5/scripts/m0-recompute.mjs"
+  },
+  "canonical_input": {
+    "paths": [
+      "fixtures/v5/m0/reducer_reorder_v1.json",
+      "fixtures/v5/m0/reducer_duplicate_overlap_v1.json",
+      "fixtures/v5/m0/reducer_no_candidate_v1.json",
+      "fixtures/v5/m0/reducer_prior_reviewable_v1.json"
+    ]
+  },
+  "canonicalization": {
+    "procedure": "audit_free recursively removes only audit_envelope; output hash = sha256(JCS(audit_free(ReducerOutput)))",
+    "jcs": "packages/v5/scripts/m0-recompute.mjs#jcs"
+  },
+  "command": "node packages/v5/scripts/m0-recompute.mjs  # reducer branch: sha256(jcs(audit_free(output)))",
+  "results": [
+    {
+      "fixture": "reorder_v1",
+      "path": "fixtures/v5/m0/reducer_reorder_v1.json",
+      "computed_value": "ee7f8e42019cb4f0e3318869cfa7dd9263b7fa5e2a0a7613b882bd06994dc8ea",
+      "expected_value": "ee7f8e42019cb4f0e3318869cfa7dd9263b7fa5e2a0a7613b882bd06994dc8ea",
+      "declared_output_sha256": "ee7f8e42019cb4f0e3318869cfa7dd9263b7fa5e2a0a7613b882bd06994dc8ea",
+      "pass": true,
+      "audit_timestamp_mutation_invariant": true
+    },
+    {
+      "fixture": "duplicate_overlap_v1",
+      "path": "fixtures/v5/m0/reducer_duplicate_overlap_v1.json",
+      "computed_value": "1ab98680ead8df03baa1e16c863261993cfeff63e22d16f68d047b42b7fd9d23",
+      "expected_value": "1ab98680ead8df03baa1e16c863261993cfeff63e22d16f68d047b42b7fd9d23",
+      "declared_output_sha256": "1ab98680ead8df03baa1e16c863261993cfeff63e22d16f68d047b42b7fd9d23",
+      "pass": true,
+      "audit_timestamp_mutation_invariant": true
+    },
+    {
+      "fixture": "no_candidate_v1",
+      "path": "fixtures/v5/m0/reducer_no_candidate_v1.json",
+      "computed_value": "93325460c5072d00f25a1b2dc02a148dcf31f7bc63e3b89b128004d8476fe156",
+      "expected_value": "93325460c5072d00f25a1b2dc02a148dcf31f7bc63e3b89b128004d8476fe156",
+      "declared_output_sha256": "93325460c5072d00f25a1b2dc02a148dcf31f7bc63e3b89b128004d8476fe156",
+      "pass": true,
+      "audit_timestamp_mutation_invariant": true
+    },
+    {
+      "fixture": "prior_reviewable_v1",
+      "path": "fixtures/v5/m0/reducer_prior_reviewable_v1.json",
+      "computed_value": "7358225464e3defec3adba8d6b92316e3b3fea02d155667a5a71132ea4cba7f0",
+      "expected_value": "7358225464e3defec3adba8d6b92316e3b3fea02d155667a5a71132ea4cba7f0",
+      "declared_output_sha256": "7358225464e3defec3adba8d6b92316e3b3fea02d155667a5a71132ea4cba7f0",
+      "pass": true,
+      "audit_timestamp_mutation_invariant": true
+    }
+  ],
+  "pass": true
+}

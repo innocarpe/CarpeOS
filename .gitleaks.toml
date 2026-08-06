@@ -16,7 +16,11 @@ paths = [
   '''(^|/)(test|tests|__tests__)(/|$)''',
   '''(^|/)scripts/test(/|$)''',
   '''\.test\.(ts|tsx|js|mjs|cjs)$''',
+  # V5 offline contract fixtures/receipts (synthetic digests + test-only key material)
+  '''(^|/)fixtures/v5(/|$)''',
+  '''(^|/)artifacts/v5(/|$)''',
 ]
+
 regexes = [
   '''(?i)synthetic[_-]''',
   '''(?i)example\.workers\.dev''',
