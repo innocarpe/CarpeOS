@@ -329,10 +329,10 @@ export function assertRealCheckSuite(suite, identityOrOptions) {
   if (!isRecord(suite)) throwApiError("malformed_response", "GitHub check suite must be an object");
   if (Object.hasOwn(suite, "runs") || Object.hasOwn(suite, "items"))
     throwApiError("malformed_response", "invented nested check-suite fields are not accepted");
-  const repository = assertOptionalGitHubRepository(suite.repository, identity);
-  const app = assertOptionalGitHubApp(suite.app, identity);
-  assertOptionalHeadSha(suite.head_sha, identity);
-  assertOptionalCheckState(suite.status, suite.conclusion, "check suite");
+  const repository = assertGitHubRepository(suite.repository, identity);
+  const app = assertGitHubApp(suite.app, identity);
+  assertHeadSha(suite.head_sha, identity);
+  assertCheckState(suite.status, suite.conclusion, "check suite");
   if (suite.external_id !== undefined && suite.external_id !== identity.external_id)
     throwApiError("duplicate_refusal", "check suite external id is foreign");
   if (suite.name !== undefined && suite.name !== identity.check_name)
@@ -343,89 +343,64 @@ export function assertRealCheckSuite(suite, identityOrOptions) {
     throwApiError("duplicate_refusal", "foreign repository identity");
   if (suite.app_id !== undefined && suite.app_id !== identity.app_id)
     throwApiError("duplicate_refusal", "foreign App identity");
+  assertOptionalBoundIdentityFields(suite, identity);
   if (!Number.isSafeInteger(suite.id) || suite.id <= 0)
     throwApiError("malformed_response", "GitHub check suite id is invalid");
-  const normalized = {
+  return {
     id: suite.id,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
+    repository_id: repository.id,
+    repository_path: repository.full_name,
     head_sha: identity.head_sha,
     external_id: identity.external_id,
     fixture_sha256: identity.fixture_sha256,
     policy_sha256: identity.policy_sha256,
     context: identity.context,
     check_name: identity.check_name,
-    app_id: identity.app_id,
+    app_id: app.id,
+    status: suite.status,
+    conclusion: suite.conclusion,
   };
-  if (repository !== undefined) {
-    if (repository.id !== undefined) normalized.repository_id = repository.id;
-    if (repository.full_name !== undefined) normalized.repository_path = repository.full_name;
-  }
-  if (app?.id !== undefined) normalized.app_id = app.id;
-  if (suite.status !== undefined) normalized.status = suite.status;
-  if (suite.conclusion !== undefined) normalized.conclusion = suite.conclusion;
-  return normalized;
 }
 
 export function assertRealCheckRun(run, identityOrOptions) {
   const identity = normalizeAdapterIdentity(identityOrOptions);
-  const expectedSuiteId = readExpectedSuiteId(identityOrOptions);
   if (!isRecord(run)) throwApiError("malformed_response", "GitHub check run must be an object");
   if (Object.hasOwn(run, "runs") || Object.hasOwn(run, "items"))
     throwApiError("malformed_response", "invented nested check-run fields are not accepted");
-  const repository = assertOptionalGitHubRepository(run.repository, identity);
-  const app = assertOptionalGitHubApp(run.app, identity);
-  assertOptionalHeadSha(run.head_sha, identity);
-  if (run.name !== undefined && run.name !== identity.check_name)
-    throwApiError("duplicate_refusal", "check run name is foreign");
-  if (run.external_id !== undefined && run.external_id !== identity.external_id)
-    throwApiError("duplicate_refusal", "check run external id is foreign");
-  if (run.repository_id !== undefined && run.repository_id !== identity.repository_id)
-    throwApiError("duplicate_refusal", "foreign repository identity");
-  if (run.repository_path !== undefined && run.repository_path !== identity.repository_path)
-    throwApiError("duplicate_refusal", "foreign repository identity");
-  if (run.app_id !== undefined && run.app_id !== identity.app_id)
-    throwApiError("duplicate_refusal", "foreign App identity");
+  const repository = assertGitHubRepository(run.repository, identity);
+  const app = assertGitHubApp(run.app, identity);
+  assertHeadSha(run.head_sha, identity);
+  if (run.name !== identity.check_name)
+    throwApiError("duplicate_refusal", "check run name is foreign or missing");
+  if (typeof run.external_id !== "string" || run.external_id !== identity.external_id)
+    throwApiError("duplicate_refusal", "check run external id is foreign or missing");
+  assertOptionalBoundIdentityFields(run, identity);
   assertCheckState(run.status, run.conclusion, "check run");
   if (!Number.isSafeInteger(run.id) || run.id <= 0)
     throwApiError("malformed_response", "GitHub check run id is invalid");
-  if (run.check_suite === undefined) {
-    if (expectedSuiteId === undefined)
-      throwApiError("malformed_response", "GitHub check run suite is required");
-  } else if (!isRecord(run.check_suite)) {
+  if (!isRecord(run.check_suite))
     throwApiError("malformed_response", "GitHub check run suite is required");
-  }
-  const suite =
-    run.check_suite === undefined
-      ? { id: expectedSuiteId }
-      : assertRealCheckSuite(run.check_suite, identity);
+  const suite = assertRealCheckSuite(run.check_suite, identity);
+  const expectedSuiteId = readExpectedSuiteId(identityOrOptions);
   if (expectedSuiteId !== undefined && suite.id !== expectedSuiteId)
     throwApiError("duplicate_refusal", "check run is foreign to the requested suite");
-  const normalized = {
+  if (run.output !== undefined) assertSafePayload(run.output);
+  return {
     id: run.id,
     suite_id: suite.id,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
+    repository_id: repository.id,
+    repository_path: repository.full_name,
     head_sha: identity.head_sha,
     external_id: identity.external_id,
     fixture_sha256: identity.fixture_sha256,
     policy_sha256: identity.policy_sha256,
     context: identity.context,
     check_name: identity.check_name,
-    app_id: identity.app_id,
+    app_id: app.id,
     status: run.status,
     conclusion: run.conclusion,
+    ...(run.output === undefined ? {} : { output: run.output }),
   };
-  if (repository !== undefined) {
-    if (repository.id !== undefined) normalized.repository_id = repository.id;
-    if (repository.full_name !== undefined) normalized.repository_path = repository.full_name;
-  }
-  if (app?.id !== undefined) normalized.app_id = app.id;
-  if (run.output !== undefined) {
-    assertSafePayload(run.output);
-    normalized.output = run.output;
-  }
-  return normalized;
 }
 
 export function normalizeCheckSuitesResponse(responseOrOptions, options) {
@@ -571,41 +546,41 @@ function markAdapterPage(page, kind) {
 }
 
 function assertGitHubRepository(repository, identity) {
-  if (!isRecord(repository))
-    throwApiError("malformed_response", "GitHub response repository is required");
-  if (repository.id !== undefined && repository.id !== identity.repository_id)
-    throwApiError("duplicate_refusal", "foreign repository identity");
-  if (repository.full_name !== undefined && repository.full_name !== identity.repository_path)
+  if (
+    !isRecord(repository) ||
+    !Number.isSafeInteger(repository.id) ||
+    repository.id <= 0 ||
+    repository.full_name !== identity.repository_path
+  )
+    throwApiError("malformed_response", "GitHub response repository identity is required");
+  if (repository.id !== identity.repository_id)
     throwApiError("duplicate_refusal", "foreign repository identity");
   return repository;
 }
-function assertOptionalGitHubRepository(repository, identity) {
-  if (repository === undefined) return undefined;
-  return assertGitHubRepository(repository, identity);
-}
 
 function assertGitHubApp(app, identity) {
-  if (!isRecord(app))
+  if (!isRecord(app) || !Number.isSafeInteger(app.id) || app.id <= 0)
     throwApiError("app_identity_missing", "GitHub response App identity is required");
-  if (app.id !== undefined) {
-    if (!Number.isSafeInteger(app.id) || app.id <= 0)
-      throwApiError("app_identity_missing", "GitHub response App identity is required");
-    if (app.id !== identity.app_id) throwApiError("duplicate_refusal", "foreign App identity");
-  }
+  if (app.id !== identity.app_id) throwApiError("duplicate_refusal", "foreign App identity");
   return app;
-}
-function assertOptionalGitHubApp(app, identity) {
-  if (app === undefined) return undefined;
-  return assertGitHubApp(app, identity);
 }
 
 function assertHeadSha(headSha, identity) {
   if (typeof headSha !== "string" || headSha !== identity.head_sha)
     throwApiError("duplicate_refusal", "foreign or moved head C");
 }
-function assertOptionalHeadSha(headSha, identity) {
-  if (headSha === undefined) return;
-  assertHeadSha(headSha, identity);
+function assertOptionalBoundIdentityFields(value, identity) {
+  for (const field of [
+    "repository_id",
+    "repository_path",
+    "app_id",
+    "fixture_sha256",
+    "policy_sha256",
+    "context",
+  ]) {
+    if (value[field] !== undefined && value[field] !== identity[field])
+      throwApiError("duplicate_refusal", "response identity is foreign");
+  }
 }
 
 function assertCheckState(status, conclusion, label) {
@@ -623,11 +598,6 @@ function assertCheckState(status, conclusion, label) {
   if (status !== "completed" && conclusion !== null)
     throwApiError("malformed_response", `${label} non-completed state cannot have a conclusion`);
 }
-function assertOptionalCheckState(status, conclusion, label) {
-  if (status === undefined && conclusion === undefined) return;
-  assertCheckState(status, conclusion, label);
-}
-
 function readExpectedSuiteId(identityOrOptions) {
   if (!isRecord(identityOrOptions)) return undefined;
   const suiteId =
@@ -830,6 +800,19 @@ export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
   const runs = collectCheckRuns({ pages, identity: verifiedIdentity });
   if (runs.length === 0)
     throwApiError("malformed_response", "verified evidence must contain a check run");
+  if (runs.length !== 1)
+    throwApiError("duplicate_refusal", "exact C/name/App lookup returned multiple check runs");
+  const [run] = runs;
+  if (run.status !== "completed" || run.conclusion !== "success")
+    throwApiError("terminal_refusal", "exact check run did not reach terminal success");
+  const suites = collectIndependentSuites(pages, verifiedIdentity);
+  if (suites.size === 0)
+    throwApiError("malformed_response", "independent check-suite enumeration is required");
+  if (!suites.has(run.suite_id))
+    throwApiError("identity_conflict", "check run suite is missing from independent enumeration");
+  const suite = suites.get(run.suite_id);
+  if (suite.status !== "completed" || suite.conclusion !== "success")
+    throwApiError("terminal_refusal", "check suite did not reach terminal success");
   const unsigned = {
     schema_version: EVIDENCE_RECEIPT_SCHEMA,
     receipt_type: "exact_check_evidence",
@@ -846,7 +829,7 @@ export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
     query_digest: digestJson(query),
     identity_digest: digestJson(verifiedIdentity),
     page_count: pages.length,
-    suite_count: countNormalizedSuites(pages),
+    suite_count: suites.size,
     run_ids: runs.map((run) => run.id),
     observed_at: observedAt,
   };
@@ -918,7 +901,10 @@ function assertCompleteAdapterPagination(pages) {
     const next = parseNextLink(readLinkHeader(page.headers));
     if (next === null) aggregate.terminal = true;
   }
-  for (const [kind, aggregate] of aggregates) {
+  for (const kind of ["check_suites", "check_runs"]) {
+    const aggregate = aggregates.get(kind);
+    if (aggregate === undefined)
+      throwApiError("incomplete_pagination", `independent ${kind} enumeration is required`);
     if (!aggregate.terminal || aggregate.ids.size !== aggregate.totalCount)
       throwApiError(
         "incomplete_pagination",
@@ -926,26 +912,21 @@ function assertCompleteAdapterPagination(pages) {
       );
   }
 }
-function countNormalizedSuites(pages) {
+
+function collectIndependentSuites(pages, identity) {
   const suites = new Map();
   for (const page of pages) {
-    const pageSuites =
-      page[ADAPTER_KIND] === "check_runs"
-        ? page.suites
-        : page[ADAPTER_KIND] === "check_suites"
-          ? page.items
-          : undefined;
-    if (!Array.isArray(pageSuites))
-      throwApiError("malformed_response", "normalized check suites are required");
-    for (const suite of pageSuites) {
+    if (page[ADAPTER_KIND] !== "check_suites") continue;
+    for (const suite of page.items) {
       if (!isRecord(suite) || !Number.isSafeInteger(suite.id) || suite.id <= 0)
         throwApiError("malformed_response", "normalized check suite id is invalid");
+      if (identity !== undefined) assertNormalizedSuiteIdentity(suite, identity);
       const existing = suites.get(suite.id);
       if (existing !== undefined) suites.set(suite.id, mergeNormalizedSuite(existing, suite));
       else suites.set(suite.id, suite);
     }
   }
-  return suites.size;
+  return suites;
 }
 
 export function assertEvidenceReceipt(receipt) {
@@ -1000,6 +981,7 @@ export function assertEvidenceReceipt(receipt) {
     errors.push("suite_count is invalid");
   if (
     !Array.isArray(receipt.run_ids) ||
+    receipt.run_ids.length !== 1 ||
     receipt.run_ids.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
     new Set(receipt.run_ids).size !== receipt.run_ids.length
   )
@@ -1129,17 +1111,10 @@ export function reconcileLostPatch({
     });
   }
 
-  // Compatibility callers provide already-fetched matches. New callers must use
-  // freshGet/fetchPendingRun/getPendingRun/fetchRun/getRun or freshRun so the exact
-  // lookup cannot be skipped.
-  return reconcileLegacyPatchMatches({
-    matches,
-    verifiedIdentity,
-    pendingRun,
-    pendingIdentity,
-    attemptedPatch,
-    retryCount,
-  });
+  throwApiError(
+    "fresh_lookup_required",
+    "lost PATCH reconciliation requires a fresh exact check-run GET",
+  );
 }
 
 function reconcileFreshPatchResponse({
@@ -1195,56 +1170,6 @@ function reconcileFreshPatchResponse({
   }
 }
 
-function reconcileLegacyPatchMatches({
-  matches,
-  verifiedIdentity,
-  pendingRun,
-  pendingIdentity,
-  attemptedPatch,
-  retryCount,
-}) {
-  let verified;
-  try {
-    verified = verifyMatches(matches, verifiedIdentity);
-  } catch {
-    return indeterminatePatch("legacy PATCH reconciliation found a foreign run");
-  }
-  if (verified.length > 1) return indeterminatePatch("legacy PATCH reconciliation was conflicting");
-  if (verified.length === 1) {
-    const found = verified[0];
-    if (found.id !== pendingRun.id)
-      return indeterminatePatch("legacy PATCH reconciliation found a foreign run");
-    if (
-      isPendingState(found) &&
-      samePendingIdentity(pendingIdentity, found) &&
-      samePendingState(pendingRun, found) &&
-      samePayloadIdentity(pendingRun, found)
-    ) {
-      if (retryCount !== 0) return indeterminatePatch("lost PATCH retry limit exhausted");
-      return {
-        status: "retry_once",
-        retry_allowed: true,
-        retry_payload: clonePayload(attemptedPatch),
-      };
-    }
-    if (matchesAttemptedPatch(pendingRun, found, attemptedPatch))
-      return {
-        status: "patch_reconciled",
-        retry_allowed: false,
-        requires_human_reconciliation: false,
-        run: found,
-      };
-    return indeterminatePatch("legacy PATCH reconciliation found a conflicting run");
-  }
-  if (retryCount === 0) {
-    return {
-      status: "retry_once",
-      retry_allowed: true,
-      retry_payload: clonePayload(attemptedPatch),
-    };
-  }
-  return indeterminatePatch("lost PATCH retry limit exhausted");
-}
 
 function buildFreshRunQuery(identity, runId) {
   if (!Number.isSafeInteger(runId) || runId <= 0)
@@ -1293,83 +1218,78 @@ function assertFreshRunQuery(actual, expected) {
 
 function extractFreshRunMatches(value, identity) {
   if (value === undefined || value === null) return [];
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) return value.map((run) => normalizeFreshRun(run, identity));
   if (value[ADAPTER_PAGE] === true) {
     assertPage(value);
     if (value[ADAPTER_KIND] !== "check_runs")
       throwApiError("malformed_response", "fresh lookup must return a check-run adapter page");
-    return value.items;
+    return value.items.map((run) => normalizeFreshRun(run, identity));
   }
   if (!isRecord(value)) return [];
   if (Object.hasOwn(value, "run")) return extractFreshRunMatches(value.run, identity);
   if (Object.hasOwn(value, "response")) return extractFreshRunMatches(value.response, identity);
-  if (Array.isArray(value.check_runs)) return normalizeCheckRunsResponse(value, { identity }).items;
+  if (Array.isArray(value.check_runs))
+    return normalizeCheckRunsResponse(value, { identity }).items;
   if (isRecord(value.data) || isRecord(value.body))
     return extractFreshRunMatches(value.data ?? value.body, identity);
-  if (Number.isSafeInteger(value.id)) return [value];
+  if (Number.isSafeInteger(value.id)) return [normalizeFreshRun(value, identity)];
   return [];
+}
+
+function normalizeFreshRun(run, identity) {
+  if (!isRecord(run) || !Number.isSafeInteger(run.id) || run.id <= 0)
+    throwApiError("malformed_response", "fresh check-run identity is required");
+  if (run.repository_id !== undefined) {
+    const normalized = assertEvidenceRecord(run, identity);
+    if (!Number.isSafeInteger(normalized.suite_id) || normalized.suite_id <= 0)
+      throwApiError("malformed_response", "fresh check-run suite identity is required");
+    return normalized;
+  }
+  assertStrictGitHubRun(run, identity);
+  return assertRealCheckRun(run, identity);
+}
+
+function assertStrictGitHubRun(run, identity) {
+  if (!isRecord(run.repository) || !isRecord(run.app) || typeof run.head_sha !== "string")
+    throwApiError("malformed_response", "fresh GitHub check-run identity is incomplete");
+  if (
+    run.name !== identity.check_name ||
+    run.external_id !== identity.external_id ||
+    run.head_sha !== identity.head_sha
+  )
+    throwApiError("duplicate_refusal", "fresh check-run identity is foreign");
+  if (!Number.isSafeInteger(run.app.id) || run.app.id !== identity.app_id)
+    throwApiError("app_identity_missing", "fresh GitHub check-run App identity is required");
+  if (
+    run.repository.id !== identity.repository_id ||
+    run.repository.full_name !== identity.repository_path
+  )
+    throwApiError("duplicate_refusal", "fresh check-run repository identity is foreign");
+  if (!isRecord(run.check_suite))
+    throwApiError("malformed_response", "fresh GitHub check-run suite is required");
+  assertStrictGitHubSuite(run.check_suite, identity);
+}
+
+function assertStrictGitHubSuite(suite, identity) {
+  if (
+    !isRecord(suite.repository) ||
+    !isRecord(suite.app) ||
+    typeof suite.head_sha !== "string" ||
+    suite.head_sha !== identity.head_sha ||
+    suite.repository.id !== identity.repository_id ||
+    suite.repository.full_name !== identity.repository_path ||
+    !Number.isSafeInteger(suite.app.id) ||
+    suite.app.id !== identity.app_id
+  )
+    throwApiError("duplicate_refusal", "fresh check-run suite identity is foreign or incomplete");
 }
 
 function readReconciliationRun(run, identity) {
   try {
-    if (!isRecord(run) || !Number.isSafeInteger(run.id) || run.id <= 0) return null;
-    const normalized =
-      run.repository_id === undefined
-        ? bindReconciliationRun(run, identity)
-        : assertEvidenceRecord(run, identity);
-    assertSafePayload(normalized);
-    return normalized;
+    return normalizeFreshRun(run, identity);
   } catch {
     return null;
   }
-}
-
-function bindReconciliationRun(run, identity) {
-  if (!isRecord(run)) return null;
-  const bound = {
-    id: run.id,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
-    head_sha: identity.head_sha,
-    external_id: identity.external_id,
-    fixture_sha256: identity.fixture_sha256,
-    policy_sha256: identity.policy_sha256,
-    context: identity.context,
-    check_name: identity.check_name,
-    app_id: identity.app_id,
-    status: run.status,
-    conclusion: run.conclusion,
-  };
-  if (run.suite_id !== undefined) bound.suite_id = run.suite_id;
-  for (const key of ["output", "payload", "annotations", "annotation_identity", "annotation"]) {
-    if (Object.hasOwn(run, key)) bound[key] = run[key];
-  }
-  if (run.name !== undefined && run.name !== identity.check_name) return null;
-  if (run.external_id !== undefined && run.external_id !== identity.external_id) return null;
-  if (run.head_sha !== undefined && run.head_sha !== identity.head_sha) return null;
-  if (run.app_id !== undefined && run.app_id !== identity.app_id) return null;
-  if (run.repository_id !== undefined && run.repository_id !== identity.repository_id) return null;
-  if (run.repository_path !== undefined && run.repository_path !== identity.repository_path)
-    return null;
-  if (run.repository !== undefined) {
-    if (
-      !isRecord(run.repository) ||
-      (run.repository.id !== undefined && run.repository.id !== identity.repository_id) ||
-      (run.repository.full_name !== undefined &&
-        run.repository.full_name !== identity.repository_path)
-    )
-      return null;
-  }
-  if (run.app !== undefined) {
-    if (!isRecord(run.app) || (run.app.id !== undefined && run.app.id !== identity.app_id))
-      return null;
-  }
-  if (run.check_suite !== undefined) {
-    if (!isRecord(run.check_suite) || !Number.isSafeInteger(run.check_suite.id)) return null;
-    if (run.suite_id !== undefined && run.suite_id !== run.check_suite.id) return null;
-    bound.suite_id = run.check_suite.id;
-  }
-  return bound;
 }
 
 function isPendingState(run) {
