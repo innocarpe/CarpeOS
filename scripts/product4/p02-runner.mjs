@@ -554,12 +554,6 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
     "/usr/local/bin:/usr/bin:/bin",
     "--cap-drop",
     "ALL",
-    "--rlimit-nproc",
-    String(P02_SANDBOX_CONTRACT.process_limit),
-    "--rlimit-as",
-    String(P02_SANDBOX_CONTRACT.memory_limit_mb * 1024 * 1024),
-    "--rlimit-fsize",
-    String(100 * 1024 * 1024),
   ];
   for (const runtimePath of [...new Set(runtimePaths)]) {
     try {
@@ -576,8 +570,11 @@ function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
       "--no-new-privs",
       "--inh-caps=-all",
       "--ambient-caps=-all",
-      "--bounding-set=-all",
       "--",
+      "/bin/sh",
+      "-ceu",
+      'ulimit -u 64; ulimit -v 1048576; ulimit -f 102400; exec "$@"',
+      "product4-p02-sandbox",
       "bwrap",
       ...bwrapArgs,
     ],

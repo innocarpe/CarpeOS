@@ -109,9 +109,6 @@ jobs:
             --setenv TZ UTC
             --setenv PATH /usr/local/bin:/usr/bin:/bin
             --cap-drop ALL
-            --rlimit-nproc 64
-            --rlimit-as 1073741824
-            --rlimit-fsize 104857600
             --ro-bind /usr /usr
             --ro-bind /bin /bin
             --ro-bind /lib /lib
@@ -120,6 +117,9 @@ jobs:
             --ro-bind "$node_dir" "$node_dir"
             --ro-bind "$pnpm_dir" "$pnpm_dir"
           )
+          ulimit -u 64
+          ulimit -v 1048576
+          ulimit -f 102400
           setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all -- "${sandbox[@]}" /bin/sh -ceu '
             rm -rf /work/*
             cp -aL /candidate/. /work/

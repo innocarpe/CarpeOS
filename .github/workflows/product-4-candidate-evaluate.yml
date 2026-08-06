@@ -91,9 +91,6 @@ jobs:
             --setenv HOME /tmp
             --setenv PATH /usr/local/bin:/usr/bin:/bin
             --cap-drop ALL
-            --rlimit-nproc 64
-            --rlimit-as 1073741824
-            --rlimit-fsize 104857600
             --ro-bind /usr /usr
             --ro-bind /bin /bin
             --ro-bind /lib /lib
@@ -101,6 +98,9 @@ jobs:
             --ro-bind /etc /etc
             --ro-bind "$node_dir" "$node_dir"
           )
+          ulimit -u 64
+          ulimit -v 1048576
+          ulimit -f 102400
           setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all -- \
             "${sandbox[@]}" "$node_path" -e 'const fs=require("node:fs"); const status=fs.readFileSync("/proc/self/status","utf8"); if (!status.includes("NoNewPrivs:" + String.fromCharCode(9) + "1")) process.exit(23); fs.writeFileSync("/output/sandbox-probe.json", JSON.stringify({backend:"bubblewrap",network:"disabled",candidate_inputs:"read_only",trusted_mounts:false,writable_paths:["/home","/output","/tmp"],capabilities:"dropped",no_new_privileges:true,process_limit:64,memory_limit_mb:1024}));'
           probe_sha256="$(sha256sum "$CARPEOS_SANDBOX_OUT/sandbox-probe.json" | cut -d' ' -f1)"
