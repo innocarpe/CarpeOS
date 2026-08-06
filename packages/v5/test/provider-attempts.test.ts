@@ -130,6 +130,32 @@ describe("attempts / review / rollback sidecar", () => {
     rollbackV5(state, "reviewer-1", "2026-08-06T00:01:00.000Z");
     expect(isV5Off(state)).toBe(true);
   });
+
+  it("enforces one-dispatch on (scope, ordinal, route) and records incident", () => {
+    const state = createSidecar(true);
+    prepareAttempt(state, {
+      attempt_id: "a1",
+      run_scope_key: "scope_x",
+      run_ordinal: 0,
+      route_digest: "sha256:r",
+    });
+    prepareAttempt(state, {
+      attempt_id: "a2",
+      run_scope_key: "scope_x",
+      run_ordinal: 0,
+      route_digest: "sha256:r",
+    });
+    const first = dispatchAttempt(state, "a1", "2026-08-06T00:00:00.000Z");
+    expect("status" in first && first.status === "dispatched").toBe(true);
+    const second = dispatchAttempt(state, "a2", "2026-08-06T00:00:01.000Z");
+    expect(second).toMatchObject({
+      schema: "carpeos.v5-incident/v1",
+      kind: "ambiguous_result",
+      canonical_effect: "none",
+    });
+    expect(state.attempts.get("a2")?.status).toBe("ambiguous");
+    expect(state.incidents).toHaveLength(1);
+  });
 });
 
 describe("evidence pack", () => {
