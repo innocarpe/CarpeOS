@@ -27,8 +27,10 @@ jobs:
       - name: Configure disposable runner paths
         run: |
           {
-            echo "CARPEOS_HOME=$RUNNER_TEMP/carpeos-product4-evaluator"
-            echo "CARPEOS_CANDIDATE_ROOT=$RUNNER_TEMP/carpeos-product4-candidate"
+            echo "CARPEOS_HOME=/tmp/carpeos-product4-evaluator-${GITHUB_RUN_ID}"
+            echo "CARPEOS_CANDIDATE_ROOT=/tmp/carpeos-product4-candidate-${GITHUB_RUN_ID}"
+            echo "CARPEOS_SANDBOX_WORK=/tmp/product4-sandbox-work-${GITHUB_RUN_ID}"
+            echo "CARPEOS_SANDBOX_OUT=/tmp/product4-sandbox-out-${GITHUB_RUN_ID}"
           } >> "$GITHUB_ENV"
       - name: Check out trusted evaluator base
         uses: actions/checkout@v7
@@ -69,7 +71,7 @@ jobs:
           mkdir -p "$CARPEOS_CANDIDATE_ROOT"
           mv "$GITHUB_WORKSPACE/candidate" "$CARPEOS_CANDIDATE_ROOT"
           chmod -R a-w "$CARPEOS_CANDIDATE_ROOT"
-          mkdir -p "$CARPEOS_HOME" "$RUNNER_TEMP/product4-sandbox-work" "$RUNNER_TEMP/product4-sandbox-out"
+          mkdir -p "$CARPEOS_HOME" "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
       - name: Freeze trusted evaluator and raw inputs before candidate execution
         run: |
           chmod -R a-w "$GITHUB_WORKSPACE"
@@ -95,9 +97,9 @@ jobs:
             --unshare-net
             --clearenv
             --ro-bind "$CARPEOS_CANDIDATE_ROOT" /candidate
-            --bind "$RUNNER_TEMP/product4-sandbox-work" /work
+            --bind "$CARPEOS_SANDBOX_WORK" /work
             --bind "$CARPEOS_HOME" /home
-            --bind "$RUNNER_TEMP/product4-sandbox-out" /output
+            --bind "$CARPEOS_SANDBOX_OUT" /output
             --tmpfs /tmp
             --proc /proc
             --dev /dev
@@ -138,13 +140,13 @@ jobs:
             node apps/carpeos-cli/dist/index.js init --home /home --trust-zone tz_synthetic
             node -e "const fs=require(\"node:fs\"); const s=fs.readFileSync(\"/proc/self/status\",\"utf8\"); if (!s.includes(\"NoNewPrivs:\" + String.fromCharCode(9) + \"1\")) process.exit(23); fs.writeFileSync(\"/output/sandbox-probe.json\", JSON.stringify({backend:\"bubblewrap\", network:\"disabled\", candidate_inputs:\"read_only\", trusted_mounts:false, writable_paths:[\"/home\",\"/output\",\"/tmp\"], capabilities:\"dropped\", no_new_privileges:true, process_limit:64, memory_limit_mb:1024}));"
           '
-          chmod -R a-w "$RUNNER_TEMP/product4-sandbox-work"
+          chmod -R a-w "$CARPEOS_SANDBOX_WORK"
       - name: Emit trusted sandbox receipt
         run: |
           set -euo pipefail
           tree_sha256="$(node "$GITHUB_WORKSPACE/scripts/product4/tree-digest.mjs" "$CARPEOS_CANDIDATE_ROOT" HEAD)"
-          probe_sha256="$(sha256sum "$RUNNER_TEMP/product4-sandbox-out/sandbox-probe.json" | cut -d' ' -f1)"
-          export RECEIPT_PATH="$RUNNER_TEMP/product4-sandbox-out/sandbox-receipt.json"
+          probe_sha256="$(sha256sum "$CARPEOS_SANDBOX_OUT/sandbox-probe.json" | cut -d' ' -f1)"
+          export RECEIPT_PATH="$CARPEOS_SANDBOX_OUT/sandbox-receipt.json"
           export HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
           export BASE_SHA="$PRODUCT4_BASE_SHA"
           export TREE_SHA256="$tree_sha256"
@@ -164,7 +166,7 @@ jobs:
             mode: 0o400,
           });
           NODE
-          chmod -R a-w "$RUNNER_TEMP/product4-sandbox-out"
+          chmod -R a-w "$CARPEOS_SANDBOX_OUT"
       - name: Recompute C-bound semantics from the trusted base
         run: |
           rm -rf "$RUNNER_TEMP/product4-attestation-out"
@@ -173,10 +175,10 @@ jobs:
           NODE_NO_WARNINGS=1 node "$GITHUB_WORKSPACE/scripts/product4/evaluator-runner.mjs" \
             --raw-report "$RUNNER_TEMP/product4-raw/raw-report.json" \
             --candidate-root "$CARPEOS_CANDIDATE_ROOT" \
-            --workspace-root "$RUNNER_TEMP/product4-sandbox-work" \
-            --cli-root "$RUNNER_TEMP/product4-sandbox-work" \
+            --workspace-root "$CARPEOS_SANDBOX_WORK" \
+            --cli-root "$CARPEOS_SANDBOX_WORK" \
             --home "$CARPEOS_HOME" \
-            --sandbox-receipt "$RUNNER_TEMP/product4-sandbox-out/sandbox-receipt.json" \
+            --sandbox-receipt "$CARPEOS_SANDBOX_OUT/sandbox-receipt.json" \
             --head-sha "${{ github.event.workflow_run.head_sha }}" \
             --base-sha "$PRODUCT4_BASE_SHA" \
             --tree-sha256 "$tree_sha256" \

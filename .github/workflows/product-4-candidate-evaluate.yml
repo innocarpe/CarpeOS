@@ -31,9 +31,9 @@ jobs:
     steps:
       - name: Configure disposable runner paths
         run: |
-          echo "CARPEOS_HOME=$RUNNER_TEMP/carpeos-product4" >> "$GITHUB_ENV"
-          echo "CARPEOS_SANDBOX_WORK=$RUNNER_TEMP/product4-sandbox-work" >> "$GITHUB_ENV"
-          echo "CARPEOS_SANDBOX_OUT=$RUNNER_TEMP/product4-sandbox-out" >> "$GITHUB_ENV"
+          echo "CARPEOS_HOME=/tmp/carpeos-product4-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "CARPEOS_SANDBOX_WORK=/tmp/product4-sandbox-work-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "CARPEOS_SANDBOX_OUT=/tmp/product4-sandbox-out-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
 
       - name: Check out candidate head C
         uses: actions/checkout@v7
@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CARPEOS_SANDBOX_WORK" "$CARPEOS_SANDBOX_OUT"
-          source_root="$RUNNER_TEMP/product4-sandbox-source"
+          source_root="/tmp/product4-sandbox-source-${GITHUB_RUN_ID}"
           rm -rf "$source_root"
           mkdir -p "$source_root"
           if ! cp -al "$GITHUB_WORKSPACE/." "$source_root/"; then
