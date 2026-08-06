@@ -12,11 +12,22 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- **P6 GraphRAG ranking** (Product 6.4 path):
+- (none yet — fold entries here before the next release)
+
+## [6.4.0] - 2026-08-07
+
+### Added
+
+- **P6 GraphRAG ranking** (Product 6.4):
   - Typed promoted unit boosts in hybrid ranking (active claim/summary/decision > draft > evidence)
   - Graph hop proximity remains non-authoritative (projection only)
   - Offline query set `fixtures/agentic/v1/graphrag-query-set/` with hit_rate ≥ 0.90
   - CLI `carpeos agentic graphrag` for suite receipt
+
+### Notes
+
+- Completes V6-P0–P6 delivery path for Product 6 Agentic Layer thesis slices.
+- Hosted graph/vector services remain non-goals.
 
 ## [6.3.0] - 2026-08-07
 
