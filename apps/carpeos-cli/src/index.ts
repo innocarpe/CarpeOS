@@ -12,6 +12,7 @@ import {
   AGENTIC_POLICY_VERSION,
   countAgenticJobs,
   createFlashSpendState,
+  evaluateAutoPromotePrecisionFromPath,
   evaluateGoldenManifest,
   getAgenticProposal,
   listAgenticHeldProposals,
@@ -1404,7 +1405,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|materialize). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|materialize|precision). See: carpeos help agentic",
     );
   }
 
@@ -1617,6 +1618,44 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           })),
         });
         return 0;
+      } finally {
+        db.close();
+      }
+    }
+    case "precision": {
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          path: { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const runtimeDir = parsed.values.home ?? runtimeDirFromEnv(env);
+      const goldenPath =
+        parsed.values.path ?? resolve(process.cwd(), "fixtures/agentic/v1/golden-12/manifest.json");
+      const db = openAgenticDb(runtimeDir);
+      try {
+        const report = evaluateAutoPromotePrecisionFromPath(db, goldenPath);
+        writeJson(process.stdout, {
+          ok: report.pass,
+          command: "agentic.precision",
+          report: {
+            schema: report.schema,
+            pass: report.pass,
+            precision: report.precision,
+            precision_min: report.precision_min,
+            promote_count: report.promote_count,
+            true_promote_count: report.true_promote_count,
+            false_promote_count: report.false_promote_count,
+            must_not_promote_leaks: report.must_not_promote_leaks,
+            case_count: report.case_count,
+            reason_codes: report.reason_codes,
+          },
+          path: goldenPath,
+        });
+        return report.pass ? 0 : 1;
       } finally {
         db.close();
       }
@@ -1982,6 +2021,7 @@ USAGE
   carpeos agentic golden [--path <manifest.json>]
   carpeos agentic list-held [--limit N]
   carpeos agentic materialize --proposal-id <id> --artifact-id <id> [--allow-promote]
+  carpeos agentic precision [--path <golden-manifest.json>]
 
 SUBCOMMANDS
   status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
@@ -1989,6 +2029,7 @@ SUBCOMMANDS
   golden       Evaluate fixtures/agentic/v1/golden-12 offline
   list-held    List agentic_v1 hold proposals for human review
   materialize  Materialize one proposal to draft Observation + disposition
+  precision    P3 offline auto-promote precision suite (must ≥ 0.90; zero must_not leaks)
 
 HARD FENCES
   - Capture inserts feed only (no LLM/network/await in capture transaction)

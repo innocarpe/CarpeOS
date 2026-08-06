@@ -8,7 +8,8 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **V6-P0** Architecture freeze | ADR 0017 + PRD-v6 + DoD + architecture + scaffold + golden skeleton | docs + `packages/agentic` + golden-12; PR #265 scaffold on main | **complete** |
 | **V6-P1** Proposal jobs | Durable jobs E1–E5; proposals `canonical_effect: none`; fake default | unit tests + feed/runner product loop on main | **complete** |
 | **V6-P2** Hold materialize | draft Observation + `agentic_v1` hold; human promote | materialize + CLI list-held/materialize; golden-12 green | **complete** (hold-first) |
-| **V6-P3** Narrow auto-promote | allowlist + E5 + precision ≥ 0.90 | eval receipt | pending |
+| **V6-P3** Narrow auto-promote | allowlist + E5 + precision ≥ 0.90 | precision suite offline; `carpeos agentic precision` | **complete** (offline suite) |
+| **npm 6.1.0** | P3 ship | release skill | pending |
 | **V6-P4** Link / graph density | provenance edges → meaning_unit graph uplift | graph metrics test | pending |
 | **V6-P5** Draft Claims | decision/fact_candidate drafts; accept = 0 auto | Claim fixtures | pending |
 | **V6-P6** GraphRAG ranking | typed promoted units in ranking path | offline query set | pending |

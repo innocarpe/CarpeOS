@@ -15,6 +15,7 @@ export * from "./jobs.js";
 export * from "./materialize.js";
 export * from "./pack.js";
 export * from "./pipeline.js";
+export * from "./precision.js";
 export * from "./proposals.js";
 export * from "./runner.js";
 export type { SqlDatabase, SqlStatement } from "./sql.js";
