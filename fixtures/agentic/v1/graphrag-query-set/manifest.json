@@ -1,0 +1,219 @@
+{
+  "schema": "carpeos.agentic.graphrag-query-set/v1",
+  "description": "Offline GraphRAG query set (P6): typed promoted meaning units must outrank evidence residue. Synthetic public-safe text only.",
+  "cases": [
+    {
+      "id": "q-preflight-decision",
+      "query_text": "preflight pull request",
+      "expect_top_id": "unit_preflight_decision",
+      "must_not_top_ids": ["noise_evidence_preflight", "noise_tool_status"],
+      "candidates": [
+        {
+          "chunk_id": "unit_preflight_decision",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Decision: we will require make preflight before opening any pull request.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "noise_evidence_preflight",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json artifact_id=art_preflight event_id=evt_noise_preflight",
+          "graph_hop": 1
+        },
+        {
+          "chunk_id": "noise_tool_status",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=tool media_type=text/plain artifact_id=art_git preflight git status exit 0",
+          "graph_hop": 2
+        }
+      ]
+    },
+    {
+      "id": "q-claim-factual",
+      "query_text": "precision suite 0.90",
+      "expect_top_id": "unit_precision_claim",
+      "must_not_top_ids": ["noise_evidence_precision"],
+      "candidates": [
+        {
+          "chunk_id": "unit_precision_claim",
+          "chunk_kind": "claim",
+          "lifecycle_status": "active",
+          "text": "Fact: the offline density suite requires precision of at least 0.90.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "draft_precision_claim",
+          "chunk_kind": "claim",
+          "lifecycle_status": "draft",
+          "text": "Fact: the offline density suite requires precision of at least 0.90 (draft).",
+          "graph_hop": 1
+        },
+        {
+          "chunk_id": "noise_evidence_precision",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json precision suite transcript metadata only",
+          "graph_hop": 1
+        }
+      ]
+    },
+    {
+      "id": "q-capture-constraint",
+      "query_text": "capture hooks never LLM",
+      "expect_top_id": "unit_capture_constraint",
+      "must_not_top_ids": ["noise_evidence_capture"],
+      "candidates": [
+        {
+          "chunk_id": "unit_capture_constraint",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Constraint: capture hooks must never call the network or an LLM.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "noise_evidence_capture",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json capture hooks LLM network metadata",
+          "graph_hop": 0
+        }
+      ]
+    },
+    {
+      "id": "q-preference-search",
+      "query_text": "default search promoted active",
+      "expect_top_ids_any": ["unit_preference_search"],
+      "top_k": 2,
+      "must_not_top_ids": ["noise_evidence_search"],
+      "candidates": [
+        {
+          "chunk_id": "unit_preference_search",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Preference: default search remains promoted active knowledge only.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "noise_evidence_search",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=tool media_type=text/plain default search promoted active noise",
+          "graph_hop": 1
+        },
+        {
+          "chunk_id": "distant_unrelated",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Decision: we will rename the private sandbox project next year.",
+          "graph_hop": 2
+        }
+      ]
+    },
+    {
+      "id": "q-graph-hop-near",
+      "query_text": "agentic materialize hold",
+      "expect_top_id": "unit_near_agentic",
+      "must_not_top_ids": ["unit_far_agentic", "noise_evidence_agentic"],
+      "candidates": [
+        {
+          "chunk_id": "unit_near_agentic",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Decision: agentic materialize remains hold-first without automatic acceptance.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "unit_far_agentic",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Decision: agentic materialize remains hold-first without automatic acceptance.",
+          "graph_hop": 2
+        },
+        {
+          "chunk_id": "noise_evidence_agentic",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json agentic materialize hold metadata",
+          "graph_hop": 0
+        }
+      ]
+    },
+    {
+      "id": "q-draft-vs-evidence",
+      "query_text": "flash only deepseek model",
+      "expect_top_ids_any": ["unit_draft_flash", "unit_active_flash"],
+      "top_k": 2,
+      "must_not_top_ids": ["noise_evidence_flash"],
+      "candidates": [
+        {
+          "chunk_id": "unit_active_flash",
+          "chunk_kind": "claim",
+          "lifecycle_status": "active",
+          "text": "Fact: real agentic model id is deepseek-v4-flash only.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "unit_draft_flash",
+          "chunk_kind": "claim",
+          "lifecycle_status": "draft",
+          "text": "Fact: real agentic model id is deepseek-v4-flash only (draft claim).",
+          "graph_hop": 1
+        },
+        {
+          "chunk_id": "noise_evidence_flash",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json deepseek flash only model metadata",
+          "graph_hop": 0
+        }
+      ]
+    },
+    {
+      "id": "q-open-loop-noise",
+      "query_text": "maybe preflight sometime",
+      "expect_top_ids_any": ["unit_open_question", "noise_ambiguous_evidence"],
+      "top_k": 3,
+      "candidates": [
+        {
+          "chunk_id": "unit_open_question",
+          "chunk_kind": "open_loop",
+          "lifecycle_status": "draft",
+          "text": "Open question: is preflight worth the latency sometime?",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "noise_ambiguous_evidence",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json maybe preflight sometime",
+          "graph_hop": 1
+        }
+      ]
+    },
+    {
+      "id": "q-multi-unit-subject",
+      "query_text": "public package name rename",
+      "expect_top_id": "unit_package_name",
+      "must_not_top_ids": ["noise_package_evidence"],
+      "candidates": [
+        {
+          "chunk_id": "unit_package_name",
+          "chunk_kind": "summary",
+          "lifecycle_status": "active",
+          "text": "Decision: the public package name is @innocarpe/example and will not rename it this quarter.",
+          "graph_hop": 0
+        },
+        {
+          "chunk_id": "noise_package_evidence",
+          "chunk_kind": "evidence_excerpt",
+          "lifecycle_status": "active",
+          "text": "EvidenceArtifact kind=session media_type=application/json public package name rename metadata",
+          "graph_hop": 0
+        }
+      ]
+    }
+  ]
+}

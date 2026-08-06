@@ -12,11 +12,12 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **npm 6.1.0** | P3 ship | precision suite + CLI; npm+tag+local activate | **complete** |
 | **V6-P4** Link / graph density | provenance edges → meaning_unit graph uplift | graph metrics test + `carpeos agentic graph-metrics` | **complete** |
 | **V6-P5** Draft Claims | decision/fact_candidate drafts; accept = 0 auto | Claim fixtures + materialize tests | **complete** |
-| **V6-P6** GraphRAG ranking | typed promoted units in ranking path | offline query set | pending |
+| **V6-P6** GraphRAG ranking | typed promoted units in ranking path | offline query set + `carpeos agentic graphrag` | **in progress** (this branch) |
 | **npm 6.0.0** | major surface + activation | hold-first cut + major-release-surface | **complete** |
 | **npm 6.1.0** | P3 narrow auto-promote | precision suite receipt | **complete** |
 | **npm 6.2.0** | P4 link / graph density | structure edges + density metrics; npm+tag+local activate | **complete** |
 | **npm 6.3.0** | P5 draft Claims | fact_candidate/decision draft Claims; zero auto AcceptanceDecision; npm+tag+local activate | **complete** |
+| **npm 6.4.0** | P6 GraphRAG ranking | typed unit boost + offline query set hit_rate ≥ 0.90 | pending cut |
 
 ## Hard fences
 

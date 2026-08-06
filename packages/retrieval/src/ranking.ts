@@ -16,7 +16,7 @@ export const CHUNK_KIND_PRIORITY: Readonly<Record<string, number>> = {
   claim: 1,
   decision: 0.95,
   summary: 0.9,
-  open_loop: 0.7,
+  open_loop: 0.55,
   evidence_excerpt: 0.2,
 };
 
@@ -49,6 +49,11 @@ export function rankHybrid(
     boostWorktreeId?: string;
     /** chunk_id -> hop distance from hybrid seed (0 = seed). */
     graphProximity?: ReadonlyMap<string, number>;
+    /**
+     * P6 GraphRAG: chunk_id → additional structured boost for typed promoted units
+     * (0–1 scale, multiplied by structured weight inside scoreCandidate).
+     */
+    typedUnitBoost?: ReadonlyMap<string, number>;
   } = {},
 ): RankedCandidate[] {
   return candidates
@@ -188,6 +193,7 @@ export function scoreCandidate(
   options: {
     boostWorktreeId?: string;
     graphProximity?: ReadonlyMap<string, number>;
+    typedUnitBoost?: ReadonlyMap<string, number>;
   } = {},
 ): RetrievalScore {
   // Fold kind priority into structured so schema score shape stays unchanged.
@@ -203,8 +209,15 @@ export function scoreCandidate(
     hop === undefined || hop < 0 || hop >= GRAPH_HOP_BOOST.length
       ? 0
       : Math.max(weights.structured, 0) * GRAPH_HOP_BOOST[hop]!;
+  // P6 GraphRAG: typed promoted/draft units get explicit structured boost over evidence residue.
+  const typedBoostRaw = options.typedUnitBoost?.get(candidate.chunk.chunk_id) ?? 0;
+  const typedBoost = Math.max(0, typedBoostRaw) * Math.max(weights.structured, 0);
   const structured =
-    candidate.structured_score * weights.structured + kindBoost + worktreeBoost + graphBoost;
+    candidate.structured_score * weights.structured +
+    kindBoost +
+    worktreeBoost +
+    graphBoost +
+    typedBoost;
   const fts = candidate.fts_score * weights.fts;
   const semantic = candidate.semantic_score * weights.semantic;
   const recency = candidate.recency_score * weights.recency;
