@@ -125,6 +125,10 @@ const evaluatorAttestation = {
       outbox_rows: 0,
       protected_uploads: 0,
     },
+    candidate_execution: {
+      unprivileged: true,
+      isolated: true,
+    },
   },
   provenance: {
     source_report_sha256: "3".repeat(64),

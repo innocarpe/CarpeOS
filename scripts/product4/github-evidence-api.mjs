@@ -15,6 +15,26 @@ const SHA1 = /^[0-9a-f]{40}$/;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const FORBIDDEN_KEY =
   /token|secret|credential|private_path|protected_plaintext|script|module|url|executable|shell/i;
+const CHECK_RUN_STATUSES = new Set([
+  "queued",
+  "in_progress",
+  "completed",
+  "requested",
+  "waiting",
+  "pending",
+]);
+const CHECK_RUN_CONCLUSIONS = new Set([
+  "action_required",
+  "cancelled",
+  "failure",
+  "neutral",
+  "success",
+  "skipped",
+  "stale",
+  "timed_out",
+]);
+const ADAPTER_PAGE = Symbol("product4.githubEvidence.adapterPage");
+const ADAPTER_KIND = Symbol("product4.githubEvidence.adapterKind");
 
 export class EvidenceApiError extends Error {
   constructor(code, message) {
@@ -32,8 +52,7 @@ export function buildExactCheckQuery({
   policySha256 = PRODUCT4_POLICY_SHA256,
   context = PRODUCT4_CONTEXT,
 }) {
-  if (typeof repositoryPath !== "string" || !/^[-_./a-z0-9]{3,200}$/i.test(repositoryPath))
-    throwApiError("invalid_query", "repository path is invalid");
+  const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
   assertSha(headSha, SHA1, "head_sha");
   if (checkName !== PRODUCT4_CHECK_NAME) throwApiError("invalid_query", "check name is not frozen");
   if (fixtureSha256 !== MAINTENANCE_STUDY_FIXTURE_SHA256)
@@ -44,7 +63,7 @@ export function buildExactCheckQuery({
     throwApiError("context_mismatch", "query context is not frozen");
   return {
     method: "GET",
-    path: `${repositoryPath.replace(/\/$/, "")}/commits/${headSha}/check-runs`,
+    path: `${normalizedRepositoryPath}/commits/${headSha}/check-runs`,
     query: {
       check_name: PRODUCT4_CHECK_NAME,
       filter: "all",
@@ -52,7 +71,7 @@ export function buildExactCheckQuery({
     },
     identity: {
       repository_id: PRODUCT4_REPOSITORY_ID,
-      repository_path: repositoryPath,
+      repository_path: normalizedRepositoryPath,
       head_sha: headSha,
       check_name: PRODUCT4_CHECK_NAME,
       fixture_sha256: fixtureSha256,
@@ -70,21 +89,35 @@ export function assertExactCheckQuery(query, expected) {
     throwApiError("invalid_query", "exact lookup requires filter=all and per_page=100");
   if (query.query.check_name !== PRODUCT4_CHECK_NAME)
     throwApiError("invalid_query", "exact lookup requires the frozen check name");
+  const queryKeys = Object.keys(query.query).sort();
+  if (queryKeys.join(",") !== "check_name,filter,per_page")
+    throwApiError("invalid_query", "exact lookup contains unsupported query parameters");
   if (expected !== undefined) {
+    if (!isRecord(expected))
+      throwApiError("identity_conflict", "expected query identity is required");
     if (query.path !== expected.path || query.query.check_name !== expected.query.check_name)
       throwApiError("identity_conflict", "query does not target the expected C/name identity");
+    if (isRecord(expected.identity)) assertQueryIdentity(query.identity, expected.identity);
   }
   assertSafePayload(query);
   return query;
 }
 
-export async function collectPaginatedPages({ firstUrl, fetchPage, pageSize = EXACT_PAGE_SIZE }) {
+export async function collectPaginatedPages({
+  firstUrl,
+  fetchPage,
+  pageSize = EXACT_PAGE_SIZE,
+  normalizePage,
+  identity,
+}) {
   if (typeof firstUrl !== "string" || firstUrl.length === 0)
     throwApiError("invalid_pagination", "first URL is required");
   if (typeof fetchPage !== "function")
     throwApiError("invalid_pagination", "page callback is required");
   if (pageSize !== EXACT_PAGE_SIZE)
     throwApiError("invalid_pagination", "page size is frozen at 100");
+  if (normalizePage !== undefined && typeof normalizePage !== "function")
+    throwApiError("invalid_pagination", "page normalizer must be a callback");
 
   const pages = [];
   const visited = new Set();
@@ -93,28 +126,147 @@ export async function collectPaginatedPages({ firstUrl, fetchPage, pageSize = EX
     if (visited.has(nextUrl))
       throwApiError("incomplete_pagination", "Link traversal loop detected");
     visited.add(nextUrl);
-    const page = await fetchPage(nextUrl);
+    const rawPage = await fetchPage(nextUrl);
+    const page =
+      normalizePage !== undefined
+        ? await normalizePage(rawPage, { identity, url: nextUrl })
+        : normalizeGitHubPageIfNeeded(rawPage, identity);
     assertPage(page);
     pages.push(page);
-    const next = parseNextLink(page.headers.link);
+    const next = parseNextLink(readLinkHeader(page.headers));
     if (next === null && page.items.length === pageSize)
       throwApiError("incomplete_pagination", "full page is missing a Link rel=next boundary");
     nextUrl = next;
   }
   return pages;
 }
+function splitLinkHeader(linkHeader) {
+  const links = [];
+  let current = "";
+  let inAngle = false;
+  let inQuote = false;
+  let escaped = false;
+  for (const character of linkHeader) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+      continue;
+    }
+    if (inQuote && character === "\\") {
+      current += character;
+      escaped = true;
+      continue;
+    }
+    if (character === '"') {
+      inQuote = !inQuote;
+      current += character;
+      continue;
+    }
+    if (!inQuote && character === "<") inAngle = true;
+    if (!inQuote && character === ">") inAngle = false;
+    if (character === "," && !inQuote && !inAngle) {
+      if (current.trim() === "") throwApiError("invalid_pagination", "empty RFC 5988 Link value");
+      links.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  if (inAngle || inQuote) throwApiError("invalid_pagination", "unterminated RFC 5988 Link value");
+  if (current.trim() === "") throwApiError("invalid_pagination", "empty RFC 5988 Link value");
+  links.push(current.trim());
+  return links;
+}
+
+function parseLinkParameters(parametersText) {
+  if (parametersText.trim() === "") return {};
+  const parameters = {};
+  let offset = 0;
+  while (offset < parametersText.length) {
+    while (/\s/.test(parametersText[offset] ?? "")) offset += 1;
+    if (parametersText[offset] !== ";")
+      throwApiError("invalid_pagination", "malformed RFC 5988 Link parameters");
+    offset += 1;
+    while (/\s/.test(parametersText[offset] ?? "")) offset += 1;
+    const keyStart = offset;
+    while (
+      offset < parametersText.length &&
+      /[!#$%&'*+\-.^_`|~0-9A-Za-z]/.test(parametersText[offset])
+    )
+      offset += 1;
+    if (offset === keyStart)
+      throwApiError("invalid_pagination", "malformed RFC 5988 Link parameter name");
+    const key = parametersText.slice(keyStart, offset).toLowerCase();
+    while (/\s/.test(parametersText[offset] ?? "")) offset += 1;
+    if (parametersText[offset] !== "=")
+      throwApiError("invalid_pagination", "RFC 5988 Link parameter value is required");
+    offset += 1;
+    while (/\s/.test(parametersText[offset] ?? "")) offset += 1;
+    let value;
+    if (parametersText[offset] === '"') {
+      offset += 1;
+      let quoted = "";
+      let closed = false;
+      while (offset < parametersText.length) {
+        const character = parametersText[offset++];
+        if (character === "\\") {
+          if (offset >= parametersText.length)
+            throwApiError("invalid_pagination", "malformed quoted Link parameter");
+          quoted += parametersText[offset++];
+        } else if (character === '"') {
+          closed = true;
+          break;
+        } else {
+          quoted += character;
+        }
+      }
+      if (!closed) throwApiError("invalid_pagination", "unterminated quoted Link parameter");
+      value = quoted;
+    } else {
+      const valueStart = offset;
+      while (
+        offset < parametersText.length &&
+        parametersText[offset] !== ";" &&
+        !/\s/.test(parametersText[offset])
+      )
+        offset += 1;
+      if (offset === valueStart)
+        throwApiError("invalid_pagination", "RFC 5988 Link parameter value is invalid");
+      value = parametersText.slice(valueStart, offset);
+      while (/\s/.test(parametersText[offset] ?? "")) offset += 1;
+    }
+    if (Object.hasOwn(parameters, key))
+      throwApiError("invalid_pagination", `duplicate RFC 5988 Link parameter ${key}`);
+    parameters[key] = value;
+  }
+  return parameters;
+}
+
+function readLinkHeader(headers) {
+  if (headers === undefined || headers === null) return undefined;
+  if (typeof headers.get === "function") {
+    return headers.get("link") ?? headers.get("Link") ?? undefined;
+  }
+  if (!isRecord(headers)) return undefined;
+  const value = headers.link ?? headers.Link;
+  if (Array.isArray(value)) return value.join(", ");
+  return value;
+}
 
 export function parseNextLink(linkHeader) {
   if (linkHeader === undefined || linkHeader === null || linkHeader === "") return null;
   if (typeof linkHeader !== "string")
     throwApiError("invalid_pagination", "Link header is not a string");
-  const links = linkHeader.split(",").map((part) => part.trim());
+  const links = splitLinkHeader(linkHeader);
   let next = null;
   for (const link of links) {
-    const match = link.match(/^<([^<>]+)>\s*;\s*rel="?([^";]+)"?\s*$/i);
+    const match = link.match(/^\s*<([^<>]+)>\s*(.*)$/);
     if (match === null) throwApiError("invalid_pagination", "malformed RFC 5988 Link header");
-    const relations = match[2].split(/\s+/);
-    if (relations.includes("next")) {
+    const parameters = parseLinkParameters(match[2]);
+    const relation = parameters.rel;
+    if (relation === undefined) continue;
+    const relations = relation.split(/\s+/).filter(Boolean);
+    if (relations.some((value) => value.toLowerCase() === "next")) {
       if (next !== null) throwApiError("duplicate_refusal", "multiple rel=next links returned");
       next = match[1];
     }
@@ -135,8 +287,7 @@ export function buildEvidenceIdentity({
 }) {
   if (repositoryId !== PRODUCT4_REPOSITORY_ID)
     throwApiError("identity_conflict", "repository id is invalid");
-  if (typeof repositoryPath !== "string" || repositoryPath.length < 3)
-    throwApiError("identity_conflict", "repository path is required");
+  const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
   assertSha(headSha, SHA1, "head_sha");
   if (typeof externalId !== "string" || externalId.length < 10 || externalId.length > 200)
     throwApiError("identity_conflict", "external id is invalid");
@@ -153,7 +304,7 @@ export function buildEvidenceIdentity({
     throwApiError("app_identity_missing", "App id is required");
   return {
     repository_id: repositoryId,
-    repository_path: repositoryPath,
+    repository_path: normalizedRepositoryPath,
     head_sha: headSha,
     external_id: externalId,
     fixture_sha256: fixtureSha256,
@@ -164,6 +315,238 @@ export function buildEvidenceIdentity({
   };
 }
 
+export function assertRealCheckSuite(suite, identityOrOptions) {
+  const identity = normalizeAdapterIdentity(identityOrOptions);
+  if (!isRecord(suite)) throwApiError("malformed_response", "GitHub check suite must be an object");
+  if (Object.hasOwn(suite, "runs") || Object.hasOwn(suite, "items"))
+    throwApiError("malformed_response", "invented nested check-suite fields are not accepted");
+  const repository = assertGitHubRepository(suite.repository, identity);
+  const app = assertGitHubApp(suite.app, identity);
+  assertHeadSha(suite.head_sha, identity);
+  assertCheckState(suite.status, suite.conclusion, "check suite");
+  if (!Number.isSafeInteger(suite.id) || suite.id <= 0)
+    throwApiError("malformed_response", "GitHub check suite id is invalid");
+  return {
+    id: suite.id,
+    repository_id: repository.id,
+    repository_path: repository.full_name,
+    head_sha: identity.head_sha,
+    fixture_sha256: identity.fixture_sha256,
+    policy_sha256: identity.policy_sha256,
+    context: identity.context,
+    check_name: identity.check_name,
+    app_id: app.id,
+    status: suite.status,
+    conclusion: suite.conclusion,
+  };
+}
+
+export function assertRealCheckRun(run, identityOrOptions) {
+  const identity = normalizeAdapterIdentity(identityOrOptions);
+  if (!isRecord(run)) throwApiError("malformed_response", "GitHub check run must be an object");
+  if (Object.hasOwn(run, "runs") || Object.hasOwn(run, "items"))
+    throwApiError("malformed_response", "invented nested check-run fields are not accepted");
+  const repository = assertGitHubRepository(run.repository, identity);
+  const app = assertGitHubApp(run.app, identity);
+  assertHeadSha(run.head_sha, identity);
+  if (run.name !== identity.check_name)
+    throwApiError("duplicate_refusal", "check run name is foreign or missing");
+  if (typeof run.external_id !== "string" || run.external_id !== identity.external_id)
+    throwApiError("duplicate_refusal", "check run external id is foreign or missing");
+  assertCheckState(run.status, run.conclusion, "check run");
+  if (!Number.isSafeInteger(run.id) || run.id <= 0)
+    throwApiError("malformed_response", "GitHub check run id is invalid");
+  if (!isRecord(run.check_suite))
+    throwApiError("malformed_response", "GitHub check run suite is required");
+  const suite = assertRealCheckSuite(run.check_suite, identity);
+  return {
+    id: run.id,
+    suite_id: suite.id,
+    repository_id: repository.id,
+    repository_path: repository.full_name,
+    head_sha: identity.head_sha,
+    external_id: identity.external_id,
+    fixture_sha256: identity.fixture_sha256,
+    policy_sha256: identity.policy_sha256,
+    context: identity.context,
+    check_name: identity.check_name,
+    app_id: app.id,
+    status: run.status,
+    conclusion: run.conclusion,
+  };
+}
+
+export function normalizeCheckSuitesResponse(responseOrOptions, options) {
+  const { response, identity, headers } = resolveAdapterInput(responseOrOptions, options);
+  const payload = unwrapGitHubResponse(response);
+  if (Object.hasOwn(payload, "items") || Object.hasOwn(payload, "runs"))
+    throwApiError("malformed_response", "invented nested GitHub response fields are not accepted");
+  const verifiedIdentity = normalizeAdapterIdentity(identity);
+  if (!isRecord(payload) || !Array.isArray(payload.check_suites))
+    throwApiError("malformed_response", "GitHub response must contain check_suites");
+  assertTotalCount(payload.total_count, payload.check_suites.length, "check suites");
+  const items = payload.check_suites.map((suite) => assertRealCheckSuite(suite, verifiedIdentity));
+  return markAdapterPage({ items, headers: headers ?? response?.headers ?? {} }, "check_suites");
+}
+
+export function normalizeCheckRunsResponse(responseOrOptions, options) {
+  const { response, identity, headers } = resolveAdapterInput(responseOrOptions, options);
+  const payload = unwrapGitHubResponse(response);
+  if (Object.hasOwn(payload, "items") || Object.hasOwn(payload, "runs"))
+    throwApiError("malformed_response", "invented nested GitHub response fields are not accepted");
+  const verifiedIdentity = normalizeAdapterIdentity(identity);
+  if (!isRecord(payload) || !Array.isArray(payload.check_runs))
+    throwApiError("malformed_response", "GitHub response must contain check_runs");
+  assertTotalCount(payload.total_count, payload.check_runs.length, "check runs");
+  const rawRuns = payload.check_runs;
+  const items = rawRuns.map((run) => assertRealCheckRun(run, verifiedIdentity));
+  const suites = new Map();
+  for (const [index, run] of items.entries()) {
+    const suite = assertRealCheckSuite(rawRuns[index].check_suite, verifiedIdentity);
+    const existing = suites.get(suite.id);
+    if (existing !== undefined && canonicalJson(existing) !== canonicalJson(suite))
+      throwApiError("duplicate_refusal", `conflicting duplicate check suite ${suite.id}`);
+    if (existing === undefined) suites.set(suite.id, suite);
+  }
+  return markAdapterPage(
+    {
+      items,
+      suites: [...suites.values()].sort((left, right) => left.id - right.id),
+      headers: headers ?? response?.headers ?? {},
+    },
+    "check_runs",
+  );
+}
+
+function normalizeAdapterIdentity(identityOrOptions) {
+  const identity =
+    isRecord(identityOrOptions) && isRecord(identityOrOptions.identity)
+      ? identityOrOptions.identity
+      : identityOrOptions;
+  return normalizeEvidenceIdentity(identity);
+}
+
+function resolveAdapterInput(responseOrOptions, options) {
+  if (
+    options === undefined &&
+    isRecord(responseOrOptions) &&
+    Object.hasOwn(responseOrOptions, "response")
+  ) {
+    return {
+      response: responseOrOptions.response,
+      identity: responseOrOptions.identity,
+      headers: responseOrOptions.headers,
+    };
+  }
+  if (
+    options === undefined &&
+    isRecord(responseOrOptions) &&
+    Object.hasOwn(responseOrOptions, "identity") &&
+    (Object.hasOwn(responseOrOptions, "data") ||
+      Object.hasOwn(responseOrOptions, "body") ||
+      Object.hasOwn(responseOrOptions, "payload") ||
+      Object.hasOwn(responseOrOptions, "check_runs") ||
+      Object.hasOwn(responseOrOptions, "check_suites"))
+  ) {
+    return {
+      response:
+        responseOrOptions.response ??
+        responseOrOptions.payload ??
+        responseOrOptions.data ??
+        responseOrOptions.body ??
+        responseOrOptions,
+      identity: responseOrOptions.identity,
+      headers: responseOrOptions.headers,
+    };
+  }
+  if (
+    options !== undefined &&
+    isRecord(options) &&
+    !Object.hasOwn(options, "identity") &&
+    Object.hasOwn(options, "repository_id")
+  ) {
+    return { response: responseOrOptions, identity: options };
+  }
+  return {
+    response: responseOrOptions,
+    identity: isRecord(options) && Object.hasOwn(options, "identity") ? options.identity : options,
+    headers: isRecord(options) ? options.headers : undefined,
+  };
+}
+
+function normalizeGitHubPageIfNeeded(response, identity) {
+  if (!isRecord(response) || identity === undefined) return response;
+  const payload = unwrapGitHubResponse(response);
+  if (Array.isArray(payload.check_runs)) return normalizeCheckRunsResponse(response, { identity });
+  if (Array.isArray(payload.check_suites))
+    return normalizeCheckSuitesResponse(response, { identity });
+  return response;
+}
+function unwrapGitHubResponse(response) {
+  if (!isRecord(response)) throwApiError("malformed_response", "GitHub response is required");
+  if (
+    isRecord(response.data) &&
+    !Array.isArray(response.check_suites) &&
+    !Array.isArray(response.check_runs)
+  )
+    return response.data;
+  if (
+    isRecord(response.body) &&
+    !Array.isArray(response.check_suites) &&
+    !Array.isArray(response.check_runs)
+  )
+    return response.body;
+  return response;
+}
+
+function markAdapterPage(page, kind) {
+  Object.defineProperty(page, ADAPTER_PAGE, { value: true });
+  Object.defineProperty(page, ADAPTER_KIND, { value: kind });
+  return page;
+}
+
+function assertGitHubRepository(repository, identity) {
+  if (!isRecord(repository))
+    throwApiError("malformed_response", "GitHub response repository is required");
+  if (repository.id !== identity.repository_id || repository.full_name !== identity.repository_path)
+    throwApiError("duplicate_refusal", "foreign repository identity");
+  return repository;
+}
+
+function assertGitHubApp(app, identity) {
+  if (!isRecord(app) || !Number.isSafeInteger(app.id) || app.id <= 0)
+    throwApiError("app_identity_missing", "GitHub response App identity is required");
+  if (app.id !== identity.app_id) throwApiError("duplicate_refusal", "foreign App identity");
+  return app;
+}
+
+function assertHeadSha(headSha, identity) {
+  if (typeof headSha !== "string" || headSha !== identity.head_sha)
+    throwApiError("duplicate_refusal", "foreign or moved head C");
+}
+
+function assertCheckState(status, conclusion, label) {
+  if (typeof status !== "string" || !CHECK_RUN_STATUSES.has(status))
+    throwApiError("malformed_response", `${label} status is invalid`);
+  if (conclusion === undefined)
+    throwApiError("malformed_response", `${label} conclusion is required`);
+  if (
+    conclusion !== null &&
+    (typeof conclusion !== "string" || !CHECK_RUN_CONCLUSIONS.has(conclusion))
+  )
+    throwApiError("malformed_response", `${label} conclusion is invalid`);
+  if (status === "completed" && conclusion === null)
+    throwApiError("malformed_response", `${label} completed state requires a conclusion`);
+  if (status !== "completed" && conclusion !== null)
+    throwApiError("malformed_response", `${label} non-completed state cannot have a conclusion`);
+}
+
+function assertTotalCount(totalCount, itemCount, label) {
+  if (!Number.isSafeInteger(totalCount) || totalCount < itemCount)
+    throwApiError("malformed_response", `GitHub ${label} total_count is invalid`);
+  if (itemCount > EXACT_PAGE_SIZE)
+    throwApiError("malformed_response", `GitHub ${label} page exceeds per_page=100`);
+}
 export function assertEvidenceRecord(record, identity) {
   if (!isRecord(record)) throwApiError("malformed_response", "evidence response is not an object");
   const errors = [];
@@ -183,41 +566,108 @@ export function assertEvidenceRecord(record, identity) {
 
 export function collectCheckRuns({ pages, identity, suiteCap = CHECK_SUITE_CAP }) {
   if (!Array.isArray(pages)) throwApiError("malformed_response", "suite pages are required");
+  const verifiedIdentity = normalizeEvidenceIdentity(identity);
   if (!Number.isSafeInteger(suiteCap) || suiteCap < 1 || suiteCap > CHECK_SUITE_CAP)
     throwApiError("cap_exceeded", "suite cap is invalid");
   const runs = new Map();
-  let suiteCount = 0;
+  const suites = new Map();
+  let legacySuiteCount = 0;
   for (const page of pages) {
     assertPage(page);
+    if (page[ADAPTER_PAGE] === true) {
+      if (page[ADAPTER_KIND] === "check_runs") {
+        if (!Array.isArray(page.suites))
+          throwApiError("malformed_response", "normalized check-run suites are required");
+        for (const suite of page.suites) registerNormalizedSuite(suites, suite, suiteCap);
+        for (const run of page.items) {
+          assertNormalizedRun(run, verifiedIdentity);
+          registerRun(runs, run);
+        }
+      } else if (page[ADAPTER_KIND] === "check_suites") {
+        for (const suite of page.items) registerNormalizedSuite(suites, suite, suiteCap);
+        if (Array.isArray(page.runs)) {
+          for (const run of page.runs) {
+            assertNormalizedRun(run, verifiedIdentity);
+            registerRun(runs, run);
+          }
+        }
+      } else {
+        throwApiError("malformed_response", "unknown evidence adapter page");
+      }
+      continue;
+    }
+
+    // Legacy pages are retained for internal predicate tests only. Receipts require
+    // adapter-marked GitHub pages and therefore cannot accidentally trust this shape.
     for (const suite of page.items) {
-      suiteCount += 1;
-      if (suiteCount > suiteCap) throwApiError("cap_exceeded", "check suite cap exceeded");
-      assertEvidenceRecord(suite, identity);
+      legacySuiteCount += 1;
+      if (legacySuiteCount > suiteCap) throwApiError("cap_exceeded", "check suite cap exceeded");
+      assertEvidenceRecord(suite, verifiedIdentity);
       if (!Array.isArray(suite.runs))
         throwApiError("malformed_response", "suite runs are required");
       for (const run of suite.runs) {
         if (!isRecord(run) || !Number.isSafeInteger(run.id) || run.id <= 0)
           throwApiError("malformed_response", "check run id is invalid");
-        if (run.app_id !== identity.app_id || run.head_sha !== identity.head_sha)
+        if (run.app_id !== verifiedIdentity.app_id || run.head_sha !== verifiedIdentity.head_sha)
           throwApiError("duplicate_refusal", "check run identity is foreign or moved");
         assertSafePayload(run);
-        const existing = runs.get(run.id);
-        if (existing !== undefined && canonicalJson(existing) !== canonicalJson(run))
-          throwApiError("duplicate_refusal", `conflicting duplicate check run ${run.id}`);
-        if (existing === undefined) runs.set(run.id, run);
+        registerRun(runs, run);
       }
     }
   }
   return [...runs.values()].sort((left, right) => left.id - right.id);
 }
+
+function registerNormalizedSuite(suites, suite, suiteCap) {
+  if (!isRecord(suite) || !Number.isSafeInteger(suite.id) || suite.id <= 0)
+    throwApiError("malformed_response", "normalized check suite id is invalid");
+  const existing = suites.get(suite.id);
+  if (existing !== undefined && canonicalJson(existing) !== canonicalJson(suite))
+    throwApiError("duplicate_refusal", `conflicting duplicate check suite ${suite.id}`);
+  if (existing === undefined) {
+    suites.set(suite.id, suite);
+    if (suites.size > suiteCap) throwApiError("cap_exceeded", "check suite cap exceeded");
+  }
+}
+
+function assertNormalizedRun(run, identity) {
+  if (!isRecord(run) || !Number.isSafeInteger(run.id) || run.id <= 0)
+    throwApiError("malformed_response", "normalized check run id is invalid");
+  if (
+    run.repository_id !== identity.repository_id ||
+    run.repository_path !== identity.repository_path ||
+    run.head_sha !== identity.head_sha ||
+    run.external_id !== identity.external_id ||
+    run.fixture_sha256 !== identity.fixture_sha256 ||
+    run.policy_sha256 !== identity.policy_sha256 ||
+    run.context !== identity.context ||
+    run.check_name !== identity.check_name ||
+    run.app_id !== identity.app_id
+  )
+    throwApiError("duplicate_refusal", "normalized check run identity is foreign");
+  assertCheckState(run.status, run.conclusion, "normalized check run");
+  assertSafePayload(run);
+}
+
+function registerRun(runs, run) {
+  const existing = runs.get(run.id);
+  if (existing !== undefined && canonicalJson(existing) !== canonicalJson(run))
+    throwApiError("duplicate_refusal", `conflicting duplicate check run ${run.id}`);
+  if (existing === undefined) runs.set(run.id, run);
+}
 export const EVIDENCE_RECEIPT_SCHEMA = "product4-evidence-api-receipt-v1";
 
 export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
-  assertExactCheckQuery(query);
   const verifiedIdentity = normalizeEvidenceIdentity(identity);
+  assertExactCheckQuery(query);
+  assertQueryBoundToIdentity(query, verifiedIdentity);
   if (!Array.isArray(pages) || pages.length < 1 || pages.length > CHECK_SUITE_CAP)
     throwApiError("malformed_response", "evidence pages must be bounded and non-empty");
+  if (pages.some((page) => page[ADAPTER_PAGE] !== true))
+    throwApiError("malformed_response", "real GitHub adapter pages are required");
   const runs = collectCheckRuns({ pages, identity: verifiedIdentity });
+  if (runs.length === 0)
+    throwApiError("malformed_response", "verified evidence must contain a check run");
   const unsigned = {
     schema_version: EVIDENCE_RECEIPT_SCHEMA,
     receipt_type: "exact_check_evidence",
@@ -234,12 +684,72 @@ export function buildEvidenceReceipt({ query, pages, identity, observedAt }) {
     query_digest: digestJson(query),
     identity_digest: digestJson(verifiedIdentity),
     page_count: pages.length,
-    suite_count: pages.reduce((count, page) => count + page.items.length, 0),
+    suite_count: countNormalizedSuites(pages),
     run_ids: runs.map((run) => run.id),
     observed_at: observedAt,
   };
   const receipt = { ...unsigned, receipt_digest: digestJson(unsigned) };
   return assertEvidenceReceipt(receipt);
+}
+
+function assertQueryBoundToIdentity(query, identity) {
+  const expectedPath = `${identity.repository_path}/commits/${identity.head_sha}/check-runs`;
+  if (query.path !== expectedPath || query.query.check_name !== identity.check_name)
+    throwApiError("identity_conflict", "query does not target the normalized C/name identity");
+  assertQueryIdentity(query.identity, {
+    repository_id: identity.repository_id,
+    repository_path: identity.repository_path,
+    head_sha: identity.head_sha,
+    check_name: identity.check_name,
+    fixture_sha256: identity.fixture_sha256,
+    policy_sha256: identity.policy_sha256,
+    context: identity.context,
+  });
+}
+
+function assertQueryIdentity(actual, expected) {
+  if (!isRecord(actual)) throwApiError("identity_conflict", "query identity is required");
+  for (const key of Object.keys(actual)) {
+    if (
+      ![
+        "repository_id",
+        "repository_path",
+        "head_sha",
+        "check_name",
+        "fixture_sha256",
+        "policy_sha256",
+        "context",
+      ].includes(key)
+    )
+      throwApiError("identity_conflict", `query identity field ${key} is unsupported`);
+  }
+  for (const key of Object.keys(expected)) {
+    if (actual[key] !== expected[key])
+      throwApiError("identity_conflict", `query identity ${key} does not match`);
+  }
+}
+
+function countNormalizedSuites(pages) {
+  const suites = new Map();
+  for (const page of pages) {
+    const pageSuites =
+      page[ADAPTER_KIND] === "check_runs"
+        ? page.suites
+        : page[ADAPTER_KIND] === "check_suites"
+          ? page.items
+          : undefined;
+    if (!Array.isArray(pageSuites))
+      throwApiError("malformed_response", "normalized check suites are required");
+    for (const suite of pageSuites) {
+      if (!isRecord(suite) || !Number.isSafeInteger(suite.id) || suite.id <= 0)
+        throwApiError("malformed_response", "normalized check suite id is invalid");
+      const existing = suites.get(suite.id);
+      if (existing !== undefined && canonicalJson(existing) !== canonicalJson(suite))
+        throwApiError("duplicate_refusal", `conflicting duplicate check suite ${suite.id}`);
+      if (existing === undefined) suites.set(suite.id, suite);
+    }
+  }
+  return suites.size;
 }
 
 export function assertEvidenceReceipt(receipt) {
@@ -390,6 +900,14 @@ function assertPage(page) {
     throwApiError("malformed_response", "page exceeds per_page=100");
 }
 
+function normalizeRepositoryPath(repositoryPath) {
+  if (typeof repositoryPath !== "string")
+    throwApiError("identity_conflict", "repository path is required");
+  const normalized = repositoryPath.replace(/\/+$/, "");
+  if (normalized.length < 3 || normalized.length > 200 || !/^[-_./a-z0-9]+$/i.test(normalized))
+    throwApiError("identity_conflict", "repository path is invalid");
+  return normalized;
+}
 function assertSha(value, pattern, label) {
   if (typeof value !== "string" || !pattern.test(value))
     throwApiError("invalid_identity", `${label} is invalid`);

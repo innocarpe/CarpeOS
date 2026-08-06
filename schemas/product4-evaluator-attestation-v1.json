@@ -76,7 +76,7 @@
     "observations": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["p02", "zero_write", "high_water"],
+      "required": ["p02", "zero_write", "high_water", "candidate_execution"],
       "properties": {
         "p02": {
           "type": "object",
@@ -123,6 +123,15 @@
             "disposition_rows": { "type": "integer", "minimum": 0, "maximum": 1000000 },
             "outbox_rows": { "type": "integer", "minimum": 0, "maximum": 1000000 },
             "protected_uploads": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+          }
+        },
+        "candidate_execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unprivileged", "isolated"],
+          "properties": {
+            "unprivileged": { "const": true },
+            "isolated": { "const": true }
           }
         }
       }

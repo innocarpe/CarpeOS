@@ -17,6 +17,7 @@ import {
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
+  normalizeCheckRunsResponse,
 } from "./github-evidence-api.mjs";
 import { assertP02Receipt, buildP02Receipt, P02_COMMAND_LINE } from "./p02-replay.mjs";
 import {
@@ -311,33 +312,61 @@ function duplicateApiResults() {
     repositoryPath: identity.repository_path,
     headSha: candidateSha,
   });
-  const suite = {
-    id: 1,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
-    head_sha: candidateSha,
-    external_id: externalId,
-    fixture_sha256: identity.fixture_sha256,
-    policy_sha256: identity.policy_sha256,
-    context: identity.context,
-    check_name: identity.check_name,
-    app_id: 4242,
-    runs: [
-      { id: 2, app_id: 4242, head_sha: candidateSha, conclusion: "success" },
-      { id: 2, app_id: 4242, head_sha: candidateSha, conclusion: "failure" },
-    ],
-  };
+  // Receipts require adapter-marked GitHub pages. Drive the same-id conflict through the
+  // real check-runs adapter so duplicate refusal still targets buildEvidenceReceipt.
+  const successPage = normalizeCheckRunsResponse(
+    {
+      total_count: 1,
+      check_runs: [syntheticGitHubRun(identity, 2, "success")],
+      headers: { link: "" },
+    },
+    { identity },
+  );
+  const failurePage = normalizeCheckRunsResponse(
+    {
+      total_count: 1,
+      check_runs: [syntheticGitHubRun(identity, 2, "failure")],
+      headers: { link: "" },
+    },
+    { identity },
+  );
   expectRefusal(
     () =>
       buildEvidenceReceipt({
         query,
         identity,
-        pages: [{ items: [suite], headers: { link: "" } }],
+        pages: [successPage, failurePage],
         observedAt: timestamp,
       }),
     "duplicate_refusal",
   );
   return "refused";
+}
+
+function syntheticGitHubRun(identity, id, conclusion) {
+  const repository = {
+    id: identity.repository_id,
+    full_name: identity.repository_path,
+  };
+  const app = { id: identity.app_id, name: "synthetic-product4-app" };
+  return {
+    id,
+    repository,
+    head_sha: identity.head_sha,
+    app,
+    name: identity.check_name,
+    external_id: identity.external_id,
+    status: "completed",
+    conclusion,
+    check_suite: {
+      id: 1,
+      repository,
+      head_sha: identity.head_sha,
+      app,
+      status: "completed",
+      conclusion: "success",
+    },
+  };
 }
 
 function responseLoss() {

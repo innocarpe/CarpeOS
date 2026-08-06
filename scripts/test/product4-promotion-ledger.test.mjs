@@ -8,6 +8,7 @@ import {
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
+  normalizeCheckRunsResponse,
 } from "../product4/github-evidence-api.mjs";
 import { PRODUCT4_POLICY_SHA256 } from "../product4/policy-identity.mjs";
 import {
@@ -72,6 +73,10 @@ function attestation(envelope) {
       outbox_rows: 0,
       protected_uploads: 0,
     },
+    candidate_execution: {
+      unprivileged: true,
+      isolated: true,
+    },
   };
   const provenance = {
     base_sha: baseSha,
@@ -97,23 +102,35 @@ function apiEvidence() {
     appId: 4242,
   });
   const query = buildExactCheckQuery({ repositoryPath: identity.repository_path, headSha });
-  const suite = {
+  const repository = { id: identity.repository_id, full_name: identity.repository_path };
+  const app = { id: identity.app_id };
+  const checkSuite = {
     id: 1,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
+    repository,
+    app,
     head_sha: identity.head_sha,
-    external_id: identity.external_id,
-    fixture_sha256: identity.fixture_sha256,
-    policy_sha256: identity.policy_sha256,
-    context: identity.context,
-    check_name: identity.check_name,
-    app_id: identity.app_id,
-    runs: [{ id: 9, app_id: identity.app_id, head_sha: identity.head_sha, conclusion: "success" }],
+    status: "completed",
+    conclusion: "success",
   };
+  const checkRun = {
+    id: 9,
+    name: identity.check_name,
+    external_id: identity.external_id,
+    repository,
+    app,
+    head_sha: identity.head_sha,
+    status: "completed",
+    conclusion: "success",
+    check_suite: checkSuite,
+  };
+  const page = normalizeCheckRunsResponse(
+    { total_count: 1, check_runs: [checkRun], headers: { link: "" } },
+    { identity },
+  );
   return buildEvidenceReceipt({
     query,
     identity,
-    pages: [{ items: [suite], headers: { link: "" } }],
+    pages: [page],
     observedAt: timestamp,
   });
 }

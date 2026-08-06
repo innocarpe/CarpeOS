@@ -8,6 +8,7 @@ useDefault = true
 
 [allowlist]
 description = "Generated artifacts, lockfiles, and synthetic unit/e2e fixtures (not live secrets)"
+regexTarget = "line"
 paths = [
   '''(^|/)pnpm-lock\.yaml$''',
   '''(^|/)packages/schema/src/generated/''',
@@ -24,4 +25,7 @@ regexes = [
   '''BEGIN PRIVATE KEY''',
   '''protected_plaintext_marker''',
   '''PRIVATE_MARKER''',
+  # Product 4 uses this non-secret observation-key identifier; the default
+  # generic-api-key rule otherwise flags the symbol name in historical diffs.
+  '''(?i)\bP02_[A-Z_]*KEYS\b''',
 ]

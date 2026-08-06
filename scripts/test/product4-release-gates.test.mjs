@@ -15,6 +15,7 @@ import {
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
+  normalizeCheckRunsResponse,
 } from "../product4/github-evidence-api.mjs";
 import {
   digestJson,
@@ -186,6 +187,10 @@ function candidateEvidence() {
       outbox_rows: 0,
       protected_uploads: 0,
     },
+    candidate_execution: {
+      unprivileged: true,
+      isolated: true,
+    },
   };
   const evaluation = evaluateCandidateEvidence({
     identity: {
@@ -259,29 +264,38 @@ function candidateEvidence() {
     repositoryPath: evidenceIdentity.repository_path,
     headSha: candidateSha,
   });
+  const repository = {
+    id: evidenceIdentity.repository_id,
+    full_name: evidenceIdentity.repository_path,
+  };
+  const app = { id: evidenceIdentity.app_id };
+  const checkSuite = {
+    id: 1,
+    repository,
+    app,
+    head_sha: evidenceIdentity.head_sha,
+    status: "completed",
+    conclusion: "success",
+  };
+  const checkRun = {
+    id: 2,
+    name: evidenceIdentity.check_name,
+    external_id: evidenceIdentity.external_id,
+    repository,
+    app,
+    head_sha: evidenceIdentity.head_sha,
+    status: "completed",
+    conclusion: "success",
+    check_suite: checkSuite,
+  };
+  const page = normalizeCheckRunsResponse(
+    { total_count: 1, check_runs: [checkRun], headers: { link: "" } },
+    { identity: evidenceIdentity },
+  );
   const apiEvidence = buildEvidenceReceipt({
     query,
     identity: evidenceIdentity,
-    pages: [
-      {
-        items: [
-          {
-            id: 1,
-            repository_id: 1315097793,
-            repository_path: evidenceIdentity.repository_path,
-            head_sha: candidateSha,
-            external_id: externalId,
-            fixture_sha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
-            policy_sha256: PRODUCT4_POLICY_SHA256,
-            context: PRODUCT4_CONTEXT,
-            check_name: PRODUCT4_CONTEXT,
-            app_id: 4242,
-            runs: [{ id: 2, app_id: 4242, head_sha: candidateSha, conclusion: "success" }],
-          },
-        ],
-        headers: { link: "" },
-      },
-    ],
+    pages: [page],
     observedAt: timestamp,
   });
   const promotionLedger = buildPromotionLedger({
