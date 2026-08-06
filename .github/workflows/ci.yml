@@ -1,10 +1,14 @@
 name: CI
 
 # Lanes (docs/maintainers/ci-policy.md / skills/carpeos-ci):
-# - PR lean (parallel): quality | boundary | build → typecheck ∥ test
-# - Main full: smokes/evals after lean green (path-filtered)
+# - PR lean (parallel, slim): static ∥ monorepo
+# - Main full: smokes/evals after monorepo (path-filtered, main only)
 # - Aggregate job name "Checks" stays required-check safe
-# - Docs/meta-only PRs: path filter → Checks success without monorepo work
+# - Docs/meta-only: path filter → Checks success without monorepo work
+#
+# Target graph (solo-maintainer):
+#   changes → static ∥ monorepo → Checks
+#           → main-full (push main only)
 on:
   pull_request:
   push:
@@ -14,10 +18,6 @@ on:
 permissions:
   contents: read
   pull-requests: read
-
-env:
-  NODE_VERSION: "22.22.0"
-  PNPM_VERSION: "11.16.0"
 
 jobs:
   changes:
@@ -57,8 +57,9 @@ jobs:
               - 'Makefile'
               - '**/*.{ts,tsx,js,mjs,cjs,cts,mts}'
 
-  quality:
-    name: Format & lint
+  # Cheap static gates, one install (format + lint + public-boundary).
+  static:
+    name: Static
     needs: changes
     if: needs.changes.outputs.ci == 'true'
     runs-on: ubuntu-latest
@@ -75,23 +76,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-  boundary:
-    name: Public boundary
-    needs: changes
-    if: needs.changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Setup Node + pnpm
-        uses: ./.github/actions/setup-node-pnpm
-
       - name: Public boundary
         run: pnpm public-boundary
 
-  build:
-    name: Build
+  # Heavy monorepo path, one install: build → typecheck → test.
+  monorepo:
+    name: Monorepo
     needs: changes
     if: needs.changes.outputs.ci == 'true'
     runs-on: ubuntu-latest
@@ -102,10 +92,17 @@ jobs:
       - name: Setup Node + pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Build monorepo
+      - name: Build
         run: pnpm build
 
-      - name: Upload build outputs
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Upload build outputs for main-full
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: monorepo-dist
@@ -116,51 +113,9 @@ jobs:
           retention-days: 1
           compression-level: 6
 
-  typecheck:
-    name: Typecheck
-    needs: [changes, build]
-    if: needs.changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Setup Node + pnpm
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Download build outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: monorepo-dist
-          path: .
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-  test:
-    name: Test
-    needs: [changes, build]
-    if: needs.changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Setup Node + pnpm
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Download build outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: monorepo-dist
-          path: .
-
-      - name: Test
-        run: pnpm test
-
   main-full:
     name: Main full
-    needs: [changes, build, test]
+    needs: [changes, monorepo]
     if: >-
       needs.changes.outputs.ci == 'true' &&
       github.event_name == 'push' &&
@@ -203,16 +158,13 @@ jobs:
       - name: Run sync worker G008 E2E
         run: pnpm --filter @carpeos/sync-worker test:e2e
 
-  # Required status check name stays "Checks" (branch protection).
+  # Required status check name stays "Checks" (branch protection / rulesets).
   checks:
     name: Checks
     needs:
       - changes
-      - quality
-      - boundary
-      - build
-      - typecheck
-      - test
+      - static
+      - monorepo
       - main-full
     if: always()
     runs-on: ubuntu-latest
@@ -244,13 +196,9 @@ jobs:
             echo "ok $name"
           }
 
-          require_success "quality" "${{ needs.quality.result }}"
-          require_success "boundary" "${{ needs.boundary.result }}"
-          require_success "build" "${{ needs.build.result }}"
-          require_success "typecheck" "${{ needs.typecheck.result }}"
-          require_success "test" "${{ needs.test.result }}"
+          require_success "static" "${{ needs.static.result }}"
+          require_success "monorepo" "${{ needs.monorepo.result }}"
 
-          # main-full is only required on push to main; skipped elsewhere is OK.
           main_full_result="${{ needs.main-full.result }}"
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             require_success "main-full" "$main_full_result"
