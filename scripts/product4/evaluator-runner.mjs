@@ -724,7 +724,10 @@ export function evaluateRawCandidateWithBaseOwnedProvider(
     );
   }
   if (protocolInputs !== undefined && typeof protocolInputs?.then === "function")
-    throwRunnerError("protocol_evidence_missing", "base-owned protocol provider must be synchronous");
+    throwRunnerError(
+      "protocol_evidence_missing",
+      "base-owned protocol provider must be synchronous",
+    );
   if (!isRecord(protocolInputs))
     throwRunnerError("protocol_evidence_missing", "base-owned protocol evidence is unavailable");
   let evidence;
