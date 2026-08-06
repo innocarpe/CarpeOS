@@ -322,7 +322,15 @@ async function main() {
   if (!options.skipConflict) {
     const conflict = await conflictProbe(options.base);
     printResult(conflict);
-    if (!conflict.ok) failures.push(conflict);
+    if (!conflict.ok) {
+      process.stdout.write(
+        `\nPREFLIGHT FAIL  merge conflict vs ${options.base}\n` +
+          `Rebase first: git fetch origin && git rebase ${options.base}\n` +
+          `Do not open/update a PR until this is green.\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const { result: changedResult, files } = await changedFiles(options.base);
@@ -345,14 +353,15 @@ async function main() {
     pnpm(["lint"], "lint"),
     pnpm(["public-boundary"], "public-boundary"),
   ]);
+  const phase1Failures = [];
   for (const result of phase1) {
     printResult(result);
-    if (!result.ok) failures.push(result);
+    if (!result.ok) phase1Failures.push(result);
   }
   // Fail closed early: do not burn build/test minutes on format/lint nits.
-  if (failures.length > 0 && options.mode !== "quick") {
+  if (phase1Failures.length > 0) {
     process.stdout.write(
-      `\nPREFLIGHT FAIL  ${failures.length} cheap gate(s)  mode=${options.mode}\n` +
+      `\nPREFLIGHT FAIL  ${phase1Failures.length} cheap gate(s)  mode=${options.mode}\n` +
         `Fix format/lint/public-boundary first (try: make preflight-fix).\n` +
         `Do not open/update a PR until this is green.\n`,
     );
