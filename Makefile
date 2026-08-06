@@ -59,12 +59,13 @@ help: ## Show available commands
 	@echo "  $(YELLOW)make preflight-pr$(RESET)             - Alias for make preflight"
 	@echo "  $(YELLOW)make preflight-full$(RESET)           - preflight + main-full smoke subset"
 	@echo "  $(YELLOW)make preflight-fix$(RESET)           - biome format --write then preflight"
+	@echo "  $(YELLOW)make preflight-assert$(RESET)        - Fail if no PREFLIGHT PASS stamp for HEAD (before gh pr create)"
 	@echo ""
 	@echo "$(BLUE)Examples:$(RESET)"
 	@echo "  make worktree pages            # ../$(PROJECT_NAME)-pages on worktree/pages"
 	@echo "  make worktree cloudflare-ops   # ../$(PROJECT_NAME)-cloudflare-ops"
 	@echo "  make remove-worktree pages"
-	@echo "  make preflight                 # green before gh pr create"
+	@echo "  make preflight && make preflight-assert   # required before gh pr create"
 	@echo ""
 	@echo "$(BLUE)Notes:$(RESET)"
 	@echo "  • New branches default to worktree/<name> from $(BASE_REF)"
@@ -202,7 +203,7 @@ status-worktree: ## Show worktree status
 
 .PHONY: install build test lint typecheck format format-check
 .PHONY: public-boundary labels-check check
-.PHONY: preflight preflight-quick preflight-pr preflight-full preflight-fix
+.PHONY: preflight preflight-quick preflight-pr preflight-full preflight-fix preflight-assert
 
 install: ## Install dependencies (pnpm install)
 	@$(PNPM) install
@@ -247,6 +248,9 @@ preflight-full: ## Preflight + main-full smoke subset
 
 preflight-fix: ## Format then full preflight
 	@node scripts/preflight.mjs --mode=pr --fix-format
+
+preflight-assert: ## Fail closed if PREFLIGHT PASS stamp missing/stale for HEAD (before gh pr create)
+	@node scripts/assert-pr-preflight.mjs
 
 # Treat positional worktree names as arguments, not unknown targets.
 %:

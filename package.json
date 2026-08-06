@@ -31,7 +31,8 @@
     "preflight": "node scripts/preflight.mjs",
     "preflight:quick": "node scripts/preflight.mjs --mode=quick",
     "preflight:pr": "node scripts/preflight.mjs --mode=pr",
-    "preflight:full": "node scripts/preflight.mjs --mode=full"
+    "preflight:full": "node scripts/preflight.mjs --mode=full",
+    "preflight:assert": "node scripts/assert-pr-preflight.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",

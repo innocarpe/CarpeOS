@@ -71,17 +71,22 @@ Rules:
 ### 2.1 Local preflight (mandatory before PR)
 
 Agents and humans **must** run the local preflight gate before opening or
-updating a PR. GitHub Actions is not a free formatter.
+updating a PR. GitHub Actions is not a free formatter. Opening a PR to discover
+`biome format:check` failures is a **harness violation**.
 
 | Entry | Command | Notes |
 | --- | --- | --- |
-| Default | `make preflight` / `pnpm preflight` / `pnpm preflight:pr` | Parallel PR-lean: format∥lint∥public-boundary → build → typecheck∥test; merge-tree conflict probe vs `origin/main` |
+| Default | `make preflight` / `pnpm preflight` / `pnpm preflight:pr` | Parallel PR-lean: format∥lint∥public-boundary → build → typecheck∥test; merge-tree conflict probe vs `origin/main`; writes `.git/carpeos-preflight.stamp` on PASS |
 | Fix format drift | `make preflight-fix` | `biome format --write` then preflight |
+| Assert before PR | `make preflight-assert` / `pnpm preflight:assert` | Fail closed if stamp missing, HEAD mismatch, or mode is only `quick` |
 | Fast loop only | `make preflight-quick` | Not sufficient alone to open a PR |
 | Sequential CI twin | `pnpm check` | Exact CI Checks step order; slower than preflight |
 
-Implementation: `scripts/preflight.mjs`. Skills: `carpeos-pr` (hard gate),
-`carpeos-ci` (local verification). Preflight does **not** claim Linux-only
+**Required sequence:** `make preflight` (or `preflight-fix`) → `make preflight-assert`
+→ only then `gh pr create`. Skill: `carpeos-pr` Rule 0.
+
+Implementation: `scripts/preflight.mjs`, `scripts/assert-pr-preflight.mjs`.
+Skills: `carpeos-pr`, `carpeos-ci`. Preflight does **not** claim Linux-only
 parity (Product 4 bubblewrap sandbox, Gitleaks).
 
 ---

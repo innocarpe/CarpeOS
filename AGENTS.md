@@ -105,6 +105,13 @@ Grok Build, and Gajae Code/GJC. Install user-global skill links:
 
 When opening or updating a GitHub PR (`gh pr create`, `gh pr edit`, ship branch):
 
+0. **Local preflight first (fail closed):**
+   ```sh
+   make preflight          # or: make preflight-fix
+   make preflight-assert   # stamp must match HEAD; mode pr|full only
+   ```
+   Never open a PR to “see if CI fails.” Format/lint/test must be green locally.
+   Skill: `skills/carpeos-pr/SKILL.md` Rule 0. Stamp: `.git/carpeos-preflight.stamp`.
 1. **Load and follow** `skills/carpeos-pr/SKILL.md` (shared skill for Claude
    Code, Codex CLI, Grok Build, and Gajae Code/GJC).
 2. **Use the full template** in `.github/PULL_REQUEST_TEMPLATE.md`. Fill every
@@ -170,16 +177,19 @@ Before `gh pr create`, push-for-review, or claiming a PR is ready:
 
 1. Run **`make preflight`** (or `pnpm preflight` / `pnpm preflight:pr`).
 2. Keep it green. On format drift: `make preflight-fix`.
-3. Record the command and `PREFLIGHT PASS` in the PR Validation table.
-4. Agent iteration may use `make preflight-quick`; that is **not** enough alone
+3. Run **`make preflight-assert`** (or `pnpm preflight:assert`). Fail closed if
+   the stamp is missing, points at another commit, or was only `quick`.
+4. Record preflight + assert results in the PR Validation table.
+5. Agent iteration may use `make preflight-quick`; that is **not** enough alone
    to open a PR.
-5. Preflight covers PR-lean invariants in parallel and probes merge conflicts vs
+6. Preflight covers PR-lean invariants in parallel and probes merge conflicts vs
    `origin/main`. It does **not** replace Linux-only Product 4 bubblewrap or
    Gitleaks — list those as explicit gaps when relevant.
 
-Implementation: `scripts/preflight.mjs`, Makefile targets `preflight*`,
-`package.json` scripts `preflight*`. Policy: `docs/maintainers/ci-policy.md`
-(Local lane). PR skill: `skills/carpeos-pr/SKILL.md`.
+Implementation: `scripts/preflight.mjs` (writes stamp),
+`scripts/assert-pr-preflight.mjs`, Makefile `preflight*` / `preflight-assert`,
+`package.json` `preflight*`. Policy: `docs/maintainers/ci-policy.md`.
+PR skill: `skills/carpeos-pr/SKILL.md` Rule 0.
 
 ## Verification Rules
 

@@ -17,6 +17,32 @@ Minimal three-bullet PR bodies are **not acceptable**. Every PR must follow the
 repository template and fill every section with real content (or an explicit
 `Not applicable` / `None` / `Not run` where required).
 
+## Rule 0 — local preflight BEFORE any PR (fail closed)
+
+**Order is mandatory. Do not reorder.**
+
+```text
+1. commit your work
+2. make preflight          # or make preflight-fix if format drifts
+3. make preflight-assert   # or: pnpm preflight:assert
+4. only then: gh pr create / push-for-review
+```
+
+| Step | Command | Why |
+| --- | --- | --- |
+| Gate | `make preflight` / `pnpm preflight:pr` | Mirrors PR lean (`format` includes **biome format:check** — the #261 class failure) |
+| Fix format | `make preflight-fix` | `biome format --write` then re-gate |
+| Stamp check | `make preflight-assert` | Fails if no PREFLIGHT PASS stamp for **current HEAD** with mode `pr`\|`full` |
+| PR | `gh pr create …` | **Forbidden** while assert is red |
+
+- `make preflight-quick` is **not** enough to open a PR.
+- “I’ll let CI catch format” is an **anti-pattern** and a harness violation.
+- Validation table **must** include preflight + assert rows with real results.
+- Stamp is `.git/carpeos-preflight.stamp` (written only on PREFLIGHT PASS).
+
+If you already opened a PR without this sequence: run preflight-fix, assert, push
+the fix, and say so in the PR — do not repeat.
+
 ## Source of truth
 
 | Artifact | Path |
@@ -33,6 +59,7 @@ update PR description, ship branch, stack PR, draft PR for review.
 
 ## Hard rules
 
+0. **Rule 0 (above)** — preflight + `preflight-assert` green on HEAD before `gh pr create`.
 1. **Fill the full template** — all sections below. Do not stop at Summary/Why/Test plan.
 2. **No empty sections** — if a section does not apply, write `None` or `Not applicable` with a one-line reason.
 3. **Validation must be honest** — only list commands you actually ran; put results in the table.
@@ -150,7 +177,9 @@ schemas, or projections.>
 
 | Command | Result |
 | --- | --- |
-| `pnpm …` | <pass / fail / Not run — reason> |
+| `make preflight` (or `pnpm preflight:pr`) | **required** — PREFLIGHT PASS |
+| `make preflight-assert` | **required** — PR_PREFLIGHT_ASSERT PASS |
+| `pnpm …` (extra scoped) | <pass / fail / Not run — reason> |
 
 ## Public-data/security boundary
 
@@ -193,10 +222,11 @@ schemas, or projections.>
 ### Create
 
 ```bash
-# 0) Local PR-lean gate FIRST (hard fail closed)
-make preflight
-# or: pnpm preflight:pr
-# or: make preflight-fix   # if format drift is expected
+# 0) Local PR-lean gate FIRST (hard fail closed) — NEVER skip
+make preflight-fix   # or: make preflight  if already formatted
+make preflight-assert # FAIL CLOSED if stamp missing/stale/quick-only
+# equivalent:
+#   pnpm preflight:pr && pnpm preflight:assert
 
 # pick kind from title/diff; never invent labels outside the catalog
 KIND=chore   # feat|fix|docs|spec|chore
@@ -273,8 +303,9 @@ If any answer is no, expand the body / fix labels before reporting done.
 
 ## Anti-patterns
 
+- **Opening `gh pr create` without `make preflight` + `make preflight-assert` green on HEAD**
+- Using CI as a free `biome format:check` / lint runner
 - Treating each atomic commit as its own PR without an explicit user request
-
 - Three bullet Summary + one-line Why + checkbox Test plan only
 - Creating a PR then shipping/merging **without** a kind label
 - “CI green” with no local commands listed

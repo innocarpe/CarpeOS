@@ -79,16 +79,19 @@ Write "None — <one reason>" if no contract impact.
 
 ## Validation
 
-<!-- Honest results only. Add/remove rows as needed. -->
+<!-- Honest results only. Agents: run make preflight && make preflight-assert
+     BEFORE gh pr create. Do not use GHA as a format linter. -->
 
 | Command | Result |
 | --- | --- |
-| `pnpm format:check` | Not run — |
-| `pnpm lint` | Not run — |
-| `pnpm typecheck` | Not run — |
-| `pnpm test` | Not run — |
-| `pnpm public-boundary` | Not run — |
-| `pnpm check` | Not run — |
+| `make preflight` / `pnpm preflight:pr` | <!-- required: PREFLIGHT PASS --> |
+| `make preflight-assert` / `pnpm preflight:assert` | <!-- required: PR_PREFLIGHT_ASSERT PASS --> |
+| `pnpm format:check` | Not run — covered by preflight / |
+| `pnpm lint` | Not run — covered by preflight / |
+| `pnpm typecheck` | Not run — covered by preflight / |
+| `pnpm test` | Not run — covered by preflight / |
+| `pnpm public-boundary` | Not run — covered by preflight / |
+| `pnpm check` | Not run — covered by preflight / |
 | `<!-- package-scoped test, e.g. pnpm --filter @carpeos/cli test -->` |  |
 
 ## Public-data/security boundary

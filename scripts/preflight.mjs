@@ -19,8 +19,8 @@
  *   1 check failure
  *   2 usage / git hygiene failure
  */
-import { spawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MODES = new Set(["quick", "pr", "full"]);
 const DEFAULT_BASE = "origin/main";
+/** Written only on PREFLIGHT PASS; gate for gh pr create (see assert-pr-preflight.mjs). */
+export const PREFLIGHT_STAMP_REL = ".git/carpeos-preflight.stamp";
 
 function parseArgs(argv) {
   const options = {
@@ -438,21 +440,55 @@ async function main() {
     process.stdout.write(
       `\nPREFLIGHT FAIL  ${failures.length} step(s)  mode=${options.mode}\n` +
         `Fix locally, re-run: pnpm preflight --mode=${options.mode}\n` +
-        `Do not open/update a PR until this is green.\n`,
+        `Do not open/update a PR until this is green.\n` +
+        `Agents: never run gh pr create while preflight is red.\n`,
     );
     process.exitCode = 1;
     return;
   }
 
+  const stamp = writePreflightStamp({ mode: options.mode, base: options.base });
   process.stdout.write(
     `\nPREFLIGHT PASS  mode=${options.mode}\n` +
+      `stamp=${stamp.path} head=${stamp.head} (mode=${stamp.mode})\n` +
+      `Before gh pr create: node scripts/assert-pr-preflight.mjs\n` +
       `Safe to push/open PR from a hygiene perspective (CI still re-runs on GHA).\n`,
   );
 }
 
-main().catch((error) => {
-  process.stderr.write(
-    `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
-  );
-  process.exitCode = 2;
-});
+function writePreflightStamp({ mode, base }) {
+  const head = gitStdout(["rev-parse", "HEAD"]);
+  const stamp = {
+    schema: "carpeos-preflight-stamp/v1",
+    head,
+    mode,
+    base,
+    passed_at: new Date().toISOString(),
+  };
+  const path = join(ROOT, PREFLIGHT_STAMP_REL);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(stamp, null, 2)}\n`, "utf8");
+  return { ...stamp, path: PREFLIGHT_STAMP_REL };
+}
+
+function gitStdout(args) {
+  const result = spawnSync("git", args, {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `git ${args.join(" ")} failed: ${(result.stderr || result.stdout || "").trim()}`,
+    );
+  }
+  return (result.stdout || "").trim();
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(
+      `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+    );
+    process.exitCode = 2;
+  });
+}

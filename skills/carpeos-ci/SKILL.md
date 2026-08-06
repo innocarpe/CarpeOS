@@ -72,6 +72,9 @@ Trigger on any of:
    this skill + `docs/maintainers/ci-policy.md` instead.
 10. **Honest PR validation.** When CI changes, the PR validation table lists real
     commands and results (`carpeos-pr` skill).
+11. **Never open a PR without local preflight.** `make preflight` +
+    `make preflight-assert` on the current HEAD before `gh pr create`
+    (`carpeos-pr` Rule 0). GHA is not a free format linter.
 
 ## Default lane contents (summary)
 
@@ -167,20 +170,24 @@ If row 3 is yes, or row 4 blows the PR budget without approval, **do not add to 
 
 **Hard rule for agents:** run the local preflight gate **before** `gh pr create` /
 push-for-review. Do not use GHA as a format/lint/public-boundary linter.
+**Mandatory sequence:**
 
 ```bash
-# Preferred — parallel PR-lean preflight (format∥lint∥boundary → build → typecheck∥test)
+# 1) PR-lean preflight (writes .git/carpeos-preflight.stamp on PASS)
 make preflight
-# equivalents:
-pnpm preflight
-pnpm preflight:pr
-node scripts/preflight.mjs --mode=pr
-
-# Fast agent loop (not sufficient alone to open a PR)
-make preflight-quick
-
-# Auto-format then full preflight
+# or auto-format then gate:
 make preflight-fix
+# equivalents: pnpm preflight / pnpm preflight:pr
+
+# 2) Fail closed if stamp missing / wrong HEAD / mode=quick only
+make preflight-assert
+# equivalent: pnpm preflight:assert
+
+# 3) ONLY THEN open the PR (carpeos-pr Rule 0)
+# gh pr create …
+
+# Fast agent loop (NOT enough alone to open a PR)
+make preflight-quick
 
 # Sequential exact CI Checks step (also valid; slower than preflight)
 pnpm check
