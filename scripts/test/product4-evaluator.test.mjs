@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -18,6 +18,7 @@ import {
 import {
   assertBaseOwnedProtocolEvidence,
   assertCandidateWorkspaceBoundary,
+  assertExecutableRootBinding,
   assertStrictReplayEvidence,
   buildBaseOwnedProtocolEvidence,
   classifyImmutableCandidateScope,
@@ -25,6 +26,7 @@ import {
   evaluateRawCandidateWithBaseOwnedProtocolInputs,
   evaluateRawCandidateWithBaseOwnedProvider,
   observeCandidateExecution,
+  trustedStrictAttestation,
   writeEvaluatorResult,
 } from "../product4/evaluator-runner.mjs";
 import {
@@ -837,5 +839,161 @@ test("M4 publisher consumes the attestation as data and never runs candidate con
         dataSink: () => null,
       }),
     /attestation_refusal/,
+  );
+});
+
+test("M4 strict attestation requires identical P02 evidence under distinct run IDs", () => {
+  const equalEvidence = {
+    invocation_digest: "e".repeat(64),
+    exit_code: 0,
+    stdout_sha256: "f".repeat(64),
+    stderr_sha256: "0".repeat(64),
+  };
+  const equalReport = buildRawCandidateReport({
+    head_sha: headSha,
+    base_sha: "c".repeat(40),
+    tree_sha256: identity.tree_sha256,
+    workflow_sha: "d".repeat(40),
+    external_id: identity.external_id,
+    commands: [
+      { command_id: "p02_replay_a", ...equalEvidence },
+      { command_id: "p02_replay_b", ...equalEvidence },
+    ],
+    p02: {
+      diagnosis: "no_analog",
+      outcome: "blocked_no_apply",
+      analog_available: false,
+      state_transition: "none_supported",
+    },
+    zero_write: {
+      canonical_events: 0,
+      review_rows: 0,
+      disposition_rows: 0,
+      outbox_rows: 0,
+      protected_uploads: 0,
+    },
+    evaluated_at: "2026-01-02T00:00:00Z",
+  });
+  assert.equal(trustedStrictAttestation(equalReport), true);
+
+  assert.throws(
+    () =>
+      buildRawCandidateReport({
+        head_sha: headSha,
+        base_sha: "c".repeat(40),
+        tree_sha256: identity.tree_sha256,
+        workflow_sha: "d".repeat(40),
+        external_id: identity.external_id,
+        commands: [
+          { command_id: "p02_replay_a", ...equalEvidence },
+          {
+            command_id: "p02_replay_b",
+            ...equalEvidence,
+            stdout_sha256: "1".repeat(64),
+          },
+        ],
+        p02: equalReport.observations.p02,
+        zero_write: equalReport.observations.zero_write,
+        evaluated_at: "2026-01-02T00:00:00Z",
+      }),
+    /p02_evidence_mismatch/,
+  );
+
+  // Single-run raw reports cannot satisfy deterministic dual-replay attestation.
+  assert.equal(trustedStrictAttestation(validRunnerRawReport()), false);
+});
+
+test("M4 reuses the immutable raw evaluated_at and refuses reinvented timestamps", () => {
+  const raw = buildRawCandidateReport({
+    head_sha: headSha,
+    base_sha: "c".repeat(40),
+    tree_sha256: identity.tree_sha256,
+    workflow_sha: "d".repeat(40),
+    external_id: identity.external_id,
+    commands: [
+      {
+        command_id: "p02_replay_a",
+        invocation_digest: "e".repeat(64),
+        exit_code: 0,
+        stdout_sha256: "f".repeat(64),
+        stderr_sha256: "0".repeat(64),
+      },
+      {
+        command_id: "p02_replay_b",
+        invocation_digest: "e".repeat(64),
+        exit_code: 0,
+        stdout_sha256: "f".repeat(64),
+        stderr_sha256: "0".repeat(64),
+      },
+    ],
+    p02: {
+      diagnosis: "no_analog",
+      outcome: "blocked_no_apply",
+      analog_available: false,
+      state_transition: "none_supported",
+    },
+    zero_write: {
+      canonical_events: 0,
+      review_rows: 0,
+      disposition_rows: 0,
+      outbox_rows: 0,
+      protected_uploads: 0,
+    },
+    evaluated_at: "2026-01-02T00:00:00Z",
+  });
+  assert.equal(raw.evaluated_at, "2026-01-02T00:00:00Z");
+  assert.throws(
+    () =>
+      evaluateRawCandidate({
+        rawReport: raw,
+        candidateRoot: "/tmp/product4-candidate",
+        home: "/tmp/product4-home",
+        expectedHeadSha: headSha,
+        expectedBaseSha: "c".repeat(40),
+        expectedTreeSha256: identity.tree_sha256,
+        evaluatorWorkflowSha: "d".repeat(40),
+        sandboxReceiptPath: "/tmp/product4-receipt.json",
+        evaluatedAt: "2026-01-03T00:00:00Z",
+      }),
+    /invalid_timestamp|evaluatedAt must reuse/,
+  );
+});
+
+test("M4 binds executable workspace and CLI roots to exact C identity", () => {
+  const root = mkdtempSync(join(tmpdir(), "product4-root-binding-"));
+  const candidate = join(root, "candidate");
+  const workspace = join(root, "workspace");
+  const home = join(root, "home");
+  const trusted = join(root, "trusted");
+  for (const path of [candidate, workspace, home, trusted]) {
+    mkdirSync(path, { recursive: true });
+  }
+  // Use spawn git for a real clean candidate checkout of this repo's HEAD is heavy;
+  // instead assert the fail-closed cases that do not need a full monorepo copy.
+  assert.throws(
+    () =>
+      assertExecutableRootBinding({
+        candidateRoot: candidate,
+        workspaceRoot: workspace,
+        cliRoot: workspace,
+        home,
+        expectedHeadSha: headSha,
+        expectedTreeSha256: identity.tree_sha256,
+        trustedRoot: trusted,
+      }),
+    /candidate_workspace_boundary|head_moved|tree_mismatch|git/,
+  );
+  assert.throws(
+    () =>
+      assertExecutableRootBinding({
+        candidateRoot: candidate,
+        workspaceRoot: candidate,
+        cliRoot: candidate,
+        home: candidate,
+        expectedHeadSha: headSha,
+        expectedTreeSha256: identity.tree_sha256,
+        trustedRoot: trusted,
+      }),
+    /candidate_workspace_boundary|overlaps/,
   );
 });
