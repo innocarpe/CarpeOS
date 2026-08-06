@@ -89,7 +89,7 @@ const predicateIds = [
 ] as const;
 
 const evaluatorAttestation = {
-  schema_version: "product4-evaluator-attestation-v1",
+  schema_version: "carpeos.product4-evaluator-attestation/v1",
   attestation_type: "strict_non_executable",
   repository_id: 1315097793,
   head_sha: headSha,
@@ -133,7 +133,7 @@ const evaluatorAttestation = {
   provenance: {
     source_report_sha256: "3".repeat(64),
     base_sha: baseSha,
-    evaluator_workflow_sha: "4".repeat(40),
+    evaluator_workflow_sha: "1".repeat(40),
     evaluated_at: "2026-01-02T00:00:00Z",
   },
 };
@@ -217,6 +217,30 @@ describe("Product 4 M0 contracts", () => {
     const replacedContext = structuredClone(evaluatorAttestation);
     replacedContext.context = "Product 4 Candidate Evidence v2";
     expect(attestationValidator?.(replacedContext)).toBe(false);
+  });
+  it("rejects duplicate predicates, malformed identities, and undocumented wrappers", () => {
+    const validator = ajv.getSchema(schemas["product4-evaluator-attestation-v1"].$id);
+    expect(schemas["product4-evaluator-attestation-v1"].$id).toBe(
+      "https://spec.carpeos.org/product4/schemas/product4-evaluator-attestation-v1.json",
+    );
+    expect(evaluatorAttestation.schema_version).toBe("carpeos.product4-evaluator-attestation/v1");
+
+    const duplicatePredicate = structuredClone(evaluatorAttestation);
+    duplicatePredicate.predicate_results[15].predicate_id = "identity_bound";
+    expect(validator?.(duplicatePredicate)).toBe(false);
+    const reorderedPredicates = structuredClone(evaluatorAttestation);
+    [reorderedPredicates.predicate_results[0], reorderedPredicates.predicate_results[1]] = [
+      reorderedPredicates.predicate_results[1],
+      reorderedPredicates.predicate_results[0],
+    ];
+    expect(validator?.(reorderedPredicates)).toBe(false);
+
+    const malformedHead = structuredClone(evaluatorAttestation);
+    malformedHead.head_sha = `${"b".repeat(39)}z`;
+    expect(validator?.(malformedHead)).toBe(false);
+
+    const undocumentedWrapper = { attestation: structuredClone(evaluatorAttestation) };
+    expect(validator?.(undocumentedWrapper)).toBe(false);
   });
 });
 

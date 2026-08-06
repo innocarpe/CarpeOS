@@ -1,32 +1,35 @@
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { lstatSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertCandidateIntent, buildCandidateIntent } from "./candidate-intent.mjs";
+import {
+  assertCandidateIntent,
+  assertCandidateIntentWriteOnce,
+  buildCandidateIntent,
+} from "./candidate-intent.mjs";
 import {
   assertCandidateState,
   classifyCandidateState,
   createCandidateState,
 } from "./candidate-state.mjs";
-import { buildSixCommandLoopReceipt } from "./command-loop.mjs";
+import { assertSixCommandLoop } from "./command-loop.mjs";
 import {
   assertEvaluatorAttestation,
   evaluateCandidateEvidence,
   PREDICATE_IDS,
 } from "./evaluator.mjs";
 import {
+  assertExactCheckQuery,
   buildEvidenceIdentity,
   buildEvidenceReceipt,
   buildExactCheckQuery,
-  assertExactCheckQuery,
   collectCheckRuns,
-  normalizeCheckRunsResponse,
   reconcileLostPatch,
   reconcileLostPost,
 } from "./github-evidence-api.mjs";
-import { applyMigrationSnapshot, readMigrationOracle } from "./migration-oracle.mjs";
-import { runP02Twice } from "./p02-runner.mjs";
+import { migrationPlanDigest, readMigrationOracle } from "./migration-oracle.mjs";
+import { assertP02SandboxReceipt, readP02SandboxReceipt, runP02Twice } from "./p02-runner.mjs";
 import {
   digestJson,
   MAINTENANCE_STUDY_FIXTURE_SHA256,
@@ -37,6 +40,11 @@ import {
 import { assertRawCandidateReport, buildRawCandidateReportFromP02 } from "./raw-producer.mjs";
 import { gitHeadSha, gitTreeSha256 } from "./tree-digest.mjs";
 
+export {
+  assertP02SandboxReceipt as assertSandboxReceipt,
+  buildP02SandboxReceipt as buildSandboxReceipt,
+  sandboxProbeDigest,
+} from "./p02-runner.mjs";
 export const EVALUATOR_RESULT_SCHEMA = "product4-evaluator-result-v1";
 const SHA1 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -63,6 +71,16 @@ const CANDIDATE_CREDENTIAL_ENV = [
   "NPM_TOKEN",
   "NPM_CONFIG_TOKEN",
 ];
+export const BASE_PROTOCOL_EVIDENCE_SCHEMA = "product4-base-owned-protocol-evidence-v1";
+const BASE_PROTOCOL_EVIDENCE_BRAND = Symbol("product4.baseOwnedProtocolEvidence");
+const PROTOCOL_PREDICATE_IDS = Object.freeze([
+  "migration_read_oracle",
+  "six_command_loop",
+  "exact_c_api",
+  "duplicate_refusal",
+  "lost_response_reconciliation",
+  "negative_cases",
+]);
 
 export class EvaluatorRunnerError extends Error {
   constructor(code, message) {
@@ -71,30 +89,34 @@ export class EvaluatorRunnerError extends Error {
     this.code = code;
   }
 }
-export function classifyImmutableCandidateScope({ headSha, treeSha256, scopePaths }) {
-  const validIdentity = SHA1.test(headSha ?? "") && SHA256.test(treeSha256 ?? "");
-  const normalizedPaths = Array.isArray(scopePaths)
-    ? [...new Set(scopePaths.filter((path) => typeof path === "string" && path.length > 0))].sort()
-    : [];
+export function classifyImmutableCandidateScope({ baseSha, headSha, treeSha256, scopePaths }) {
+  const validIdentity =
+    SHA1.test(baseSha ?? "") && SHA1.test(headSha ?? "") && SHA256.test(treeSha256 ?? "");
+  const normalizedPaths = normalizeScopePaths(scopePaths);
   const scope = {
+    base_sha: validIdentity ? baseSha : "",
     head_sha: validIdentity ? headSha : "",
     tree_sha256: validIdentity ? treeSha256 : "",
     paths: normalizedPaths,
   };
   const scopeDigest = digestJson(scope);
   const hasRequiredScope = PRODUCT4_REQUIRED_SCOPE.every((path) => normalizedPaths.includes(path));
+  const hasCandidateSurface = normalizedPaths.some((path) => hasCandidateSurfacePath(path));
   const hasOnlyNonCandidateSurface =
-    normalizedPaths.length > 0 && normalizedPaths.every((path) => !hasCandidateSurfacePath(path));
+    normalizedPaths.length === 0 || normalizedPaths.every((path) => !hasCandidateSurfacePath(path));
+  const hasInvalidPath =
+    !Array.isArray(scopePaths) ||
+    scopePaths.some((path) => typeof path !== "string" || normalizeScopePath(path) === null);
   const state =
-    !validIdentity || normalizedPaths.length === 0
+    !validIdentity || hasInvalidPath
       ? "classification_pending"
-      : hasRequiredScope
-        ? "pending_evidence"
-        : hasOnlyNonCandidateSurface
-          ? "not_applicable"
+      : hasOnlyNonCandidateSurface
+        ? "not_applicable"
+        : hasCandidateSurface && hasRequiredScope
+          ? "pending_evidence"
           : "classification_pending";
   const classification = {
-    source: "immutable_c_tree",
+    source: "immutable_base_to_c",
     scope_digest: scopeDigest,
     ...(state === "pending_evidence" ? { candidate: true } : {}),
     ...(state === "not_applicable" ? { candidate: false } : {}),
@@ -107,25 +129,42 @@ export function classifyImmutableCandidateScope({ headSha, treeSha256, scopePath
   };
 }
 
-export function immutableTreeScopePaths({ repoRoot }) {
+export function immutableTreeScopePaths({ repoRoot, baseSha, headSha = "HEAD" }) {
   if (typeof repoRoot !== "string" || repoRoot.length === 0)
     throwRunnerError("candidate_root_required", "candidate checkout is required");
-  const result = spawnSync("git", ["ls-tree", "-r", "-z", "--name-only", "--full-tree", "HEAD"], {
-    cwd: resolve(repoRoot),
-    encoding: "buffer",
-    env: { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
-  });
+  assertSha(baseSha, SHA1, "baseSha");
+  if (headSha !== "HEAD") assertSha(headSha, SHA1, "headSha");
+  const result = spawnSync(
+    "git",
+    [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "--no-ext-diff",
+      "--no-textconv",
+      "-z",
+      baseSha,
+      headSha,
+    ],
+    {
+      cwd: resolve(repoRoot),
+      encoding: "buffer",
+      env: { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+    },
+  );
   if (result.error) throwRunnerError("scope_read_failed", result.error.message);
   if (result.status !== 0)
     throwRunnerError(
       "scope_read_failed",
-      result.stderr?.toString("utf8") || "git scope read failed",
+      result.stderr?.toString("utf8") || "git base-to-C scope read failed",
     );
-  return [
-    ...new Set((result.stdout ?? Buffer.alloc(0)).toString("utf8").split("\0").filter(Boolean)),
-  ].sort();
+  const paths = (result.stdout ?? Buffer.alloc(0)).toString("utf8").split("\0").filter(Boolean);
+  if (paths.some((path) => normalizeScopePath(path) === null))
+    throwRunnerError("scope_read_failed", "git returned an invalid changed path");
+  return normalizeScopePaths(paths);
 }
 
+export const immutableChangedScopePaths = immutableTreeScopePaths;
 export function assertCandidateWorkspaceBoundary({
   candidateRoot,
   trustedRoot = TRUSTED_EVALUATOR_ROOT,
@@ -153,22 +192,54 @@ export function assertCandidateWorkspaceBoundary({
   return { candidate_root: candidateReal, trusted_root: trustedReal };
 }
 
+function assertSandboxWorkspaceBoundary({ workspaceRoot, cliRoot }) {
+  for (const [label, root] of [
+    ["workspace", workspaceRoot],
+    ["CLI", cliRoot],
+  ]) {
+    let realRoot;
+    try {
+      realRoot = realpathSync(resolve(root));
+    } catch (error) {
+      throwRunnerError(
+        "candidate_workspace_boundary",
+        `${label} sandbox root must exist: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (
+      pathWithin(TRUSTED_EVALUATOR_ROOT, realRoot) ||
+      pathWithin(realRoot, TRUSTED_EVALUATOR_ROOT)
+    )
+      throwRunnerError(
+        "candidate_workspace_boundary",
+        `${label} sandbox root overlaps trusted evaluator`,
+      );
+  }
+}
 export function observeCandidateExecution({
   candidateRoot,
   trustedRoot = TRUSTED_EVALUATOR_ROOT,
   environment = process.env,
+  sandboxReceipt,
+  expectedHeadSha,
+  expectedBaseSha,
+  expectedTreeSha256,
 }) {
-  let isolated = false;
-  try {
-    assertCandidateWorkspaceBoundary({ candidateRoot, trustedRoot });
-    isolated = true;
-  } catch {
-    isolated = false;
-  }
+  assertCandidateWorkspaceBoundary({ candidateRoot, trustedRoot });
+  assertP02SandboxReceipt(sandboxReceipt, { candidateRoot });
+  assertSha(expectedHeadSha, SHA1, "expectedHeadSha");
+  assertSha(expectedBaseSha, SHA1, "expectedBaseSha");
+  assertSha(expectedTreeSha256, SHA256, "expectedTreeSha256");
+  assertP02SandboxReceipt(sandboxReceipt, {
+    candidateRoot,
+    headSha: expectedHeadSha,
+    baseSha: expectedBaseSha,
+    treeSha256: expectedTreeSha256,
+  });
   const unprivileged = CANDIDATE_CREDENTIAL_ENV.every(
     (name) => typeof environment?.[name] !== "string" || environment[name].length === 0,
   );
-  return { unprivileged, isolated };
+  return { unprivileged, isolated: true };
 }
 
 export function writeEvaluatorResult(outputPath, result) {
@@ -202,18 +273,466 @@ export function writeEvaluatorResult(outputPath, result) {
     );
   }
 }
-
-export function evaluateRawCandidate({
-  rawReport,
-  candidateRoot,
-  home,
-  expectedHeadSha,
-  expectedBaseSha,
-  expectedTreeSha256,
-  evaluatorWorkflowSha,
-  evaluatedAt = new Date().toISOString(),
+/**
+ * @internal Construct only from trusted module receipts; raw candidate input never reaches here.
+ */
+export function buildBaseOwnedProtocolEvidence({
+  headSha,
+  treeSha256,
+  migration,
+  loop,
+  exact_c_api,
+  duplicate_refusal,
+  lost_response_reconciliation,
+  negative_cases,
 }) {
+  const identity = protocolIdentity({ headSha, treeSha256 });
+  const observations = {
+    migration_read_oracle: buildMigrationObservation(migration, identity),
+    six_command_loop: buildLoopObservation(loop, identity),
+    exact_c_api: buildExactApiObservation(exact_c_api, identity),
+    duplicate_refusal: buildDuplicateObservation(duplicate_refusal, identity),
+    lost_response_reconciliation: buildLostResponseObservation(
+      lost_response_reconciliation,
+      identity,
+    ),
+    negative_cases: buildNegativeObservation(negative_cases, identity),
+  };
+  const evidence = {
+    schema_version: BASE_PROTOCOL_EVIDENCE_SCHEMA,
+    identity,
+    observations,
+    evidence_digest: digestJson({
+      schema_version: BASE_PROTOCOL_EVIDENCE_SCHEMA,
+      identity,
+      observations,
+    }),
+  };
+  Object.defineProperty(evidence, BASE_PROTOCOL_EVIDENCE_BRAND, { value: true });
+  deepFreeze(evidence);
+  return assertBaseOwnedProtocolEvidence(evidence);
+}
+
+export function assertBaseOwnedProtocolEvidence(evidence, { headSha, treeSha256 } = {}) {
+  if (!isRecord(evidence) || evidence[BASE_PROTOCOL_EVIDENCE_BRAND] !== true)
+    throwRunnerError("protocol_evidence_forged", "protocol evidence is not evaluator-owned");
+  assertExactObjectKeys(evidence, [
+    "schema_version",
+    "identity",
+    "observations",
+    "evidence_digest",
+  ]);
+  if (evidence.schema_version !== BASE_PROTOCOL_EVIDENCE_SCHEMA)
+    throwRunnerError("protocol_evidence_forged", "protocol evidence schema is invalid");
+  const identity = protocolIdentity({
+    headSha: headSha ?? evidence.identity?.head_sha,
+    treeSha256: treeSha256 ?? evidence.identity?.tree_sha256,
+  });
+  if (digestJson(evidence.identity) !== digestJson(identity))
+    throwRunnerError(
+      "protocol_evidence_forged",
+      "protocol evidence identity is not immutable-bound",
+    );
+  assertExactObjectKeys(evidence.observations, PROTOCOL_PREDICATE_IDS);
+  const preimages = new Set();
+  for (const predicateId of PROTOCOL_PREDICATE_IDS) {
+    const observation = evidence.observations[predicateId];
+    assertProtocolObservation(observation, predicateId, identity, preimages);
+  }
+  const expectedEvidenceDigest = digestJson({
+    schema_version: BASE_PROTOCOL_EVIDENCE_SCHEMA,
+    identity,
+    observations: evidence.observations,
+  });
+  if (evidence.evidence_digest !== expectedEvidenceDigest)
+    throwRunnerError("protocol_evidence_forged", "protocol evidence digest is invalid");
+  return evidence;
+}
+
+function protocolIdentity({ headSha, treeSha256 }) {
+  assertSha(headSha, SHA1, "protocol headSha");
+  assertSha(treeSha256, SHA256, "protocol treeSha256");
+  return {
+    repository_id: PRODUCT4_REPOSITORY_ID,
+    head_sha: headSha,
+    tree_sha256: treeSha256,
+    fixture_sha256: MAINTENANCE_STUDY_FIXTURE_SHA256,
+    policy_sha256: PRODUCT4_POLICY_SHA256,
+    context: PRODUCT4_CONTEXT,
+  };
+}
+
+function assertProtocolObservation(observation, predicateId, identity, preimages) {
+  if (!isRecord(observation))
+    throwRunnerError("protocol_evidence_forged", `${predicateId} observation is missing`);
+  assertExactObjectKeys(observation, [
+    "predicate_id",
+    "evidence_source",
+    "evidence_preimage",
+    "evidence_digest",
+  ]);
+  if (observation.predicate_id !== predicateId)
+    throwRunnerError("protocol_evidence_forged", `${predicateId} observation id is invalid`);
+  if (
+    typeof observation.evidence_source !== "string" ||
+    observation.evidence_source.length === 0 ||
+    observation.evidence_source.length > 200
+  )
+    throwRunnerError("protocol_evidence_forged", `${predicateId} evidence source is invalid`);
+  if (!isRecord(observation.evidence_preimage))
+    throwRunnerError("protocol_evidence_forged", `${predicateId} evidence preimage is missing`);
+  if (digestJson(observation.evidence_preimage.identity ?? null) !== digestJson(identity))
+    throwRunnerError("protocol_evidence_forged", `${predicateId} evidence preimage is not C-bound`);
+  const preimageDigest = digestJson(observation.evidence_preimage);
+  if (preimages.has(preimageDigest))
+    throwRunnerError("protocol_evidence_forged", "protocol evidence preimages must be distinct");
+  preimages.add(preimageDigest);
+  const expectedDigest = digestJson({
+    predicate_id: predicateId,
+    identity,
+    evidence_source: observation.evidence_source,
+    evidence_preimage: observation.evidence_preimage,
+  });
+  if (observation.evidence_digest !== expectedDigest)
+    throwRunnerError("protocol_evidence_forged", `${predicateId} evidence digest is invalid`);
+}
+
+function protocolObservation(predicateId, identity, source, preimage) {
+  const evidencePreimage = { ...preimage, identity };
+  const observation = {
+    predicate_id: predicateId,
+    evidence_source: source,
+    evidence_preimage: evidencePreimage,
+    evidence_digest: digestJson({
+      predicate_id: predicateId,
+      identity,
+      evidence_source: source,
+      evidence_preimage: evidencePreimage,
+    }),
+  };
+  return observation;
+}
+
+function assertExactObjectKeys(value, keys) {
+  if (!isRecord(value))
+    throwRunnerError("protocol_evidence_forged", "protocol evidence object is required");
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index]))
+    throwRunnerError("protocol_evidence_forged", "protocol evidence fields are not exact");
+}
+
+function deepFreeze(value) {
+  if (!isRecord(value) && !Array.isArray(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+function buildMigrationObservation(input, identity) {
+  assertExactObjectKeys(input, ["before", "after", "plan", "receipt"]);
+  assertExactObjectKeys(input.receipt, [
+    "migration_id",
+    "plan_digest",
+    "applied_operation_ids",
+    "applied_at",
+  ]);
+  let oracle;
+  try {
+    oracle = readMigrationOracle(input.before, input.after, input.plan);
+  } catch (error) {
+    throwRunnerError(
+      "protocol_evidence_forged",
+      `migration oracle is invalid: ${errorMessage(error)}`,
+    );
+  }
+  const planDigest = migrationPlanDigest(input.plan);
+  const expectedOperationIds = input.plan.operations.map((operation) => operation.operation_id);
+  if (
+    oracle.status !== "ready" ||
+    Object.values(oracle.checks).some((passed) => passed !== true) ||
+    input.receipt.migration_id !== input.plan.migration_id ||
+    input.receipt.plan_digest !== planDigest ||
+    digestJson(input.receipt.applied_operation_ids) !== digestJson(expectedOperationIds) ||
+    !input.after.migration_receipts.some(
+      (receipt) => digestJson(receipt) === digestJson(input.receipt),
+    )
+  )
+    throwRunnerError("protocol_evidence_forged", "migration receipt/oracle is not C-bound");
+  return protocolObservation(
+    "migration_read_oracle",
+    identity,
+    "migration-oracle.readMigrationOracle",
+    {
+      plan_digest: planDigest,
+      before_digest: digestJson(input.before),
+      after_digest: digestJson(input.after),
+      receipt_digest: digestJson(input.receipt),
+      oracle_digest: digestJson(oracle),
+    },
+  );
+}
+
+function buildLoopObservation(input, identity) {
+  assertExactObjectKeys(input, ["receipt"]);
+  const receipt = input.receipt;
+  assertExactObjectKeys(receipt, [
+    "schema_version",
+    "policy_sha256",
+    "context",
+    "steps",
+    "template_5",
+    "auto_authority",
+    "receipt_digest",
+  ]);
+  try {
+    assertSixCommandLoop(receipt);
+  } catch (error) {
+    throwRunnerError(
+      "protocol_evidence_forged",
+      `six-command loop is invalid: ${errorMessage(error)}`,
+    );
+  }
+  if (!isRecord(receipt) || typeof receipt.receipt_digest !== "string")
+    throwRunnerError("protocol_evidence_forged", "six-command loop receipt digest is required");
+  const unsigned = { ...receipt };
+  delete unsigned.receipt_digest;
+  if (digestJson(unsigned) !== receipt.receipt_digest)
+    throwRunnerError("protocol_evidence_forged", "six-command loop receipt digest is invalid");
+  return protocolObservation("six_command_loop", identity, "command-loop.assertSixCommandLoop", {
+    receipt_digest: receipt.receipt_digest,
+    steps_digest: digestJson(receipt.steps),
+  });
+}
+
+function buildExactApiObservation(input, identity) {
+  assertExactObjectKeys(input, ["query", "pages", "identity", "observedAt"]);
+  const apiIdentity = assertApiIdentity(input.identity, identity);
+  let receipt;
+  let runs;
+  try {
+    receipt = buildEvidenceReceipt({
+      query: input.query,
+      pages: input.pages,
+      identity: apiIdentity,
+      observedAt: input.observedAt,
+    });
+    runs = collectCheckRuns({ pages: input.pages, identity: apiIdentity });
+  } catch (error) {
+    throwRunnerError(
+      "protocol_evidence_forged",
+      `exact C API evidence is invalid: ${errorMessage(error)}`,
+    );
+  }
+  if (runs.length === 0 || receipt.status !== "verified")
+    throwRunnerError("protocol_evidence_forged", "exact C API evidence is not verified");
+  return protocolObservation("exact_c_api", identity, "github-evidence.buildEvidenceReceipt", {
+    receipt_digest: receipt.receipt_digest,
+    query_digest: receipt.query_digest,
+    identity_digest: receipt.identity_digest,
+    page_digest: digestJson(input.pages),
+    run_ids: runs.map((run) => run.id),
+  });
+}
+
+function buildDuplicateObservation(input, identity) {
+  assertExactObjectKeys(input, ["pages", "identity"]);
+  const apiIdentity = assertApiIdentity(input.identity, identity);
+  let code;
+  try {
+    collectCheckRuns({ pages: input.pages, identity: apiIdentity });
+  } catch (error) {
+    code = error?.code;
+  }
+  if (code !== "duplicate_refusal")
+    throwRunnerError("protocol_evidence_forged", "duplicate API evidence did not refuse");
+  return protocolObservation("duplicate_refusal", identity, "github-evidence.collectCheckRuns", {
+    page_digest: digestJson(input.pages),
+    identity_digest: digestJson(apiIdentity),
+    refusal_code: code,
+  });
+}
+
+function buildLostResponseObservation(input, identity) {
+  assertExactObjectKeys(input, ["identity", "post", "patch"]);
+  assertExactObjectKeys(input.post, ["matches"]);
+  assertExactObjectKeys(input.patch, ["matches", "pendingRun", "attemptedPatch", "retryCount"]);
+  const apiIdentity = assertApiIdentity(input.identity, identity);
+  let postResult;
+  let patchResult;
+  try {
+    postResult = reconcileLostPost({ matches: input.post.matches, identity: apiIdentity });
+    patchResult = reconcileLostPatch({
+      matches: input.patch.matches,
+      identity: apiIdentity,
+      pendingRun: input.patch.pendingRun,
+      attemptedPatch: input.patch.attemptedPatch,
+      retryCount: input.patch.retryCount,
+    });
+  } catch (error) {
+    throwRunnerError(
+      "protocol_evidence_forged",
+      `lost-response reconciliation is invalid: ${errorMessage(error)}`,
+    );
+  }
+  if (
+    postResult.status !== "post_indeterminate" ||
+    !["retry_once", "patch_reconciled"].includes(patchResult.status)
+  )
+    throwRunnerError("protocol_evidence_forged", "lost-response reconciliation is not fail-closed");
+  return protocolObservation(
+    "lost_response_reconciliation",
+    identity,
+    "github-evidence.reconcileLostPostAndPatch",
+    {
+      input_digest: digestJson(input),
+      post_status: postResult.status,
+      patch_status: patchResult.status,
+    },
+  );
+}
+
+function buildNegativeObservation(input, identity) {
+  assertExactObjectKeys(input, ["identity", "invalidPolicySha256", "foreignHeadSha"]);
+  const apiIdentity = assertApiIdentity(input.identity, identity);
+  if (input.invalidPolicySha256 === PRODUCT4_POLICY_SHA256)
+    throwRunnerError("protocol_evidence_forged", "negative policy input must be invalid");
+  assertSha(input.invalidPolicySha256, SHA256, "negative policy sha");
+  assertSha(input.foreignHeadSha, SHA1, "negative foreign head");
+  if (input.foreignHeadSha === identity.head_sha)
+    throwRunnerError("protocol_evidence_forged", "negative foreign head must differ from C");
+  let policyRefusal = false;
+  try {
+    buildExactCheckQuery({
+      repositoryPath: apiIdentity.repository_path,
+      headSha: apiIdentity.head_sha,
+      policySha256: input.invalidPolicySha256,
+    });
+  } catch (error) {
+    policyRefusal = error?.code === "policy_not_active";
+  }
+  const validQuery = buildExactCheckQuery({
+    repositoryPath: apiIdentity.repository_path,
+    headSha: apiIdentity.head_sha,
+  });
+  const foreignQuery = {
+    ...validQuery,
+    path: `${apiIdentity.repository_path}/commits/${input.foreignHeadSha}/check-runs`,
+    identity: { ...validQuery.identity, head_sha: input.foreignHeadSha },
+  };
+  let identityRefusal = false;
+  try {
+    assertExactCheckQuery(foreignQuery, validQuery);
+  } catch (error) {
+    identityRefusal = error?.code === "identity_conflict";
+  }
+  if (!policyRefusal || !identityRefusal)
+    throwRunnerError("protocol_evidence_forged", "negative protocol checks did not refuse");
+  return protocolObservation(
+    "negative_cases",
+    identity,
+    "github-evidence.policy-and-identity-refusal",
+    {
+      policy_refusal_code: "policy_not_active",
+      identity_refusal_code: "identity_conflict",
+      valid_query_digest: digestJson(validQuery),
+      invalid_policy_sha256: input.invalidPolicySha256,
+      foreign_head_sha: input.foreignHeadSha,
+    },
+  );
+}
+
+function assertApiIdentity(input, identity) {
+  assertExactObjectKeys(input, [
+    "repository_id",
+    "repository_path",
+    "head_sha",
+    "external_id",
+    "fixture_sha256",
+    "policy_sha256",
+    "context",
+    "check_name",
+    "app_id",
+  ]);
+  let apiIdentity;
+  try {
+    apiIdentity = buildEvidenceIdentity({
+      repositoryId: input.repository_id,
+      repositoryPath: input.repository_path,
+      headSha: input.head_sha,
+      externalId: input.external_id,
+      fixtureSha256: input.fixture_sha256,
+      policySha256: input.policy_sha256,
+      context: input.context,
+      checkName: input.check_name,
+      appId: input.app_id,
+    });
+  } catch (error) {
+    throwRunnerError("protocol_evidence_forged", `API identity is invalid: ${errorMessage(error)}`);
+  }
+  if (
+    apiIdentity.head_sha !== identity.head_sha ||
+    apiIdentity.fixture_sha256 !== identity.fixture_sha256 ||
+    apiIdentity.policy_sha256 !== identity.policy_sha256 ||
+    apiIdentity.context !== identity.context ||
+    apiIdentity.external_id !== `carpeos-4.0.0:${identity.head_sha}:${identity.fixture_sha256}`
+  )
+    throwRunnerError("protocol_evidence_forged", "API identity is not C-bound");
+  return apiIdentity;
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function evaluateRawCandidate(input) {
+  if (!isRecord(input)) throwRunnerError("invalid_input", "evaluator input is required");
+  for (const key of ["baseOwnedProtocolEvidence", "trustedProtocolEvidence", "protocolInputs"]) {
+    if (Object.hasOwn(input, key) && input[key] !== undefined)
+      throwRunnerError(
+        "protocol_evidence_forged",
+        `${key} is not accepted on the public evaluator path`,
+      );
+  }
+  return evaluateRawCandidateFromBaseOwnedEvidence(input, undefined);
+}
+
+/**
+ * @internal Trusted evaluator boundary. Only base-owned module receipts may cross this path.
+ */
+export function evaluateRawCandidateWithBaseOwnedProtocolInputs(input) {
+  if (!isRecord(input) || !isRecord(input.protocolInputs))
+    throwRunnerError("protocol_evidence_missing", "base-owned protocol inputs are required");
+  const { protocolInputs, ...runnerInput } = input;
+  const evidence = buildBaseOwnedProtocolEvidence({
+    ...protocolInputs,
+    headSha: runnerInput.expectedHeadSha,
+    treeSha256: runnerInput.expectedTreeSha256,
+  });
+  return evaluateRawCandidateFromBaseOwnedEvidence(runnerInput, evidence);
+}
+
+function evaluateRawCandidateFromBaseOwnedEvidence(
+  {
+    rawReport,
+    candidateRoot,
+    home,
+    expectedHeadSha,
+    expectedBaseSha,
+    expectedTreeSha256,
+    evaluatorWorkflowSha,
+    sandboxReceipt,
+    sandboxReceiptPath,
+    existingIntent,
+    trustedPredicates: callerTrustedPredicates,
+    workspaceRoot = candidateRoot,
+    cliRoot = candidateRoot,
+    evaluatedAt = new Date().toISOString(),
+  },
+  protocolEvidence,
+) {
+  if (callerTrustedPredicates !== undefined)
+    throwRunnerError("predicate_refusal", "caller-supplied trusted predicates are never accepted");
   assertRawCandidateReport(rawReport);
+  assertNoCallerProtocolObservations(rawReport);
   assertSha(expectedHeadSha, SHA1, "expectedHeadSha");
   assertSha(expectedBaseSha, SHA1, "expectedBaseSha");
   assertSha(expectedTreeSha256, SHA256, "expectedTreeSha256");
@@ -225,13 +744,45 @@ export function evaluateRawCandidate({
     throwRunnerError("base_mismatch", "raw report base is not the workflow base");
   if (rawReport.tree_sha256 !== expectedTreeSha256)
     throwRunnerError("tree_mismatch", "raw report tree is not the expected C tree");
+  if (protocolEvidence === undefined)
+    throwRunnerError("protocol_evidence_missing", "base-owned protocol evidence is required");
+  assertBaseOwnedProtocolEvidence(protocolEvidence, {
+    headSha: expectedHeadSha,
+    treeSha256: expectedTreeSha256,
+  });
   if (typeof candidateRoot !== "string" || candidateRoot.length === 0)
     throwRunnerError("candidate_root_required", "candidate checkout is required");
   if (typeof home !== "string" || home.length === 0)
     throwRunnerError("runtime_home_required", "disposable evaluator home is required");
+  if (typeof workspaceRoot !== "string" || workspaceRoot.length === 0)
+    throwRunnerError("workspace_root_required", "sandbox workspace is required");
+  if (typeof cliRoot !== "string" || cliRoot.length === 0)
+    throwRunnerError("cli_root_required", "sandbox CLI root is required");
 
   assertCandidateWorkspaceBoundary({ candidateRoot });
-  const candidateExecution = observeCandidateExecution({ candidateRoot });
+  assertSandboxWorkspaceBoundary({ workspaceRoot, cliRoot });
+  assertRuntimeHomeBoundary({ home, candidateRoot });
+  if (sandboxReceipt !== undefined)
+    throwRunnerError(
+      "sandbox_receipt_forged",
+      "sandbox receipt must be supplied as an external trusted receipt path",
+    );
+  if (typeof sandboxReceiptPath !== "string" || sandboxReceiptPath.length === 0)
+    throwRunnerError("sandbox_receipt_missing", "external sandbox receipt path is required");
+  const receipt = readTrustedSandboxReceipt({
+    receiptPath: sandboxReceiptPath,
+    candidateRoot,
+    headSha: expectedHeadSha,
+    baseSha: expectedBaseSha,
+    treeSha256: expectedTreeSha256,
+  });
+  const candidateExecution = observeCandidateExecution({
+    candidateRoot,
+    sandboxReceipt: receipt,
+    expectedHeadSha,
+    expectedBaseSha,
+    expectedTreeSha256,
+  });
   if (!candidateExecution.unprivileged || !candidateExecution.isolated)
     throwRunnerError(
       "candidate_execution_boundary",
@@ -246,11 +797,16 @@ export function evaluateRawCandidate({
     throwRunnerError("tree_mismatch", "candidate checkout tree changed");
 
   const scope = classifyImmutableCandidateScope({
+    baseSha: expectedBaseSha,
     headSha: expectedHeadSha,
     treeSha256: expectedTreeSha256,
-    scopePaths: immutableTreeScopePaths({ repoRoot: candidateRoot }),
+    scopePaths: immutableTreeScopePaths({
+      repoRoot: candidateRoot,
+      baseSha: expectedBaseSha,
+      headSha: expectedHeadSha,
+    }),
   });
-  const intent = buildCandidateIntent({
+  const generatedIntent = buildCandidateIntent({
     repository_id: PRODUCT4_REPOSITORY_ID,
     head_sha: expectedHeadSha,
     tree_sha256: expectedTreeSha256,
@@ -261,6 +817,7 @@ export function evaluateRawCandidate({
     classification: scope.classification,
     scope_digest: scope.scope_digest,
   });
+  const intent = writeCandidateIntentOnce({ home, intent: generatedIntent, existingIntent });
   if (
     intent.intent !== scope.intent ||
     intent.state !== scope.state ||
@@ -291,9 +848,12 @@ export function evaluateRawCandidate({
 
   const p02Receipt = runP02Twice({
     home,
-    workspaceRoot: candidateRoot,
-    cliRoot: candidateRoot,
+    workspaceRoot,
+    cliRoot,
+    candidateRoot,
+    sandboxReceipt: receipt,
   });
+  assertPersistedCandidateIntent({ home, intent });
   const candidateHeadAfter = gitHeadSha({ repoRoot: candidateRoot });
   const candidateTreeAfter = gitTreeSha256({ repoRoot: candidateRoot });
   if (candidateHeadAfter !== expectedHeadSha)
@@ -318,6 +878,7 @@ export function evaluateRawCandidate({
     intent,
     state: classifiedState,
     observations,
+    trustedProtocolEvidence: protocolEvidence,
   });
   const identity = {
     repository_id: PRODUCT4_REPOSITORY_ID,
@@ -473,15 +1034,32 @@ export function assertEvaluatorResult(result) {
   return result;
 }
 
-function recomputePredicates({ rawReport, p02Receipt, intent, state, observations }) {
+function recomputePredicates({
+  rawReport,
+  p02Receipt,
+  intent,
+  state,
+  observations,
+  trustedProtocolEvidence,
+}) {
+  const distinctProtocolEvidence = new Set();
+  const protocolPredicate = (predicateId) =>
+    trustedProtocolObservation({
+      intent,
+      predicateId,
+      distinctProtocolEvidence,
+      trustedProtocolEvidence,
+    });
   const checks = {
     identity_bound: () =>
-      rawReport.head_sha === intent.head_sha && rawReport.tree_sha256 === intent.tree_sha256,
+      rawReport.head_sha === intent.head_sha &&
+      rawReport.tree_sha256 === intent.tree_sha256 &&
+      rawReport.external_id === `carpeos-4.0.0:${intent.head_sha}:${intent.fixture_sha256}`,
     fixture_bound: () => rawReport.fixture_sha256 === MAINTENANCE_STUDY_FIXTURE_SHA256,
     policy_pinned: () => rawReport.intent_policy_sha256 === PRODUCT4_POLICY_SHA256,
     context_pinned: () => rawReport.context === PRODUCT4_CONTEXT,
-    migration_read_oracle: trustedMigrationOracle,
-    six_command_loop: trustedSixCommandLoop,
+    migration_read_oracle: () => protocolPredicate("migration_read_oracle"),
+    six_command_loop: () => protocolPredicate("six_command_loop"),
     p02_truthful_no_analog: () => trustedP02Receipt(p02Receipt),
     zero_write: () => trustedZeroWrite(p02Receipt),
     state_order: () => state.state === "pending_evidence" && state.transitions.length === 1,
@@ -490,12 +1068,12 @@ function recomputePredicates({ rawReport, p02Receipt, intent, state, observation
       observations.candidate_execution.unprivileged === true &&
       observations.candidate_execution.isolated === true,
     strict_attestation: () => trustedStrictAttestation(rawReport),
-    exact_c_api: () => trustedExactApi({ rawReport, intent }),
-    duplicate_refusal: () => trustedDuplicateRefusal({ rawReport, intent }),
-    lost_response_reconciliation: () => trustedLostResponseReconciliation({ rawReport, intent }),
+    exact_c_api: () => protocolPredicate("exact_c_api"),
+    duplicate_refusal: () => protocolPredicate("duplicate_refusal"),
+    lost_response_reconciliation: () => protocolPredicate("lost_response_reconciliation"),
     provenance_bound: () =>
       rawReport.external_id === `carpeos-4.0.0:${intent.head_sha}:${intent.fixture_sha256}`,
-    negative_cases: () => trustedNegativeCases({ rawReport, intent }),
+    negative_cases: () => protocolPredicate("negative_cases"),
   };
   return Object.fromEntries(
     PREDICATE_IDS.map((predicateId) => {
@@ -510,6 +1088,46 @@ function recomputePredicates({ rawReport, p02Receipt, intent, state, observation
   );
 }
 
+function trustedProtocolObservation({
+  intent,
+  predicateId,
+  distinctProtocolEvidence,
+  trustedProtocolEvidence,
+}) {
+  if (!trustedProtocolEvidence || !PROTOCOL_PREDICATE_IDS.includes(predicateId)) return false;
+  const observation = trustedProtocolEvidence.observations?.[predicateId];
+  if (!isRecord(observation) || observation.predicate_id !== predicateId) return false;
+  const identity = protocolIdentity({
+    headSha: intent.head_sha,
+    treeSha256: intent.tree_sha256,
+  });
+  if (digestJson(trustedProtocolEvidence.identity ?? null) !== digestJson(identity)) return false;
+  if (digestJson(observation.evidence_preimage?.identity ?? null) !== digestJson(identity))
+    return false;
+  const preimageDigest = digestJson(observation.evidence_preimage);
+  if (distinctProtocolEvidence?.has(preimageDigest)) return false;
+  const expectedDigest = digestJson({
+    predicate_id: predicateId,
+    identity,
+    evidence_source: observation.evidence_source,
+    evidence_preimage: observation.evidence_preimage,
+  });
+  if (observation.evidence_digest !== expectedDigest) return false;
+  distinctProtocolEvidence?.add(preimageDigest);
+  return true;
+}
+
+function assertNoCallerProtocolObservations(rawReport) {
+  if (
+    Object.hasOwn(rawReport, "protocol_observations") ||
+    (isRecord(rawReport.observations) &&
+      Object.hasOwn(rawReport.observations, "protocol_observations"))
+  )
+    throwRunnerError(
+      "predicate_refusal",
+      "caller-supplied protocol observations are never trusted",
+    );
+}
 function assertIntentStateBinding({ intent, state, headSha, treeSha256, scopeDigest }) {
   if (
     intent.repository_id !== PRODUCT4_REPOSITORY_ID ||
@@ -538,6 +1156,7 @@ function assertIntentStateBinding({ intent, state, headSha, treeSha256, scopeDig
   )
     throwRunnerError("classification_binding", "state transition is not bound to classification");
 }
+
 function trustedP02Receipt(receipt) {
   if (!isRecord(receipt) || !isRecord(receipt.fixture_verification)) return false;
   const expectedFixture = receipt.fixture_verification.fixture_sha256;
@@ -567,223 +1186,15 @@ function trustedStrictAttestation(rawReport) {
   const commands = rawReport?.observations?.commands;
   if (!Array.isArray(commands) || commands.length !== 2) return false;
   const ids = commands.map((command) => command?.command_id).sort();
-  return ids[0] === "p02_replay_a" && ids[1] === "p02_replay_b";
-}
-
-function trustedMigrationOracle() {
-  const plan = {
-    schema_version: "product4-migration-plan-v1",
-    migration_id: "m4_evaluator_probe",
-    source_schema_version: "v1",
-    target_schema_version: "product4-v1",
-    policy_sha256: PRODUCT4_POLICY_SHA256,
-    context: PRODUCT4_CONTEXT,
-    required_action_ids: ["action_product4_probe"],
-    operations: [
-      {
-        operation_id: "op_add_product4_probe",
-        kind: "add_table",
-        table: "product4_probe",
-        name: "evidence_receipts",
-      },
-    ],
-    rollback: { mode: "explicit_authorized", preserve_canonical: true, requires_fresh_read: true },
-  };
-  const snapshot = {
-    schema_version: "v1",
-    canonical_events: [],
-    canonical_event_digests: [],
-    protected_value_refs: [],
-    trust_zone_ids: ["tz_synthetic"],
-    pending_action_ids: [],
-    completed_action_ids: ["action_product4_probe"],
-    applied_operation_ids: [],
-    migration_receipts: [],
-    rollback_receipts: [],
-    legacy_writer_fields: { mode: "append_only" },
-    legacy_writer_compatible: true,
-  };
-  const applied = applyMigrationSnapshot(snapshot, plan);
-  const oracle = readMigrationOracle(applied.before, applied.after, plan);
-  return oracle.status === "ready" && Object.values(oracle.checks).every(Boolean);
-}
-
-function trustedSixCommandLoop() {
-  const commandIds = {
-    1: "capture",
-    2: "canonical_append",
-    3: "adjudication",
-    4: "promoted_projection",
-    6: "candidate_evidence",
-    7: "human_authority",
-  };
-  const receipt = buildSixCommandLoopReceipt({
-    steps: [1, 2, 3, 4, 6, 7].map((step) => ({
-      step,
-      command_id: commandIds[step],
-      status: "passed",
-      evidence_digest: digestJson({ step, command_id: commandIds[step] }),
-    })),
-  });
-  return receipt.steps.map((step) => step.step).join(",") === "1,2,3,4,6,7";
-}
-
-function trustedExactApi({ rawReport, intent }) {
-  const identity = trustedEvidenceIdentity({ rawReport, intent });
-  const query = buildExactCheckQuery({
-    repositoryPath: identity.repository_path,
-    headSha: identity.head_sha,
-  });
-  const repository = {
-    id: identity.repository_id,
-    full_name: identity.repository_path,
-  };
-  const app = { id: identity.app_id };
-  const checkSuite = {
-    id: 1,
-    repository,
-    app,
-    head_sha: identity.head_sha,
-    status: "completed",
-    conclusion: "success",
-  };
-  const checkRun = {
-    id: 5,
-    name: identity.check_name,
-    external_id: identity.external_id,
-    repository,
-    app,
-    head_sha: identity.head_sha,
-    status: "completed",
-    conclusion: "success",
-    check_suite: checkSuite,
-  };
-  const page = normalizeCheckRunsResponse(
-    { total_count: 1, check_runs: [checkRun], headers: { link: "" } },
-    { identity },
+  if (ids[0] !== "p02_replay_a" || ids[1] !== "p02_replay_b") return false;
+  const evidence = commands.map((command) =>
+    digestJson({
+      invocation_digest: command?.invocation_digest,
+      stdout_sha256: command?.stdout_sha256,
+      stderr_sha256: command?.stderr_sha256,
+    }),
   );
-  const receipt = buildEvidenceReceipt({
-    query,
-    identity,
-    pages: [page],
-    observedAt: "2026-01-02T00:00:00Z",
-  });
-  return (
-    receipt.head_sha === rawReport.head_sha &&
-    receipt.external_id === rawReport.external_id &&
-    receipt.query_digest === digestJson(query)
-  );
-}
-
-function trustedDuplicateRefusal({ rawReport, intent }) {
-  const identity = trustedEvidenceIdentity({ rawReport, intent });
-  const repository = {
-    id: identity.repository_id,
-    full_name: identity.repository_path,
-  };
-  const app = { id: identity.app_id };
-  const checkSuite = {
-    id: 1,
-    repository,
-    app,
-    head_sha: identity.head_sha,
-    status: "completed",
-    conclusion: "success",
-  };
-  const run = {
-    id: 5,
-    name: identity.check_name,
-    external_id: identity.external_id,
-    repository,
-    app,
-    head_sha: identity.head_sha,
-    status: "completed",
-    conclusion: "success",
-    check_suite: checkSuite,
-  };
-  const conflictingRun = { ...run, conclusion: "failure" };
-  const page = normalizeCheckRunsResponse(
-    { total_count: 2, check_runs: [run, conflictingRun], headers: { link: "" } },
-    { identity },
-  );
-  try {
-    collectCheckRuns({ identity, pages: [page] });
-  } catch {
-    return true;
-  }
-  return false;
-}
-
-function trustedLostResponseReconciliation({ rawReport, intent }) {
-  const identity = trustedEvidenceIdentity({ rawReport, intent });
-  const pending = {
-    id: 7,
-    repository_id: identity.repository_id,
-    repository_path: identity.repository_path,
-    head_sha: identity.head_sha,
-    external_id: identity.external_id,
-    fixture_sha256: identity.fixture_sha256,
-    policy_sha256: identity.policy_sha256,
-    context: identity.context,
-    check_name: identity.check_name,
-    app_id: identity.app_id,
-    status: "queued",
-    conclusion: null,
-  };
-  const patch = { status: "completed", conclusion: "success" };
-  return (
-    reconcileLostPost({ matches: [], identity }).status === "post_indeterminate" &&
-    reconcileLostPatch({ matches: [], identity, pendingRun: pending, attemptedPatch: patch })
-      .status === "retry_once"
-  );
-}
-
-function trustedNegativeCases({ rawReport, intent }) {
-  const identity = trustedEvidenceIdentity({ rawReport, intent });
-  let policyRefused = false;
-  try {
-    buildExactCheckQuery({
-      repositoryPath: identity.repository_path,
-      headSha: identity.head_sha,
-      policySha256: "f".repeat(64),
-    });
-  } catch {
-    policyRefused = true;
-  }
-  const query = buildExactCheckQuery({
-    repositoryPath: identity.repository_path,
-    headSha: identity.head_sha,
-  });
-  const foreignHeadSha = "b".repeat(40);
-  const foreignQuery = {
-    ...query,
-    path: `${identity.repository_path}/commits/${foreignHeadSha}/check-runs`,
-    identity: { ...query.identity, head_sha: foreignHeadSha },
-  };
-  let identityRefused = false;
-  try {
-    assertExactCheckQuery(foreignQuery, query);
-  } catch {
-    identityRefused = true;
-  }
-  return policyRefused && identityRefused;
-}
-
-function trustedEvidenceIdentity({ rawReport, intent }) {
-  if (
-    !isRecord(rawReport) ||
-    !isRecord(intent) ||
-    rawReport.head_sha !== intent.head_sha ||
-    rawReport.tree_sha256 !== intent.tree_sha256 ||
-    rawReport.external_id !== `carpeos-4.0.0:${intent.head_sha}:${intent.fixture_sha256}`
-  )
-    throwRunnerError("evidence_identity", "raw report is not bound to immutable C identity");
-  return buildEvidenceIdentity({
-    repositoryPath: "synthetic/carpeos",
-    headSha: intent.head_sha,
-    externalId: rawReport.external_id,
-    appId: 4242,
-  });
+  return evidence[0] !== evidence[1];
 }
 
 function trustedObservations(p02Receipt, candidateExecution) {
@@ -810,6 +1221,138 @@ function trustedObservations(p02Receipt, candidateExecution) {
   };
 }
 
+function normalizeScopePath(path) {
+  if (
+    typeof path !== "string" ||
+    path.length === 0 ||
+    path.startsWith("/") ||
+    path.includes("\0") ||
+    path.includes("\\") ||
+    path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+  )
+    return null;
+  return path;
+}
+
+function normalizeScopePaths(paths) {
+  if (!Array.isArray(paths)) return [];
+  return [...new Set(paths.map((path) => normalizeScopePath(path)).filter(Boolean))].sort();
+}
+
+function assertRuntimeHomeBoundary({ home, candidateRoot, trustedRoot = TRUSTED_EVALUATOR_ROOT }) {
+  const runtimeHome = resolve(home);
+  mkdirSync(runtimeHome, { recursive: true });
+  let homeReal;
+  try {
+    homeReal = realpathSync(runtimeHome);
+  } catch (error) {
+    throwRunnerError(
+      "runtime_home_boundary",
+      `runtime home must exist: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const candidateReal = realpathSync(resolve(candidateRoot));
+  const trustedReal = realpathSync(resolve(trustedRoot));
+  if (
+    pathWithin(candidateReal, homeReal) ||
+    pathWithin(homeReal, candidateReal) ||
+    pathWithin(trustedReal, homeReal)
+  )
+    throwRunnerError(
+      "runtime_home_boundary",
+      "runtime home overlaps candidate or trusted evaluator",
+    );
+  return homeReal;
+}
+
+function readTrustedSandboxReceipt({ receiptPath, candidateRoot, headSha, baseSha, treeSha256 }) {
+  if (typeof receiptPath !== "string" || receiptPath.length === 0)
+    throwRunnerError("sandbox_receipt_missing", "sandbox receipt path is required");
+  let receiptReal;
+  try {
+    const receiptInput = resolve(receiptPath);
+    if (lstatSync(receiptInput).isSymbolicLink())
+      throwRunnerError("sandbox_receipt_forged", "sandbox receipt cannot be a symlink");
+    receiptReal = realpathSync(receiptInput);
+    const receiptStat = statSync(receiptReal);
+    if (!receiptStat.isFile() || (receiptStat.mode & 0o222) !== 0)
+      throwRunnerError(
+        "sandbox_receipt_forged",
+        "sandbox receipt must be a read-only regular file",
+      );
+  } catch (error) {
+    if (error instanceof EvaluatorRunnerError) throw error;
+    throwRunnerError(
+      "sandbox_receipt_missing",
+      `sandbox receipt cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const candidateReal = realpathSync(resolve(candidateRoot));
+  const trustedReal = realpathSync(TRUSTED_EVALUATOR_ROOT);
+  if (pathWithin(candidateReal, receiptReal) || pathWithin(trustedReal, receiptReal))
+    throwRunnerError("sandbox_receipt_forged", "sandbox receipt is not an external trusted input");
+  return readP02SandboxReceipt(receiptReal, { candidateRoot, headSha, baseSha, treeSha256 });
+}
+function writeCandidateIntentOnce({ home, intent, existingIntent }) {
+  const intentPath = resolve(home, "candidate-intent.json");
+  mkdirSync(resolve(home), { recursive: true });
+  if (existingIntent !== undefined) {
+    assertCandidateIntentWriteOnce(existingIntent, intent);
+  }
+  let persisted;
+  try {
+    const intentStat = lstatSync(intentPath);
+    if (!intentStat.isFile() || intentStat.isSymbolicLink())
+      throwRunnerError("intent_refusal", "candidate intent path must be a regular file");
+    persisted = JSON.parse(readFileSync(intentPath, "utf8"));
+  } catch (error) {
+    if (error instanceof EvaluatorRunnerError) throw error;
+    if (error?.code !== "ENOENT")
+      throwRunnerError(
+        "intent_refusal",
+        `candidate intent cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+      );
+  }
+  if (persisted !== undefined) {
+    assertCandidateIntentWriteOnce(persisted, intent);
+    return persisted;
+  }
+  try {
+    writeFileSync(intentPath, `${JSON.stringify(intent, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+  } catch (error) {
+    if (error?.code !== "EEXIST")
+      throwRunnerError(
+        "intent_refusal",
+        `candidate intent write-once emission failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    const raced = JSON.parse(readFileSync(intentPath, "utf8"));
+    assertCandidateIntentWriteOnce(raced, intent);
+    return raced;
+  }
+  return intent;
+}
+
+function assertPersistedCandidateIntent({ home, intent }) {
+  const intentPath = resolve(home, "candidate-intent.json");
+  let persisted;
+  try {
+    const intentStat = lstatSync(intentPath);
+    if (!intentStat.isFile() || intentStat.isSymbolicLink())
+      throwRunnerError("intent_refusal", "candidate intent path must be a regular file");
+    persisted = JSON.parse(readFileSync(intentPath, "utf8"));
+  } catch (error) {
+    if (error instanceof EvaluatorRunnerError) throw error;
+    throwRunnerError(
+      "intent_refusal",
+      `candidate intent cannot be re-read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return assertCandidateIntentWriteOnce(persisted, intent);
+}
 function assertSha(value, pattern, label) {
   if (typeof value !== "string" || !pattern.test(value))
     throwRunnerError("invalid_sha", `${label} is invalid`);
@@ -842,6 +1385,9 @@ function parseArgs(argv) {
     "--base-sha",
     "--tree-sha256",
     "--workflow-sha",
+    "--sandbox-receipt",
+    "--workspace-root",
+    "--cli-root",
     "--evaluated-at",
     "--output",
   ]);
@@ -862,6 +1408,7 @@ function parseArgs(argv) {
     "--base-sha",
     "--tree-sha256",
     "--workflow-sha",
+    "--sandbox-receipt",
     "--output",
   ]) {
     if (values[flag] === undefined) throwRunnerError("invalid_args", `${flag} is required`);
@@ -875,6 +1422,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const result = evaluateRawCandidate({
       rawReport: JSON.parse(readFileSync(resolve(args["--raw-report"]), "utf8")),
       candidateRoot: resolve(args["--candidate-root"]),
+      sandboxReceiptPath: resolve(args["--sandbox-receipt"]),
+      workspaceRoot:
+        args["--workspace-root"] === undefined ? undefined : resolve(args["--workspace-root"]),
+      cliRoot: args["--cli-root"] === undefined ? undefined : resolve(args["--cli-root"]),
       home: resolve(args["--home"]),
       expectedHeadSha: args["--head-sha"],
       expectedBaseSha: args["--base-sha"],

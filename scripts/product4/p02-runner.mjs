@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
@@ -13,6 +13,53 @@ import {
   P02_COMMAND_LINE,
 } from "./p02-replay.mjs";
 import { canonicalJson, digestJson, sha256Hex } from "./policy-identity.mjs";
+export const P02_SANDBOX_RECEIPT_SCHEMA = "product4-sandbox-receipt-v1";
+export const P02_SANDBOX_CONTRACT = Object.freeze({
+  backend: "bubblewrap",
+  network: "disabled",
+  candidate_inputs: "read_only",
+  trusted_mounts: false,
+  writable_paths: Object.freeze(["/home", "/output", "/tmp"]),
+  capabilities: "dropped",
+  no_new_privileges: true,
+  process_limit: 64,
+  memory_limit_mb: 1024,
+});
+const P02_SANDBOX_PROBE = Object.freeze({
+  backend: P02_SANDBOX_CONTRACT.backend,
+  network: P02_SANDBOX_CONTRACT.network,
+  candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
+  trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
+  writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
+  capabilities: P02_SANDBOX_CONTRACT.capabilities,
+  no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
+  process_limit: P02_SANDBOX_CONTRACT.process_limit,
+  memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
+});
+export function sandboxProbeDigest() {
+  return sha256Hex(JSON.stringify(P02_SANDBOX_PROBE));
+}
+const P02_SANDBOX_RECEIPT_KEYS = Object.freeze([
+  "schema_version",
+  "backend",
+  "candidate_root",
+  "head_sha",
+  "base_sha",
+  "tree_sha256",
+  "network",
+  "candidate_inputs",
+  "trusted_mounts",
+  "writable_paths",
+  "capabilities",
+  "no_new_privileges",
+  "process_limit",
+  "memory_limit_mb",
+  "probe_sha256",
+  "sandbox_command_digest",
+  "receipt_digest",
+]);
+const SHA1 = /^[0-9a-f]{40}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const P02_ARGS = [
@@ -36,18 +83,163 @@ const ZERO_WRITE_TABLES = {
 };
 const SEED_PROTECTED_VALUE_ID = "pv_synthetic_maintenance_001";
 const SEED_IDEMPOTENCY_KEY = "idem_synthetic_maintenance_seed_001";
+export function sandboxCommandDigest() {
+  return digestJson(P02_SANDBOX_CONTRACT);
+}
+
+export function buildP02SandboxReceipt({
+  candidateRoot,
+  headSha,
+  baseSha,
+  treeSha256,
+  probeSha256,
+}) {
+  if (typeof candidateRoot !== "string" || candidateRoot.length === 0)
+    throwRunnerError("sandbox_receipt_invalid", "candidate root is required");
+  assertSha(headSha, SHA1, "head_sha");
+  assertSha(baseSha, SHA1, "base_sha");
+  assertSha(treeSha256, SHA256, "tree_sha256");
+  assertSha(probeSha256, SHA256, "probe_sha256");
+  let candidateReal;
+  try {
+    candidateReal = realpathSync(resolve(candidateRoot));
+  } catch (error) {
+    throwRunnerError(
+      "sandbox_receipt_invalid",
+      `candidate root must exist: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const unsigned = {
+    schema_version: P02_SANDBOX_RECEIPT_SCHEMA,
+    backend: P02_SANDBOX_CONTRACT.backend,
+    candidate_root: candidateReal,
+    head_sha: headSha,
+    base_sha: baseSha,
+    tree_sha256: treeSha256,
+    network: P02_SANDBOX_CONTRACT.network,
+    candidate_inputs: P02_SANDBOX_CONTRACT.candidate_inputs,
+    trusted_mounts: P02_SANDBOX_CONTRACT.trusted_mounts,
+    writable_paths: [...P02_SANDBOX_CONTRACT.writable_paths],
+    capabilities: P02_SANDBOX_CONTRACT.capabilities,
+    no_new_privileges: P02_SANDBOX_CONTRACT.no_new_privileges,
+    process_limit: P02_SANDBOX_CONTRACT.process_limit,
+    memory_limit_mb: P02_SANDBOX_CONTRACT.memory_limit_mb,
+    probe_sha256: probeSha256,
+    sandbox_command_digest: sandboxCommandDigest(),
+  };
+  return { ...unsigned, receipt_digest: digestJson(unsigned) };
+}
+
+export function assertP02SandboxReceipt(
+  receipt,
+  { candidateRoot, headSha, baseSha, treeSha256 } = {},
+) {
+  if (!isRecord(receipt))
+    throwRunnerError("sandbox_receipt_missing", "trusted sandbox receipt is required");
+  const keys = Object.keys(receipt);
+  if (
+    keys.length !== P02_SANDBOX_RECEIPT_KEYS.length ||
+    P02_SANDBOX_RECEIPT_KEYS.some((key) => !Object.hasOwn(receipt, key)) ||
+    keys.some((key) => !P02_SANDBOX_RECEIPT_KEYS.includes(key))
+  )
+    throwRunnerError("sandbox_receipt_forged", "sandbox receipt fields are not exact");
+  if (receipt.schema_version !== P02_SANDBOX_RECEIPT_SCHEMA)
+    throwRunnerError("sandbox_receipt_forged", "sandbox receipt schema is invalid");
+  if (receipt.backend !== P02_SANDBOX_CONTRACT.backend)
+    throwRunnerError("sandbox_receipt_forged", "sandbox backend is not bubblewrap");
+  assertSha(receipt.head_sha, SHA1, "sandbox receipt head_sha");
+  assertSha(receipt.base_sha, SHA1, "sandbox receipt base_sha");
+  assertSha(receipt.tree_sha256, SHA256, "sandbox receipt tree_sha256");
+  assertSha(receipt.probe_sha256, SHA256, "sandbox receipt probe_sha256");
+  if (receipt.probe_sha256 !== sandboxProbeDigest())
+    throwRunnerError(
+      "sandbox_receipt_forged",
+      "sandbox probe evidence is not the fixed contract probe",
+    );
+  if (typeof receipt.candidate_root !== "string" || !isAbsolute(receipt.candidate_root))
+    throwRunnerError("sandbox_receipt_forged", "sandbox candidate root must be absolute");
+  if (candidateRoot !== undefined) {
+    let expectedRoot;
+    let actualRoot;
+    try {
+      expectedRoot = realpathSync(resolve(candidateRoot));
+      actualRoot = realpathSync(receipt.candidate_root);
+    } catch {
+      throwRunnerError("sandbox_receipt_forged", "sandbox candidate root is unavailable");
+    }
+    if (expectedRoot !== actualRoot)
+      throwRunnerError(
+        "sandbox_receipt_forged",
+        "sandbox receipt is bound to another candidate root",
+      );
+  }
+  for (const [key, expected] of [
+    ["head_sha", headSha],
+    ["base_sha", baseSha],
+    ["tree_sha256", treeSha256],
+  ]) {
+    if (expected !== undefined && receipt[key] !== expected)
+      throwRunnerError("sandbox_receipt_forged", `sandbox receipt ${key} is not identity-bound`);
+  }
+  if (
+    receipt.network !== P02_SANDBOX_CONTRACT.network ||
+    receipt.candidate_inputs !== P02_SANDBOX_CONTRACT.candidate_inputs ||
+    receipt.trusted_mounts !== P02_SANDBOX_CONTRACT.trusted_mounts ||
+    receipt.capabilities !== P02_SANDBOX_CONTRACT.capabilities ||
+    receipt.no_new_privileges !== P02_SANDBOX_CONTRACT.no_new_privileges ||
+    receipt.process_limit !== P02_SANDBOX_CONTRACT.process_limit ||
+    receipt.memory_limit_mb !== P02_SANDBOX_CONTRACT.memory_limit_mb ||
+    JSON.stringify(receipt.writable_paths) !==
+      JSON.stringify(P02_SANDBOX_CONTRACT.writable_paths) ||
+    receipt.sandbox_command_digest !== sandboxCommandDigest()
+  )
+    throwRunnerError(
+      "sandbox_receipt_forged",
+      "sandbox receipt does not enforce the fixed contract",
+    );
+  const unsigned = { ...receipt };
+  delete unsigned.receipt_digest;
+  if (digestJson(unsigned) !== receipt.receipt_digest)
+    throwRunnerError("sandbox_receipt_forged", "sandbox receipt digest is invalid");
+  return receipt;
+}
+
+export function readP02SandboxReceipt(receiptPath, expected = {}) {
+  if (typeof receiptPath !== "string" || receiptPath.length === 0)
+    throwRunnerError("sandbox_receipt_missing", "sandbox receipt path is required");
+  let body;
+  try {
+    body = JSON.parse(readFileSync(resolve(receiptPath), "utf8"));
+  } catch (error) {
+    throwRunnerError(
+      "sandbox_receipt_missing",
+      `sandbox receipt cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return assertP02SandboxReceipt(body, expected);
+}
 
 /**
  * Seed one synthetic fixture row, take an immutable baseline, and replay only
  * the read-only reconciliation command twice. Seeding is deliberately kept
  * outside runOnce: the command under test must never create fixture state.
  */
-export function runP02Twice({ home, workspaceRoot = process.cwd(), cliRoot = REPO_ROOT }) {
+export function runP02Twice({
+  home,
+  workspaceRoot = process.cwd(),
+  cliRoot = REPO_ROOT,
+  candidateRoot = workspaceRoot,
+  sandboxReceipt,
+}) {
   if (typeof home !== "string" || home.length === 0)
     throw new Error("P02 runner requires a runtime home");
   if (typeof cliRoot !== "string" || cliRoot.length === 0)
     throw new Error("P02 runner requires a CLI root");
+  assertP02SandboxReceipt(sandboxReceipt, { candidateRoot });
+  if (process.platform !== "linux")
+    throwRunnerError("sandbox_unavailable", "P02 requires a Linux bubblewrap sandbox");
   const runtimeHome = resolve(home);
+  mkdirSync(runtimeHome, { recursive: true });
 
   const { fixture, fixtureSha256 } = loadP02Fixture();
   const seeded = seedDisposableFixture({
@@ -55,15 +247,32 @@ export function runP02Twice({ home, workspaceRoot = process.cwd(), cliRoot = REP
     cliRoot,
     fixture,
     home: runtimeHome,
+    sandboxReceipt,
   });
   assertSeedObservation(seeded, fixture);
 
   const observer = new DatabaseSync(resolve(runtimeHome, "carpeos.sqlite"), { readOnly: true });
   try {
     const before = readStoreObservation(runtimeHome, observer);
-    const runA = runOnce(runtimeHome, workspaceRoot, cliRoot, fixture, fixtureSha256, "runA");
+    const runA = runOnce(
+      runtimeHome,
+      workspaceRoot,
+      cliRoot,
+      fixture,
+      fixtureSha256,
+      "runA",
+      sandboxReceipt,
+    );
     const between = readStoreObservation(runtimeHome, observer);
-    const runB = runOnce(runtimeHome, workspaceRoot, cliRoot, fixture, fixtureSha256, "runB");
+    const runB = runOnce(
+      runtimeHome,
+      workspaceRoot,
+      cliRoot,
+      fixture,
+      fixtureSha256,
+      "runB",
+      sandboxReceipt,
+    );
     const after = readStoreObservation(runtimeHome, observer);
     const mutationProbe = mutationProbeBetween(before, between, after);
     const mutationObservation = buildMutationObservation({ before, between, after });
@@ -90,11 +299,13 @@ export function runP02Twice({ home, workspaceRoot = process.cwd(), cliRoot = REP
  * initialized through its supported CLI opener, then this boundary inserts the
  * fixture row once with append-only SQL. Reconciliation itself remains read-only.
  */
-export function seedDisposableFixture({ home, workspaceRoot, cliRoot, fixture }) {
+export function seedDisposableFixture({ home, workspaceRoot, cliRoot, fixture, sandboxReceipt }) {
   assertP02Fixture(fixture);
   const runtimeHome = resolve(home);
-  bootstrapStore({ home: runtimeHome, workspaceRoot, cliRoot });
   const databasePath = resolve(runtimeHome, "carpeos.sqlite");
+  assertDisposableDatabasePath(databasePath, { allowMissing: true });
+  bootstrapStore({ home: runtimeHome, workspaceRoot, cliRoot, sandboxReceipt });
+  assertDisposableDatabasePath(databasePath);
   const database = new DatabaseSync(databasePath);
   try {
     database.exec("PRAGMA foreign_keys = ON");
@@ -177,17 +388,14 @@ export function seedDisposableFixture({ home, workspaceRoot, cliRoot, fixture })
   return seeded;
 }
 
-function bootstrapStore({ home, workspaceRoot, cliRoot }) {
-  const cliPath = resolve(cliRoot, "apps/carpeos-cli/dist/index.js");
-  const result = spawnSync(
-    process.execPath,
-    [cliPath, "project", "identify", "--home", home, "--trust-zone", "tz_synthetic"],
-    {
-      cwd: workspaceRoot,
-      env: commandEnvironment(home),
-      encoding: "buffer",
-    },
-  );
+function bootstrapStore({ home, workspaceRoot, cliRoot, sandboxReceipt }) {
+  const result = runSandboxed({
+    home,
+    workspaceRoot,
+    cliRoot,
+    args: ["project", "identify", "--home", "/home", "--trust-zone", "tz_synthetic"],
+    sandboxReceipt,
+  });
   if (result.error !== undefined || result.status !== 0) {
     throwRunnerError(
       "fixture_store_bootstrap_failed",
@@ -211,12 +419,13 @@ function bootstrapStore({ home, workspaceRoot, cliRoot }) {
   }
 }
 
-function runOnce(home, workspaceRoot, cliRoot, fixture, fixtureSha256, label) {
-  const cliPath = resolve(cliRoot, "apps/carpeos-cli/dist/index.js");
-  const result = spawnSync(process.execPath, [cliPath, ...P02_ARGS], {
-    cwd: workspaceRoot,
-    env: commandEnvironment(home),
-    encoding: "buffer",
+function runOnce(home, workspaceRoot, cliRoot, fixture, fixtureSha256, label, sandboxReceipt) {
+  const result = runSandboxed({
+    home,
+    workspaceRoot,
+    cliRoot,
+    args: [...P02_ARGS],
+    sandboxReceipt,
   });
   if (result.error !== undefined) {
     throwRunnerError("cli_spawn_failed", result.error.message);
@@ -279,20 +488,116 @@ function runOnce(home, workspaceRoot, cliRoot, fixture, fixtureSha256, label) {
   return run;
 }
 
-function commandEnvironment(home) {
-  return {
-    CARPEOS_HOME: home,
-    CARPEOS_TRUST_ZONE: "tz_synthetic",
-    NODE_NO_WARNINGS: "1",
-    HOME: home,
-    NO_COLOR: "1",
-    TZ: "UTC",
-    PATH: process.env.PATH ?? "/usr/bin:/bin",
-  };
+function runSandboxed({ home, workspaceRoot, cliRoot, args, sandboxReceipt }) {
+  assertP02SandboxReceipt(sandboxReceipt);
+  let workspaceReal;
+  let cliReal;
+  let homeReal;
+  try {
+    workspaceReal = realpathSync(resolve(workspaceRoot));
+    cliReal = realpathSync(resolve(cliRoot));
+    homeReal = realpathSync(resolve(home));
+  } catch (error) {
+    throwRunnerError(
+      "sandbox_root_invalid",
+      `sandbox roots must exist: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!isAbsolute(workspaceReal) || !isAbsolute(cliReal) || !isAbsolute(homeReal))
+    throwRunnerError("sandbox_root_invalid", "sandbox roots must be absolute");
+  const runtimePaths = ["/usr", "/bin", "/lib", "/lib64", "/etc", resolve(process.execPath, "..")];
+  const bwrapArgs = [
+    "--die-with-parent",
+    "--new-session",
+    "--unshare-all",
+    "--unshare-net",
+    "--clearenv",
+    "--ro-bind",
+    workspaceReal,
+    "/candidate",
+    "--ro-bind",
+    cliReal,
+    "/cli",
+    "--bind",
+    homeReal,
+    "/home",
+    "--tmpfs",
+    "/tmp",
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--dir",
+    "/run",
+    "--chdir",
+    "/candidate",
+    "--setenv",
+    "HOME",
+    "/home",
+    "--setenv",
+    "CARPEOS_HOME",
+    "/home",
+    "--setenv",
+    "CARPEOS_TRUST_ZONE",
+    "tz_synthetic",
+    "--setenv",
+    "NODE_NO_WARNINGS",
+    "1",
+    "--setenv",
+    "NO_COLOR",
+    "1",
+    "--setenv",
+    "TZ",
+    "UTC",
+    "--setenv",
+    "PATH",
+    "/usr/local/bin:/usr/bin:/bin",
+    "--cap-drop",
+    "ALL",
+    "--rlimit-nproc",
+    String(P02_SANDBOX_CONTRACT.process_limit),
+    "--rlimit-as",
+    String(P02_SANDBOX_CONTRACT.memory_limit_mb * 1024 * 1024),
+    "--rlimit-fsize",
+    String(100 * 1024 * 1024),
+  ];
+  for (const runtimePath of [...new Set(runtimePaths)]) {
+    try {
+      realpathSync(runtimePath);
+      bwrapArgs.push("--ro-bind", runtimePath, runtimePath);
+    } catch {
+      // A runner may not have every conventional runtime directory.
+    }
+  }
+  bwrapArgs.push("--", process.execPath, "/cli/apps/carpeos-cli/dist/index.js", ...args);
+  const result = spawnSync(
+    "setpriv",
+    [
+      "--no-new-privs",
+      "--inh-caps=-all",
+      "--ambient-caps=-all",
+      "--bounding-set=-all",
+      "--",
+      "bwrap",
+      ...bwrapArgs,
+    ],
+    {
+      cwd: workspaceReal,
+      encoding: "buffer",
+      timeout: 120_000,
+    },
+  );
+  if (result.error)
+    throwRunnerError(
+      "sandbox_unavailable",
+      `setpriv/bubblewrap execution failed: ${result.error.message}`,
+    );
+  return result;
 }
 
 export function readStoreObservation(home, observer) {
   const databasePath = resolve(home, "carpeos.sqlite");
+  assertDisposableDatabasePath(databasePath);
   const ownsDatabase = observer === undefined;
   const database = observer ?? new DatabaseSync(databasePath, { readOnly: true });
   try {
@@ -546,6 +851,24 @@ function assertSeedObservation(observation, fixture) {
   }
 }
 
+function assertDisposableDatabasePath(databasePath, { allowMissing = false } = {}) {
+  let stat;
+  try {
+    stat = lstatSync(databasePath);
+  } catch (error) {
+    if (allowMissing && error?.code === "ENOENT") return;
+    throwRunnerError(
+      "fixture_store_not_disposable",
+      `P02 database path is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (stat.isSymbolicLink() || !stat.isFile())
+    throwRunnerError("fixture_store_not_disposable", "P02 database path must be a regular file");
+}
+function assertSha(value, pattern, label) {
+  if (typeof value !== "string" || !pattern.test(value))
+    throwRunnerError("sandbox_receipt_forged", `${label} is invalid`);
+}
 function throwRunnerError(code, message) {
   const error = new Error(`${code}: ${message}`);
   error.name = "P02RunnerError";
@@ -569,28 +892,41 @@ function parseArgs(argv) {
       flag !== "--home" &&
       flag !== "--workspace-root" &&
       flag !== "--cli-root" &&
+      flag !== "--candidate-root" &&
+      flag !== "--sandbox-receipt" &&
       flag !== "--output"
     )
-      throw new Error("P02 runner accepts only --home, --workspace-root, --cli-root, and --output");
+      throw new Error(
+        "P02 runner accepts only --home, --workspace-root, --cli-root, --candidate-root, --sandbox-receipt, and --output",
+      );
     const value = argv[index + 1];
     if (typeof value !== "string" || value.length === 0 || values[flag] !== undefined)
       throw new Error(`${flag} requires one non-empty value and cannot repeat`);
     values[flag] = value;
     index += 1;
   }
-  if (values["--home"] === undefined || values["--output"] === undefined)
-    throw new Error("P02 runner requires --home and --output");
+  if (
+    values["--home"] === undefined ||
+    values["--output"] === undefined ||
+    values["--sandbox-receipt"] === undefined
+  )
+    throw new Error("P02 runner requires --home, --sandbox-receipt, and --output");
   return values;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const args = parseArgs(process.argv.slice(2));
+    const workspaceRoot =
+      args["--workspace-root"] === undefined ? process.cwd() : resolve(args["--workspace-root"]);
+    const candidateRoot =
+      args["--candidate-root"] === undefined ? workspaceRoot : resolve(args["--candidate-root"]);
     const receipt = runP02Twice({
       home: resolve(args["--home"]),
-      workspaceRoot:
-        args["--workspace-root"] === undefined ? process.cwd() : resolve(args["--workspace-root"]),
+      workspaceRoot,
       cliRoot: args["--cli-root"] === undefined ? REPO_ROOT : resolve(args["--cli-root"]),
+      candidateRoot,
+      sandboxReceipt: readP02SandboxReceipt(args["--sandbox-receipt"], { candidateRoot }),
     });
     writeFileSync(resolve(args["--output"]), `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   } catch (error) {

@@ -10,7 +10,12 @@ import {
   buildExactCheckQuery,
   normalizeCheckRunsResponse,
 } from "../product4/github-evidence-api.mjs";
-import { PRODUCT4_POLICY_SHA256 } from "../product4/policy-identity.mjs";
+import {
+  digestJson,
+  MAINTENANCE_STUDY_FIXTURE_SHA256,
+  PRODUCT4_CONTEXT,
+  PRODUCT4_POLICY_SHA256,
+} from "../product4/policy-identity.mjs";
 import {
   appendPromotionEntry,
   assertPromotionLedger,
@@ -23,7 +28,7 @@ const headSha = "a".repeat(40);
 const baseSha = "b".repeat(40);
 const treeSha = "c".repeat(64);
 const workflowSha = "d".repeat(40);
-const externalId = `carpeos-4.0.0:${headSha}:0c7f7e3d849d6ab77558cfb24027c03ef6f6236051d5b0a1f05e86ec959fa60f`;
+const externalId = `carpeos-4.0.0:${headSha}:${MAINTENANCE_STUDY_FIXTURE_SHA256}`;
 
 function intent() {
   return buildCandidateIntent({
@@ -49,7 +54,7 @@ function attestation(envelope) {
     tree_sha256: treeSha,
     fixture_sha256: envelope.fixture_sha256,
     policy_sha256: PRODUCT4_POLICY_SHA256,
-    context: envelope.context,
+    context: PRODUCT4_CONTEXT,
     external_id: externalId,
   };
   const observations = {
@@ -67,7 +72,7 @@ function attestation(envelope) {
       protected_uploads: 0,
     },
     high_water: {
-      canonical_events: 0,
+      canonical_events: 1,
       review_rows: 0,
       disposition_rows: 0,
       outbox_rows: 0,
@@ -78,19 +83,46 @@ function attestation(envelope) {
       isolated: true,
     },
   };
+  const candidateReport = {
+    schema_version: "product4-candidate-report-v1",
+    report_type: "raw_candidate_report",
+    repository_id: identity.repository_id,
+    head_sha: identity.head_sha,
+    tree_sha256: identity.tree_sha256,
+    fixture_sha256: identity.fixture_sha256,
+    intent_policy_sha256: identity.policy_sha256,
+    context: identity.context,
+    external_id: identity.external_id,
+    observed: "synthetic",
+  };
+  const trustedPredicates = Object.fromEntries(PREDICATE_IDS.map((id) => [id, true]));
   const provenance = {
     base_sha: baseSha,
     evaluator_workflow_sha: workflowSha,
     evaluated_at: timestamp,
   };
+  const trustedEvidence = {
+    schema_version: "carpeos.product4-trusted-evidence/v1",
+    owner: "base_evaluator",
+    identity: { ...identity },
+    predicate_digest: digestJson(trustedPredicates),
+    observation_digest: digestJson(observations),
+    source_report_digest: digestJson(candidateReport),
+    source: {
+      kind: "base_recompute",
+      evaluator_tree_sha256: "e".repeat(64),
+    },
+  };
   return evaluateCandidateEvidence({
     identity,
-    candidateReport: { observed: "synthetic" },
-    trustedPredicates: Object.fromEntries(PREDICATE_IDS.map((id) => [id, true])),
+    candidateReport,
+    trustedPredicates,
     observations,
     provenance,
     issuerWorkflowSha: workflowSha,
+    trustedEvidence,
     candidateReportedSuccess: false,
+    requireCandidateExecutionObservation: true,
   }).attestation;
 }
 

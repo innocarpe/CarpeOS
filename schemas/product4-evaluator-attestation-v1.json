@@ -3,6 +3,38 @@
   "$id": "https://spec.carpeos.org/product4/schemas/product4-evaluator-attestation-v1.json",
   "title": "CarpeOS Product 4 strict evaluator attestation",
   "description": "Base-owned, non-executable evidence. Publishers consume it as data only.",
+  "$defs": {
+    "predicate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate_id", "passed", "evidence_digest"],
+      "properties": {
+        "predicate_id": {
+          "type": "string",
+          "enum": [
+            "identity_bound",
+            "fixture_bound",
+            "policy_pinned",
+            "context_pinned",
+            "migration_read_oracle",
+            "six_command_loop",
+            "p02_truthful_no_analog",
+            "zero_write",
+            "state_order",
+            "no_privileged_candidate_execution",
+            "strict_attestation",
+            "exact_c_api",
+            "duplicate_refusal",
+            "lost_response_reconciliation",
+            "provenance_bound",
+            "negative_cases"
+          ]
+        },
+        "passed": { "const": true },
+        "evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,7 +53,7 @@
     "provenance"
   ],
   "properties": {
-    "schema_version": { "const": "product4-evaluator-attestation-v1" },
+    "schema_version": { "const": "carpeos.product4-evaluator-attestation/v1" },
     "attestation_type": { "const": "strict_non_executable" },
     "repository_id": { "const": 1315097793 },
     "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -69,9 +101,111 @@
             ]
           },
           "passed": { "const": true },
-          "evidence_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          "evidence_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the predicate id, passed value, frozen core identity, and observation preimage."
+          }
         }
-      }
+      },
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "identity_bound" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "fixture_bound" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "policy_pinned" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "context_pinned" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "migration_read_oracle" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "six_command_loop" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "p02_truthful_no_analog" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "zero_write" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "state_order" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "no_privileged_candidate_execution" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "strict_attestation" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "exact_c_api" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "duplicate_refusal" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "lost_response_reconciliation" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "provenance_bound" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/predicate_result" },
+            { "properties": { "predicate_id": { "const": "negative_cases" } } }
+          ]
+        }
+      ]
     },
     "observations": {
       "type": "object",

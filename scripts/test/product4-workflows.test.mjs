@@ -70,6 +70,7 @@ test("M4 publisher has no candidate checkout and performs a data-only dry run", 
   assert.match(source, /publisher-runner\.mjs/);
   assert.match(source, /name: product4-attestation\n/);
   assert.doesNotMatch(source, /product4-attestation-\$\{\{/);
+  assert.doesNotMatch(source, /--head-sha "\$\{\{ github\.event\.workflow_run\.head_sha \}\}"/);
   assert.match(source, /name: product4-publication\n/);
   assert.doesNotMatch(source, /product4-publication-\$\{\{/);
   assert.match(source, /live authority/);
