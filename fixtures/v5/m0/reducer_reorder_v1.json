@@ -40,14 +40,8 @@
     "proposal_run_key": "prun_c5632a0d9d4606a2",
     "operation": "extract",
     "selected_model_id": "model_synthetic_primary",
-    "attempt_ids": [
-      "att_e760d585c88916a3",
-      "att_5a0c5df2b08e4f8f"
-    ],
-    "selected_attempt_ids": [
-      "att_5a0c5df2b08e4f8f",
-      "att_e760d585c88916a3"
-    ],
+    "attempt_ids": ["att_e760d585c88916a3", "att_5a0c5df2b08e4f8f"],
+    "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
     "status": "draft",
     "reason_code": "selected_primary",
     "config_identity": "cfg_863f118295406d26",
@@ -184,10 +178,7 @@
         "start": 0,
         "end": 1
       },
-      "source_attempt_ids": [
-        "att_5a0c5df2b08e4f8f",
-        "att_e760d585c88916a3"
-      ],
+      "source_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
       "candidate_digest": "sha256:dab927fbcca5978bbbf2142113c75c780c74a94da358eed41c2509ca31db6312"
     }
   ],
@@ -203,10 +194,7 @@
         "end": 1
       }
     ],
-    "source_attempt_ids": [
-      "att_5a0c5df2b08e4f8f",
-      "att_e760d585c88916a3"
-    ],
+    "source_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
     "synthesis_digest": "sha256:bc93b9211ebf18fce4693b199ab6b33930b7b7d7b798def332c72bd246130e96"
   },
   "prior": null,
@@ -218,13 +206,8 @@
     "proposal_id": "prop_79b69b237ae7e4f7",
     "status": "draft",
     "reason_code": "selected_primary",
-    "selected_attempt_ids": [
-      "att_5a0c5df2b08e4f8f",
-      "att_e760d585c88916a3"
-    ],
-    "selected_candidate_ids": [
-      "cand_f55e1441fdf010f7"
-    ],
+    "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+    "selected_candidate_ids": ["cand_f55e1441fdf010f7"],
     "synthesis_id": "syn_91c5a2f8d939b20f",
     "proposal_row": {
       "schema": "carpeos.proposal-row/v1",
@@ -235,13 +218,8 @@
       "status": "draft",
       "reason_code": "selected_primary",
       "transition_seq": 0,
-      "selected_attempt_ids": [
-        "att_5a0c5df2b08e4f8f",
-        "att_e760d585c88916a3"
-      ],
-      "selected_candidate_ids": [
-        "cand_f55e1441fdf010f7"
-      ],
+      "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+      "selected_candidate_ids": ["cand_f55e1441fdf010f7"],
       "synthesis_id": "syn_91c5a2f8d939b20f",
       "canonical_effect": "none",
       "audit_envelope": {
@@ -277,13 +255,8 @@
   "expected": {
     "status": "draft",
     "reason_code": "selected_primary",
-    "selected_attempt_ids": [
-      "att_5a0c5df2b08e4f8f",
-      "att_e760d585c88916a3"
-    ],
-    "selected_candidate_ids": [
-      "cand_f55e1441fdf010f7"
-    ],
+    "selected_attempt_ids": ["att_5a0c5df2b08e4f8f", "att_e760d585c88916a3"],
+    "selected_candidate_ids": ["cand_f55e1441fdf010f7"],
     "synthesis_id": "syn_91c5a2f8d939b20f",
     "output_sha256": "ee7f8e42019cb4f0e3318869cfa7dd9263b7fa5e2a0a7613b882bd06994dc8ea"
   }

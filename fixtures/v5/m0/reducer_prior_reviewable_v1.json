@@ -37,12 +37,8 @@
     "proposal_run_key": "prun_e4a91974f0d61034",
     "operation": "extract",
     "selected_model_id": "model_synthetic_primary",
-    "attempt_ids": [
-      "att_bc891530bc2908a6"
-    ],
-    "selected_attempt_ids": [
-      "att_bc891530bc2908a6"
-    ],
+    "attempt_ids": ["att_bc891530bc2908a6"],
+    "selected_attempt_ids": ["att_bc891530bc2908a6"],
     "status": "blocked",
     "reason_code": "prior_reviewable_run",
     "config_identity": "cfg_2b4dddefcb92c998",
@@ -109,12 +105,8 @@
       "status": "draft",
       "reason_code": "awaiting_review",
       "transition_seq": 0,
-      "selected_attempt_ids": [
-        "att_e1acaf8ef5d36932"
-      ],
-      "selected_candidate_ids": [
-        "cand_da67bbafdbaee728"
-      ],
+      "selected_attempt_ids": ["att_e1acaf8ef5d36932"],
+      "selected_candidate_ids": ["cand_da67bbafdbaee728"],
       "synthesis_id": "syn_a6502e3c69ae37bd",
       "canonical_effect": "none",
       "audit_envelope": {
@@ -151,9 +143,7 @@
     "proposal_id": "prop_16dfef15b0b967f3",
     "status": "blocked",
     "reason_code": "prior_reviewable_run",
-    "selected_attempt_ids": [
-      "att_bc891530bc2908a6"
-    ],
+    "selected_attempt_ids": ["att_bc891530bc2908a6"],
     "selected_candidate_ids": [],
     "synthesis_id": null,
     "proposal_row": {
@@ -165,9 +155,7 @@
       "status": "blocked",
       "reason_code": "prior_reviewable_run",
       "transition_seq": 0,
-      "selected_attempt_ids": [
-        "att_bc891530bc2908a6"
-      ],
+      "selected_attempt_ids": ["att_bc891530bc2908a6"],
       "selected_candidate_ids": [],
       "synthesis_id": null,
       "canonical_effect": "none",
@@ -209,12 +197,8 @@
         "status": "draft",
         "reason_code": "awaiting_review",
         "transition_seq": 0,
-        "selected_attempt_ids": [
-          "att_e1acaf8ef5d36932"
-        ],
-        "selected_candidate_ids": [
-          "cand_da67bbafdbaee728"
-        ],
+        "selected_attempt_ids": ["att_e1acaf8ef5d36932"],
+        "selected_candidate_ids": ["cand_da67bbafdbaee728"],
         "synthesis_id": "syn_a6502e3c69ae37bd",
         "canonical_effect": "none",
         "audit_envelope": {
@@ -247,9 +231,7 @@
   "expected": {
     "status": "blocked",
     "reason_code": "prior_reviewable_run",
-    "selected_attempt_ids": [
-      "att_bc891530bc2908a6"
-    ],
+    "selected_attempt_ids": ["att_bc891530bc2908a6"],
     "selected_candidate_ids": [],
     "synthesis_id": null,
     "output_sha256": "7358225464e3defec3adba8d6b92316e3b3fea02d155667a5a71132ea4cba7f0"

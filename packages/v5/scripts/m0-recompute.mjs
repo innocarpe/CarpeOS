@@ -101,8 +101,7 @@ for (const v of redactVectors) {
   }
 }
 const redactComputed = "sha256:" + sha256Hex(jcs(redactVectors));
-const redactExpected =
-  "sha256:a020e5cbb35a3249c0e5060e2094aa225a14f99a193673249f6a461a5dfd6eeb";
+const redactExpected = "sha256:a020e5cbb35a3249c0e5060e2094aa225a14f99a193673249f6a461a5dfd6eeb";
 const redactPass = redactComputed === redactExpected;
 
 const redactionReceipt = {
@@ -115,11 +114,11 @@ const redactionReceipt = {
     vector_count: redactVectors.length,
   },
   canonicalization: {
-    procedure: "RFC 8785-style sorted-key UTF-8 JCS over the exact 24-vector array; no wrapper reconstruction",
+    procedure:
+      "RFC 8785-style sorted-key UTF-8 JCS over the exact 24-vector array; no wrapper reconstruction",
     jcs: "packages/v5/scripts/m0-recompute.mjs#jcs",
   },
-  command:
-    "node packages/v5/scripts/m0-recompute.mjs  # redaction branch: sha256(jcs(vectors))",
+  command: "node packages/v5/scripts/m0-recompute.mjs  # redaction branch: sha256(jcs(vectors))",
   computed_value: redactComputed,
   expected_value: redactExpected,
   pass: redactPass,
@@ -202,20 +201,14 @@ module.exports = {
 };
 `;
 const fn = new Function("require", "module", "exports", "console", wrapped);
-fn(
-  require,
-  module,
-  module.exports,
-  {
-    log() {},
-    assert(c, m) {
-      if (!c) throw new Error("telemetry generator assert failed: " + (m || ""));
-    },
+fn(require, module, module.exports, {
+  log() {},
+  assert(c, m) {
+    if (!c) throw new Error("telemetry generator assert failed: " + (m || ""));
   },
-);
+});
 const tel = module.exports;
-const expectedManifest =
-  "sha256:e525906cc32b62d7e5c5c1657a947eee32b172d77aac2b81b5215c196394256a";
+const expectedManifest = "sha256:e525906cc32b62d7e5c5c1657a947eee32b172d77aac2b81b5215c196394256a";
 const expectedSpki = "MCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=";
 const SEED_BYTES = Buffer.from(
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",

@@ -1,7 +1,7 @@
 {
   "schema": "carpeos.v5.m0-computation-receipt/v1",
   "contract": "redact_v1",
-  "timestamp": "2026-08-06T05:38:16.041Z",
+  "timestamp": "2026-08-06T05:51:46.710Z",
   "runtime": {
     "node": "v22.22.3",
     "platform": "darwin",

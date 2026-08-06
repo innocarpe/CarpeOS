@@ -40,14 +40,8 @@
     "proposal_run_key": "prun_cfe2651b46b65cf4",
     "operation": "extract",
     "selected_model_id": "model_synthetic_primary",
-    "attempt_ids": [
-      "att_2ebd9e66b2a617c4",
-      "att_f205815c39b6d993"
-    ],
-    "selected_attempt_ids": [
-      "att_f205815c39b6d993",
-      "att_2ebd9e66b2a617c4"
-    ],
+    "attempt_ids": ["att_2ebd9e66b2a617c4", "att_f205815c39b6d993"],
+    "selected_attempt_ids": ["att_f205815c39b6d993", "att_2ebd9e66b2a617c4"],
     "status": "draft",
     "reason_code": "duplicate_containment",
     "config_identity": "cfg_b9631b779291c9dd",
@@ -184,10 +178,7 @@
         "start": 1,
         "end": 2
       },
-      "source_attempt_ids": [
-        "att_2ebd9e66b2a617c4",
-        "att_f205815c39b6d993"
-      ],
+      "source_attempt_ids": ["att_2ebd9e66b2a617c4", "att_f205815c39b6d993"],
       "candidate_digest": "sha256:045a029123e51cfa96b05e8028b5ba56d32ef5ace9e77f5513b6ab833324ab05"
     }
   ],
@@ -203,10 +194,7 @@
         "end": 2
       }
     ],
-    "source_attempt_ids": [
-      "att_2ebd9e66b2a617c4",
-      "att_f205815c39b6d993"
-    ],
+    "source_attempt_ids": ["att_2ebd9e66b2a617c4", "att_f205815c39b6d993"],
     "synthesis_digest": "sha256:76eb49c9e2af33560acb9f10eadabfeb7dbbc8bee5c8d7207d76786b1686ea7f"
   },
   "prior": null,
@@ -218,13 +206,8 @@
     "proposal_id": "prop_d3cfc84b0d570faa",
     "status": "draft",
     "reason_code": "duplicate_containment",
-    "selected_attempt_ids": [
-      "att_f205815c39b6d993",
-      "att_2ebd9e66b2a617c4"
-    ],
-    "selected_candidate_ids": [
-      "cand_3fbb82316f31534b"
-    ],
+    "selected_attempt_ids": ["att_f205815c39b6d993", "att_2ebd9e66b2a617c4"],
+    "selected_candidate_ids": ["cand_3fbb82316f31534b"],
     "synthesis_id": "syn_0cb57a2c9450fd72",
     "proposal_row": {
       "schema": "carpeos.proposal-row/v1",
@@ -235,13 +218,8 @@
       "status": "draft",
       "reason_code": "duplicate_containment",
       "transition_seq": 0,
-      "selected_attempt_ids": [
-        "att_f205815c39b6d993",
-        "att_2ebd9e66b2a617c4"
-      ],
-      "selected_candidate_ids": [
-        "cand_3fbb82316f31534b"
-      ],
+      "selected_attempt_ids": ["att_f205815c39b6d993", "att_2ebd9e66b2a617c4"],
+      "selected_candidate_ids": ["cand_3fbb82316f31534b"],
       "synthesis_id": "syn_0cb57a2c9450fd72",
       "canonical_effect": "none",
       "audit_envelope": {
@@ -277,13 +255,8 @@
   "expected": {
     "status": "draft",
     "reason_code": "duplicate_containment",
-    "selected_attempt_ids": [
-      "att_f205815c39b6d993",
-      "att_2ebd9e66b2a617c4"
-    ],
-    "selected_candidate_ids": [
-      "cand_3fbb82316f31534b"
-    ],
+    "selected_attempt_ids": ["att_f205815c39b6d993", "att_2ebd9e66b2a617c4"],
+    "selected_candidate_ids": ["cand_3fbb82316f31534b"],
     "synthesis_id": "syn_0cb57a2c9450fd72",
     "output_sha256": "1ab98680ead8df03baa1e16c863261993cfeff63e22d16f68d047b42b7fd9d23"
   }

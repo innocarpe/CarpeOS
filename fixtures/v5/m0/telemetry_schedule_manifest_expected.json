@@ -13,12 +13,7 @@
     "expired": 32
   },
   "body_size_bytes": 16384,
-  "replay_equal": [
-    true,
-    true,
-    true,
-    true
-  ],
+  "replay_equal": [true, true, true, true],
   "conflict_diff_bytes": 1,
   "expired": true,
   "snapshot_manifest": [
