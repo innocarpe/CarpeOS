@@ -397,9 +397,15 @@ function bootstrapStore({ home, workspaceRoot, cliRoot, sandboxReceipt }) {
     sandboxReceipt,
   });
   if (result.error !== undefined || result.status !== 0) {
+    const stderr = result.stderr?.toString("utf8").trim();
     throwRunnerError(
       "fixture_store_bootstrap_failed",
-      result.error?.message ?? `store bootstrap exited with ${String(result.status)}`,
+      [
+        result.error?.message ?? `store bootstrap exited with ${String(result.status)}`,
+        stderr === "" ? undefined : stderr,
+      ]
+        .filter(Boolean)
+        .join(": "),
     );
   }
   let body;
