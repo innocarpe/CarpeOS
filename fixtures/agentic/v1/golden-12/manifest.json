@@ -1,6 +1,6 @@
 {
   "schema": "carpeos.agentic.golden-12/v1",
-  "policy_version": "agentic_v1",
+  "policy_version": "agentic_v1.1",
   "model_id": "deepseek-v4-flash",
   "description": "Minimal vertical-slice corpus for Product 6 brain: 4 decisions, 4 noise, 4 injection/ambiguous. Bodies are synthetic public-safe text only.",
   "cases": [

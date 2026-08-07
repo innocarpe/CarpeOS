@@ -55,7 +55,7 @@ export function humanReviewAgenticHeld(input: AgenticPromoteHeldInput): AgenticP
     observation_event_id: result.observation?.event_id ?? null,
     reason_codes: [
       input.decision === "promote" ? "human_promoted_observation" : "human_rejected_hold",
-      "agentic_v1",
+      AGENTIC_POLICY_VERSION,
       "no_auto_path",
     ],
     error: null,
@@ -196,7 +196,7 @@ export function humanRetractAgenticUnit(input: AgenticRetractUnitInput): Agentic
     supersession_event_id: result.event_id,
     reason_codes: [
       "human_retract_supersession",
-      "agentic_v1",
+      AGENTIC_POLICY_VERSION,
       "correction_only",
       result.status === "replay" ? "replay" : "recorded",
     ],

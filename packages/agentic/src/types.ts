@@ -6,8 +6,13 @@
 /** Frozen real model id for Product 6 (cost policy). */
 export const AGENTIC_FLASH_MODEL_ID = "deepseek-v4-flash" as const;
 
-/** Promotion / disposition policy identity for this plane. */
-export const AGENTIC_POLICY_VERSION = "agentic_v1" as const;
+/**
+ * Promotion / disposition policy identity for this plane.
+ * Bumped to agentic_v1.1 with quality ultragoal Q1′ (prepared pack + effective
+ * Flash views) so bulk retract (QD10) can select quality-era units without
+ * freezing every historical agentic_v1 disposition together.
+ */
+export const AGENTIC_POLICY_VERSION = "agentic_v1.1" as const;
 
 /** Ontology kinds v1 (ADR 0017 D7). */
 export type AgenticKnowledgeKind =

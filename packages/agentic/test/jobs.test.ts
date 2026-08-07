@@ -96,7 +96,7 @@ describe("agentic job store", () => {
     expect(replay).toEqual(first);
     expect(first.state).toBe("pending");
     expect(first.canonical_effect).toBe("none");
-    expect(first.policy_version).toBe("agentic_v1");
+    expect(first.policy_version).toBe("agentic_v1.1");
     expect(countAgenticJobs(db).pending).toBe(1);
     db.close();
   });

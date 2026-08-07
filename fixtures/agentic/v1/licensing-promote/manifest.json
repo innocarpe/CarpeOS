@@ -1,6 +1,6 @@
 {
   "schema": "carpeos.agentic.licensing-promote/v1",
-  "policy_version": "agentic_v1",
+  "policy_version": "agentic_v1.1",
   "model_id": "deepseek-v4-flash",
   "description": "ADR 0018 D3.3 offline licensing corpus: no hint_kind on positives, gate-reaching negatives, multi-topic packs, statement-grounding adversaries. Synthetic public-safe text only.",
   "cases": [

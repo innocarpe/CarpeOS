@@ -142,7 +142,7 @@ export function materializeAgenticProposal(
         reasonCodes: [
           ...proposal.gate.reason_codes,
           `kind:${proposal.candidate.kind}`,
-          "agentic_v1",
+          AGENTIC_POLICY_VERSION,
         ],
         statement: proposal.candidate.statement,
         policyVersion: AGENTIC_POLICY_VERSION,
@@ -208,8 +208,8 @@ export function materializeAgenticProposal(
       reasonCodes: [
         ...proposal.gate.reason_codes,
         `kind:${proposal.candidate.kind}`,
-        "agentic_v1",
-        "formation:agentic_v1",
+        AGENTIC_POLICY_VERSION,
+        `formation:${AGENTIC_POLICY_VERSION}`,
         wantPromote ? "materialize_promote" : "materialize_hold_first",
         `structure_edges:${edges.length}`,
         targets.draft_claim ? "p5_draft_claim_target" : "p5_observation_only",
