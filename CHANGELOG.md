@@ -14,6 +14,32 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.6.0] - 2026-08-07
+
+### Added
+
+- **HITL-free Agentic compound loop (ADR 0018 promote-when-verified)**:
+  - E5 **statement grounding** (quote ⊆ pack is not enough; statement must ground in cited spans)
+  - Offline **licensing-promote** corpus without `hint_kind` positives
+  - Gate default flips to **promote** for verified `decision` | `constraint` | `preference`
+  - `procedure` and `fact_candidate` remain hold-biased (not v1 usable allowlist)
+  - Human **retract** via append-only Supersession (`carpeos agentic retract … --human-confirmed`)
+  - Persistent **day spend** caps in agentic DB; extract gated on triage keep
+  - Capture feed **lease** mutual exclusion for concurrent / always-on runners
+  - **30-minute** always-on batch: `carpeos agentic timer install` / `scripts/install-agentic-timer.sh`
+  - Decision materialize remains Observation-primary + optional draft Claim; never auto `AcceptanceDecision`
+
+### Changed
+
+- CLI `agentic run --allow-auto-promote` defaults **true**; staging escape:
+  `--hold-first` or `CARPEOS_AGENTIC_HOLD_FIRST=1`
+- Human `promote-held` / `accept-claim` documented as **correction-only**, not the happy path
+
+### Notes
+
+- Success criteria: ADR 0018 S1–S7 (usable meaning without load-bearing HITL; S3 via timer).
+- Network remains off by default; live Flash still requires explicit `--allow-network` + key.
+
 ## [6.5.0] - 2026-08-07
 
 ### Added

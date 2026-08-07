@@ -23,8 +23,8 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **Feed backfill** | historical Evidence → agentic feed | `carpeos agentic backfill` | **complete** |
 | **npm 6.5.0** | complete topology residuals | E10 + human review + backfill | **complete** |
 
-| **ADR 0018** | HITL-free compound loop (promote-when-verified + 30m batch brain) | design + reviews (PR #291) + implementation | **implementing** (npm 6.6.0 target) |
-| **npm 6.6.0** | promote-when-verified defaults + retract + day spend + 30m timer | E5 grounding, licensing corpus, S1–S7 | **in progress** |
+| **ADR 0018** | HITL-free compound loop (promote-when-verified + 30m batch brain) | design + reviews (PR #291) + impl (PR #292/#293) | **complete** (code on main) |
+| **npm 6.6.0** | promote-when-verified defaults + retract + day spend + 30m timer | E5 grounding, licensing corpus, S1–S7 | **cutting** |
 
 ## Hard fences
 
