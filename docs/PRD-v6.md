@@ -10,6 +10,12 @@ Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md) · [PRD-v3](PRD-v3.md) ·
 
 ---
 
+## North-star correction (ADR 0018)
+
+Agentic Layer exists so the product loop completes **without required human-in-the-loop**:
+session → capture → verified usable meaning → next agent default retrieval.
+Hold-first staging defaults in early 6.x were a drift; see ADR 0018.
+
 ## Version thesis
 
 > **Can a post-capture Agentic Layer, driven only by DeepSeek V4 Flash, form
