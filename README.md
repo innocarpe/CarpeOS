@@ -381,7 +381,8 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 
 Current npm package is **`@innocarpe/carpeos@6.5.0`** (`v6.5.0`): operator loop through
 adjudication + retrieval, plus Product 4 trust plane, opt-in Product 5 draft lane, and
-**Product 6 hold-first Agentic Layer** (post-capture Flash brain; capture stays dumb).
+**Product 6 Agentic Layer** (post-capture Flash brain; **promote-when-verified** HITL-free
+defaults per ADR 0018; capture stays dumb; human tools are correction-only).
 Full major/minor thesis and DoD index:
 
 - [docs/PRD.md](docs/PRD.md) — one PRD per major
