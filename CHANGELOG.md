@@ -14,6 +14,22 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.3] - 2026-08-07
+
+### Added
+
+- Agentic **triage/extract v2** prompts (`agentic.triage/v2`, `agentic.extract/v2`).
+- Deterministic **decision override belt**: Flash triage drop is upgraded to keep when
+  the pack has explicit decision/constraint/preference language (fixes live
+  `tool_noise` drops on real decisions).
+- Extract parser clamps (max 3 candidates, emittable kinds) + local extract fallback
+  when Flash returns empty or non-emittable kinds on decision packs.
+
+### Fixed
+
+- Runner extract gating uses stage parser so `need_context` never spends extract and
+  local overrides apply before Flash extract is skipped.
+
 ## [6.7.2] - 2026-08-07
 
 ### Fixed
