@@ -1581,7 +1581,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           : providerEnv.loaded_key
             ? "v5-provider.env"
             : "none";
-      const spendCap = Number(parsed.values["spend-cap-usd"] ?? "1");
+      const spendCap = Number(parsed.values["spend-cap-usd"] ?? "5");
       const limit = Number(parsed.values.limit ?? "50");
       const holdFirst =
         parsed.values["hold-first"] === true ||
@@ -1625,7 +1625,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           prefer_lifecycle: preferLifecycle,
           limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50,
           spend: createFlashSpendState({
-            spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
+            spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 5,
+            max_calls: 64,
           }),
           on_project: () => {
             withLocalRetrievalDatabase(store, (retrievalDb) =>
@@ -1767,7 +1768,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         // Default product path: feed drain + Flash + materialize (same as flush).
         const store = openStore(options, env);
         try {
-          const spendCap = Number(parsed.values["spend-cap-usd"] ?? "1");
+          const spendCap = Number(parsed.values["spend-cap-usd"] ?? "5");
           const limit = Number(parsed.values.limit ?? "20");
           const holdFirst =
             parsed.values["hold-first"] === true ||
@@ -1784,7 +1785,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             hold_first: holdFirst,
             limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20,
             spend: createFlashSpendState({
-              spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
+              spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 5,
+              max_calls: 64,
             }),
             on_project: () => {
               withLocalRetrievalDatabase(store, (retrievalDb) =>

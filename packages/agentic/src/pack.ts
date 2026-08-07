@@ -16,6 +16,22 @@ import {
 } from "@carpeos/v5";
 import { digestSha256, sha256Hex } from "./digest.js";
 
+/**
+ * Real SessionEnd transcripts are far larger than V5 draft-lane segment defaults
+ * (segment_scalars: 240). Agentic pack needs room for full session signal text.
+ */
+export const AGENTIC_PACK_LIMITS: ProfileLimits = {
+  ...DEFAULT_PROFILE_LIMITS,
+  field_utf8_bytes: 200_000,
+  field_scalars: 80_000,
+  pack_utf8_bytes: 220_000,
+  pack_scalars: 100_000,
+  field_count: 8,
+  segment_count: 32,
+  segment_scalars: 80_000,
+  segment_utf8_bytes: 200_000,
+};
+
 export type AgenticPackInput = {
   pack_id: string;
   /** Plain UTF-8 body to pack (public-safe / already filtered text). */
@@ -65,7 +81,7 @@ export function packAgenticEvidence(input: AgenticPackInput): AgenticPackResult 
     };
   }
 
-  const limits = input.limits ?? DEFAULT_PROFILE_LIMITS;
+  const limits = input.limits ?? AGENTIC_PACK_LIMITS;
   const outer = buildPlainTextRedactOuter({
     body,
     title: scrubAgenticPackText(input.title ?? "agentic.evidence"),
