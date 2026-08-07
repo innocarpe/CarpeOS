@@ -10,6 +10,7 @@ import { computeStageInputDigest, makeAgenticJobId, sha256Hex, stableJson } from
 import type { SqlDatabase } from "./sql.js";
 import {
   AGENTIC_FLASH_MODEL_ID,
+  AGENTIC_KNOWN_POLICY_VERSIONS,
   AGENTIC_POLICY_VERSION,
   AGENTIC_PROMPT_VERSIONS,
   type AgenticJob,
@@ -414,7 +415,8 @@ function assertJob(job: AgenticJob): void {
   if (job.schema !== "carpeos.agentic.job/v1") {
     throw new Error(`invalid agentic job schema: ${job.schema}`);
   }
-  if (job.policy_version !== AGENTIC_POLICY_VERSION) {
+  // Accept current + known legacy stamps so 6.7+ can lease pre-quality jobs.
+  if (!AGENTIC_KNOWN_POLICY_VERSIONS.has(job.policy_version)) {
     throw new Error(`invalid policy_version: ${job.policy_version}`);
   }
   if (job.model_id !== "fake" && job.model_id !== AGENTIC_FLASH_MODEL_ID) {
