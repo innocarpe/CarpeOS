@@ -14,6 +14,15 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.2] - 2026-08-07
+
+### Fixed
+
+- Flash HTTP calls abort after **45s** (`CARPEOS_AGENTIC_FLASH_TIMEOUT_MS`, 5s–180s);
+  timeouts requeue the feed row instead of hanging flush indefinitely.
+- `agentic flush --limit N` scans past `empty_signal` lifecycle rows (up to 5×N)
+  so Stop/PreCompact emptiness does not starve SessionEnd work.
+
 ## [6.7.1] - 2026-08-07
 
 ### Fixed
