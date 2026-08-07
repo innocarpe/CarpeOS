@@ -98,7 +98,7 @@ After capture, two write-time paths can assign what is worth keeping:
 | Plane | Role | Default path |
 | --- | --- | --- |
 | **`adj_v3`** | Cheap rule prefilter / noise reject | Still available; comparison baseline |
-| **Agentic Layer** (`agentic_v1`) | Typed, cited brain (Flash-only when network on) | **Product 6 happy path** from 6.6.0 |
+| **Agentic Layer** (`agentic_v1.1`) | Typed, cited brain (Flash-only when network on) + **quality plane** | **Product 6 happy path** from 6.6.0; quality ultragoal closed through **6.7.7** |
 
 | Disposition | Meaning unit | Default search |
 | --- | --- | --- |
@@ -398,6 +398,7 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 | Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
 | Product 3.2 DoD (B0 reconciliation preview) | [docs/maintainers/product-3.2.0.md](docs/maintainers/product-3.2.0.md) |
 | Product 6 Agentic architecture | [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md) |
+| Agentic quality plane (ultragoal) | [docs/architecture/agentic-quality.md](docs/architecture/agentic-quality.md) |
 | Product 6 DoD | [docs/maintainers/product-6.0.0.md](docs/maintainers/product-6.0.0.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Compatibility / deprecations | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
@@ -412,18 +413,22 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 Current npm package is **`@innocarpe/carpeos@6.7.7`** (`v6.7.7`): operator loop through
 adjudication + retrieval, Product 4 trust plane, opt-in Product 5 draft lane, and
 **Product 6 HITL-free Agentic Layer** (post-capture Flash brain;
-**promote-when-verified**, retract, day spend, **30m timer** — ADR 0018; capture
-stays dumb; human tools are correction-only).
+**promote-when-verified**, retract, day spend, **30m timer** — ADR 0018) plus the
+**agentic quality plane** (6.7.x: prepared packs, redaction, line-scoped admit,
+transcript recovery, cite grounding, quality corpus DoD, near-dup hold, denser
+host adapters — capture stays dumb; human tools are correction-only).
 Full major/minor thesis and DoD index:
 
 - [docs/PRD.md](docs/PRD.md) — one PRD per major
 - [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md) — service map
+- [docs/architecture/agentic-quality.md](docs/architecture/agentic-quality.md) — quality ultragoal
 - [docs/maintainers/](docs/maintainers/) — `product-N.0.0.md` receipts (e.g.
   [6.0.0](docs/maintainers/product-6.0.0.md), [5.0.0](docs/maintainers/product-5.0.0.md))
 
 Honest residuals (do not invent green): live Product 4 release authority out of band;
 B1 apply deferred; hosted graph/edge not claimed; V5 never on capture hot path;
-procedure auto-promote still hold-biased; live Flash remains opt-in network.
+procedure auto-promote still hold-biased; live Flash remains opt-in network;
+Q-S5 dogfood remains advisory (metrics helper shipped).
 
 ---
 
@@ -437,7 +442,8 @@ Default local loop (CI-gated):
 
 ```text
 hooks → encrypted evidence → agentic_capture_feed (no LLM in capture)
-  → agentic run / 30m timer (promote-when-verified)
+  → agentic flush / run / 30m timer (promote-when-verified, agentic_v1.1)
+  → quality belt (line-scoped admit, scrubbed pack views, cite clamp, near-dup)
   → active Observations in default search
   → retrieval-first graph/hybrid recall → MCP / CLI
   (+ adj_v3 baseline, local OKF export, optional private sync, Obsidian)
@@ -446,6 +452,7 @@ hooks → encrypted evidence → agentic_capture_feed (no LLM in capture)
 # Staging: CARPEOS_AGENTIC_HOLD_FIRST=1
 # Offline (no Flash): CARPEOS_AGENTIC_NETWORK=off or --allow-network false
 # Credentials: DEEPSEEK_API_KEY or ~/.carpeos/v5-provider.env
+# Q-S5 advisory: node scripts/quality-qs5-metrics.mjs --days 7
 ```
 
 | Area | Status |
@@ -462,7 +469,7 @@ hooks → encrypted evidence → agentic_capture_feed (no LLM in capture)
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
 | Product 3.x–5.x | **Shipped** — see product DoDs under `docs/maintainers/` |
-| Product 6 Agentic Layer (`carpeos agentic`) | **HITL-free shipped** in **6.6.0** — promote-when-verified, retract, day spend, 30m timer; [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md) |
+| Product 6 Agentic Layer (`carpeos agentic`) | **HITL-free shipped** from **6.6.0**; **quality plane closed through 6.7.7** (`agentic_v1.1`, corpus DoD, cite belt, near-dup, denser hosts); [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md), [agentic-quality](docs/architecture/agentic-quality.md) |
 | `carpeos setup` / one-stop install | Shipped (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |

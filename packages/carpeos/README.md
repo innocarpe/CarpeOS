@@ -15,10 +15,14 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-The current public release is **`6.7.7`** (grounded extract cite belt + agentic quality substrate + HITL-free Agentic Layer with
-**deepseek-v4-flash product path**, plus `agentic feed` / `flush`). Activate with
-the exact version pin and `carpeos setup doctor`. Always-on Flash batch:
-`carpeos agentic timer install`. Versions follow
+The current public release is **`6.7.7`** (HITL-free Agentic Layer + **closed
+agentic quality plane**: prepared packs, redaction, cite belt, corpus DoD,
+near-dup, denser host adapters; **deepseek-v4-flash** product path; `agentic
+feed` / `flush` / 30m timer). Activate with the exact version pin and
+`carpeos setup doctor`. Always-on Flash batch:
+`carpeos agentic timer install`. Quality notes:
+[agentic-quality.md](https://github.com/innocarpe/carpeos/blob/main/docs/architecture/agentic-quality.md).
+Versions follow
 [SemVer](https://semver.org/). See the repo
 [CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md) and
 [versioning policy](https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/versioning-and-releases.md).

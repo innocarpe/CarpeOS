@@ -25,6 +25,10 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 
 | **ADR 0018** | HITL-free compound loop (promote-when-verified + 30m batch brain) | design + reviews (PR #291) + impl (PR #292/#293) | **complete** |
 | **npm 6.6.0** | promote-when-verified defaults + retract + day spend + 30m timer | E5 grounding, licensing corpus, S1–S7; npm+tag+local activate | **complete** |
+| **Quality ultragoal plan** | v2.1 SSOT + dual reviews | `docs/plans/agentic-quality-ultragoal.md` | **complete** |
+| **npm 6.7.0–6.7.4** | quality substrate + cite belt | prepared pack, redaction, admit line-scope, transcript recovery, quality filter, triage/extract v2, corpus baseline #2 | **complete** |
+| **npm 6.7.5–6.7.6** | residual closeout | Q-S5 metrics, scrub PII shapes, within-pack near-dup, rebuild soft-fail | **complete** |
+| **npm 6.7.7** | optional polish | cross-session near-dup + denser host adapters; docs surface sync | **complete** |
 
 ## Hard fences
 
@@ -59,4 +63,8 @@ CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 ```sh
 pnpm --filter @carpeos/agentic test
 # golden-12 under fixtures/agentic/v1/golden-12/ (offline, network_used=false)
+# quality corpus DoD:
+pnpm --filter './packages/agentic' exec vitest run test/quality-corpus.test.ts
+# Q-S5 advisory:
+node scripts/quality-qs5-metrics.mjs --days 7
 ```
