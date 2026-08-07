@@ -130,6 +130,7 @@ export function runAgenticProposalPipeline(
   if (!packed.ok) {
     return {
       ...base,
+      ok: false,
       stage: "pack",
       reason_codes: [packed.error_code, packed.detail],
     };

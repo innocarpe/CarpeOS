@@ -159,9 +159,15 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
       ...nowOpt,
     });
 
-    // Live Flash second pass when admitted and network allowed.
-    // Extract is gated on triage keep (ADR 0018 D5) to avoid spend on drops.
-    if (allow_network && pipeline.admit_decision === "admit") {
+    // Live Flash second pass when admitted, pack succeeded, and network allowed.
+    // Do not spend Flash tokens when pack/redact already failed.
+    if (
+      allow_network &&
+      pipeline.admit_decision === "admit" &&
+      pipeline.ok &&
+      pipeline.pack_digest !== null &&
+      pipeline.pack_digest !== undefined
+    ) {
       const triageRes = await callAgenticFlash({
         stage: "triage",
         pack_text: signal,
