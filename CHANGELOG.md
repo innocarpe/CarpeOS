@@ -14,6 +14,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.1] - 2026-08-07
+
+### Fixed
+
+- Agentic job lease accepts legacy durable `agentic_v1` policy stamps so homes
+  upgraded from 6.6.x can `agentic flush` without `invalid policy_version` crashes.
+  New jobs still stamp `agentic_v1.1`.
+
 ## [6.7.0] - 2026-08-07
 
 ### Added
