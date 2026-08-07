@@ -4,7 +4,9 @@
  * No LLM, no network, no canonical writes.
  */
 
-const LIFECYCLE_ADMIT = new Set(["SessionEnd", "Stop", "PreCompact"]);
+import { AGENTIC_FEED_LIFECYCLE_HOOKS, normalizeAgenticFeedHook } from "@carpeos/capture";
+
+const LIFECYCLE_ADMIT = new Set<string>(AGENTIC_FEED_LIFECYCLE_HOOKS);
 const ALWAYS_DROP = new Set(["PostToolUse", "SessionStart", "Notification"]);
 
 const NOISE_ONLY = /^(ok|done|passed|success|noop|n\/a|none|\.|…|\.\.\.)$/i;
@@ -91,17 +93,5 @@ export function ruleAdmitEvidence(input: AgenticAdmitInput): AgenticAdmitResult 
 }
 
 function normalizeHook(raw: string): string {
-  const t = raw.trim();
-  if (t.length === 0) return "unknown";
-  const key = t.toLowerCase().replace(/[\s_-]+/g, "");
-  const map: Record<string, string> = {
-    sessionend: "SessionEnd",
-    stop: "Stop",
-    precompact: "PreCompact",
-    posttooluse: "PostToolUse",
-    sessionstart: "SessionStart",
-    notification: "Notification",
-    userpromptsubmit: "UserPromptSubmit",
-  };
-  return map[key] ?? t;
+  return normalizeAgenticFeedHook(raw);
 }

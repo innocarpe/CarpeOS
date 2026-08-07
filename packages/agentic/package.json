@@ -22,6 +22,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@carpeos/capture": "workspace:*",
     "@carpeos/local-store": "workspace:*",
     "@carpeos/schema": "workspace:*",
     "@carpeos/v5": "workspace:*"

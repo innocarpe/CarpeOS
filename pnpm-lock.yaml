@@ -114,6 +114,9 @@ importers:
 
   packages/agentic:
     dependencies:
+      '@carpeos/capture':
+        specifier: workspace:*
+        version: link:../capture
       '@carpeos/local-store':
         specifier: workspace:*
         version: link:../local-store

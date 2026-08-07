@@ -99,7 +99,7 @@ describe("product loop: capture feed → runner → materialize", () => {
     store.close();
   });
 
-  it("PostToolUse noise is feed-drained as skipped without active meaning", async () => {
+  it("PostToolUse never enters agentic feed (lifecycle-only enqueue)", async () => {
     const store = makeStore();
     const captured = store.captureHook(
       envelope({
@@ -109,6 +109,9 @@ describe("product loop: capture feed → runner → materialize", () => {
       }),
       { extract: false },
     );
+    expect(captured.status).toBe("captured");
+    // Product path: noise hooks are not queued for Flash at all.
+    expect(store.listAgenticCaptureFeed({ state: "pending" })).toHaveLength(0);
     const agenticDb = new DatabaseSync(join(tempDir(), "agentic.sqlite"));
     const report = await processAgenticOnce({
       store,
@@ -116,11 +119,9 @@ describe("product loop: capture feed → runner → materialize", () => {
       materialize: true,
       now,
     });
-    expect(report.feed_skipped).toBe(1);
-    expect(
-      listAgenticProposals(agenticDb).filter((p) => p.gate.decision !== "reject"),
-    ).toHaveLength(0);
-    expect(store.listDispositionHistory(captured.event.event_id)).toHaveLength(0);
+    expect(report.feed_seen).toBe(0);
+    expect(report.reason_codes).toContain("feed_empty");
+    expect(listAgenticProposals(agenticDb)).toHaveLength(0);
     store.close();
     agenticDb.close();
   });

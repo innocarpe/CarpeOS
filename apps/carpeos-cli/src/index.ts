@@ -1546,6 +1546,13 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           "hold-first": { type: "boolean", default: false },
           "spend-cap-usd": { type: "string" },
           limit: { type: "string" },
+          /**
+           * Before drain, bulk-skip residual non-lifecycle rows (PostToolUse flood).
+           * Default true so flush spends Flash on SessionEnd first.
+           */
+          "skip-ineligible": { type: "boolean", default: true },
+          /** Prefer SessionEnd/Stop/PreCompact when claiming (default true). */
+          "prefer-lifecycle": { type: "boolean", default: true },
         },
         allowPositionals: false,
         strict: true,
@@ -1580,15 +1587,22 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         parsed.values["hold-first"] === true ||
         env.CARPEOS_AGENTIC_HOLD_FIRST === "1" ||
         env.CARPEOS_AGENTIC_HOLD_FIRST === "true";
+      const skipIneligible = parsed.values["skip-ineligible"] !== false;
+      const preferLifecycle = parsed.values["prefer-lifecycle"] !== false;
       const db = openAgenticDb(runtimeDir);
       const store = openStore(options, env);
       try {
+        let noiseSkip: { scanned: number; skipped: number } | null = null;
+        if (skipIneligible) {
+          noiseSkip = store.skipIneligibleAgenticFeed({ limit: 10_000 });
+        }
         const before = summarizeAgenticFeed(store, 10, { preview: false });
         if (before.counts.pending + before.counts.leased === 0) {
           writeJson(process.stdout, {
             ok: true,
             command: `agentic.${subcommand}`,
             message: "feed empty — nothing to flush",
+            noise_skip: noiseSkip,
             feed_before: before.counts,
             feed_after: before.counts,
             model_id: AGENTIC_FLASH_MODEL_ID,
@@ -1608,6 +1622,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           materialize: parsed.values.materialize !== false,
           allow_auto_promote: holdFirst ? false : parsed.values["allow-auto-promote"] !== false,
           hold_first: holdFirst,
+          prefer_lifecycle: preferLifecycle,
           limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50,
           spend: createFlashSpendState({
             spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
@@ -1622,6 +1637,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         writeJson(process.stdout, {
           ok: report.ok,
           command: `agentic.${subcommand}`,
+          noise_skip: noiseSkip,
+          prefer_lifecycle: preferLifecycle,
           feed_before: before.counts,
           feed_after: after.counts,
           report,
@@ -2765,7 +2782,7 @@ export function formatCommandHelp(command: string): string {
 USAGE
   carpeos agentic status [--home <path>] [--trust-zone <id>]
   carpeos agentic feed [--limit N] [--preview]     # inspect capture queue
-  carpeos agentic flush [--limit N]                # process queue NOW (Flash default)
+  carpeos agentic flush [--limit N] [--skip-ineligible]  # process NOW (Flash; prefer SessionEnd)
   carpeos agentic run --once [--materialize] [--limit N]
   carpeos agentic run --once --text <signal> [--hook-event SessionEnd]
   carpeos agentic run --once --golden [--golden-path <manifest.json>]
@@ -2782,7 +2799,7 @@ OPERATOR LOOP (test / debug)
 SUBCOMMANDS
   status       Feed + job + proposal counts (Flash product path)
   feed         Inspect agentic_capture_feed (pending/leased/done/skipped)
-  flush        Immediate drain of pending feed via deepseek-v4-flash (alias: drain)
+  flush        Immediate drain (Flash); default skip non-lifecycle noise + prefer SessionEnd
   run          Same drain path as flush; also --text / --golden modes
   timer        Install 30m always-on Flash batch (launchd/systemd)
   list-held / promote-held / accept-claim / retract
