@@ -7,7 +7,7 @@ knowledge, and retrieve it for humans and agents.
 
 ```sh
 # npm — current public release
-npm install -g @innocarpe/carpeos@6.5.0
+npm install -g @innocarpe/carpeos@6.6.0
 
 # one-liner (curl)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
