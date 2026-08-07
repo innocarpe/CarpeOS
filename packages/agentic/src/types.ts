@@ -11,8 +11,20 @@ export const AGENTIC_FLASH_MODEL_ID = "deepseek-v4-flash" as const;
  * Bumped to agentic_v1.1 with quality ultragoal Q1′ (prepared pack + effective
  * Flash views) so bulk retract (QD10) can select quality-era units without
  * freezing every historical agentic_v1 disposition together.
+ *
+ * New writes use AGENTIC_POLICY_VERSION. Durable jobs/dispositions may still
+ * carry legacy stamps; readers must accept the known set.
  */
 export const AGENTIC_POLICY_VERSION = "agentic_v1.1" as const;
+/** Historical policy stamps still present in local agentic job stores. */
+export const AGENTIC_LEGACY_POLICY_VERSIONS = ["agentic_v1"] as const;
+export type AgenticPolicyVersion =
+  | typeof AGENTIC_POLICY_VERSION
+  | (typeof AGENTIC_LEGACY_POLICY_VERSIONS)[number];
+export const AGENTIC_KNOWN_POLICY_VERSIONS: ReadonlySet<string> = new Set([
+  AGENTIC_POLICY_VERSION,
+  ...AGENTIC_LEGACY_POLICY_VERSIONS,
+]);
 
 /** Ontology kinds v1 (ADR 0017 D7). */
 export type AgenticKnowledgeKind =
@@ -58,7 +70,7 @@ export type AgenticJob = {
   source_event_id: string;
   stage: AgenticStageId;
   state: AgenticJobState;
-  policy_version: typeof AGENTIC_POLICY_VERSION;
+  policy_version: AgenticPolicyVersion;
   model_id: typeof AGENTIC_FLASH_MODEL_ID | "fake";
   /** Identity digest: pack + prompt + model + policy (+ prior stage output). */
   input_digest: string;

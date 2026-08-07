@@ -101,6 +101,22 @@ describe("agentic job store", () => {
     db.close();
   });
 
+  it("leases and rewrites durable jobs stamped agentic_v1 (pre-6.7 compat)", () => {
+    const db = makeDb();
+    const job = enqueueAgenticJob(db, spec({ source_event_id: "evt_legacy_policy" }));
+    // Simulate a pre-quality job row still on disk.
+    const legacy = { ...job, policy_version: "agentic_v1" as const };
+    db.prepare(`UPDATE agentic_jobs SET job_json = ? WHERE job_id = ?`).run(
+      JSON.stringify(legacy),
+      job.job_id,
+    );
+    const lease = leaseAgenticJobs(db, { limit: 1, leaseMs: 30_000, now });
+    expect(lease).toHaveLength(1);
+    expect(lease[0]?.job.policy_version).toBe("agentic_v1");
+    expect(lease[0]?.job.state).toBe("leased");
+    db.close();
+  });
+
   it("leases due jobs once and rejects concurrent double-lease", () => {
     const db = makeDb();
     enqueueAgenticJob(db, spec());
