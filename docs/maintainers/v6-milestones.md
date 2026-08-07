@@ -23,6 +23,8 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **Feed backfill** | historical Evidence → agentic feed | `carpeos agentic backfill` | **complete** |
 | **npm 6.5.0** | complete topology residuals | E10 + human review + backfill | **complete** |
 
+| **ADR 0018** | HITL-free compound loop (promote-when-verified + 30m batch brain) | design + reviews | **proposed** |
+
 ## Hard fences
 
 - Capture: no LLM/network/agentic await
