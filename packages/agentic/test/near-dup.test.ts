@@ -19,7 +19,10 @@ describe("near-duplicate promote hold", () => {
       allow_auto_promote: true,
       agentic_enabled: true,
       now,
-      flash_triage_text: JSON.stringify({ decision: "keep", reason_codes: ["decision_class_signal"] }),
+      flash_triage_text: JSON.stringify({
+        decision: "keep",
+        reason_codes: ["decision_class_signal"],
+      }),
       flash_extract_text: JSON.stringify({
         candidates: [
           { kind: "decision", statement: quote, quote, confidence: 0.9 },
