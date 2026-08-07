@@ -59,8 +59,18 @@ is recorded in [../maintainers/quality-ultragoal-qs5-receipt.md](../maintainers/
 | --- | --- |
 | Privacy scrub: emails / IPs / DNS hostnames | **shipped** (`scrubAgenticPackText`) |
 | Near-dup promote hold (within pack) | **shipped** (`near_duplicate_statement`) |
+| Near-dup promote hold (recent zone promotes) | **shipped** (`near_duplicate_statement_recent`) |
+| Denser host adapters (nested prose keys + more transcript roots) | **shipped** (`extractSignalTextFromCapturePayload` dig + `~/.cursor`/`~/.gajae`/`~/.agents`) |
 | Retrieval rebuild must not fail-close materialize | **shipped** (`project_hook_failed` soft path) |
 | Q-S5 metric helper | **shipped** (`scripts/quality-qs5-metrics.mjs`) |
+
+### What “optional polish” meant
+
+Plan §8 listed three optional items **after** DoD:
+
+1. **near-dup hold** — stop promoting the same decision text over and over (now within-pack + recent promotes in the trust zone).
+2. **denser host adapters** — more Claude/Codex/Cursor/Grok/Gajae envelope shapes yield agentic prose (nested `payload.message.content`, `final_message`, content-block arrays, extra transcript roots) without `JSON.stringify` of the whole envelope.
+3. **residual scrub broaden** — emails/IPs/hostnames (already shipped in 6.7.6).
 
 ## Fences (unchanged)
 

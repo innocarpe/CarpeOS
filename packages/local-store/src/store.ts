@@ -5590,23 +5590,45 @@ export function isAgenticFeedEnabled(env: NodeJS.ProcessEnv = process.env): bool
  * - NEVER JSON.stringify the full envelope as the agentic body (H0).
  * - No prose → empty string (admit → empty_signal before Flash).
  */
+/** Inline prose keys used by Claude/Codex/Cursor/Grok/Gajae-style hook envelopes. */
+const AGENTIC_INLINE_PROSE_KEYS = [
+  "transcript",
+  "transcript_text",
+  "text",
+  "message",
+  "content",
+  "body",
+  "summary",
+  "prompt",
+  "user_message",
+  "assistant_message",
+  "final_message",
+  "response",
+  "output_text",
+  "last_assistant_message",
+  "completion",
+  "result",
+] as const;
+
+const AGENTIC_NEST_KEYS = ["payload", "event", "data", "message", "result", "session"] as const;
+
 export function extractSignalTextFromCapturePayload(payload: unknown): string {
   if (payload === null || payload === undefined) return "";
   if (typeof payload === "string") return payload.trim();
   if (typeof payload !== "object" || Array.isArray(payload)) return "";
-  const obj = payload as Record<string, unknown>;
-  for (const key of [
-    "transcript",
-    "transcript_text",
-    "text",
-    "message",
-    "content",
-    "body",
-    "summary",
-  ]) {
+  return digAgenticProse(payload as Record<string, unknown>, 0);
+}
+
+/**
+ * denser host adapters: walk a few nested objects for prose / transcript_path
+ * without JSON.stringify of the full envelope (H0 fence).
+ */
+function digAgenticProse(obj: Record<string, unknown>, depth: number): string {
+  if (depth > 3) return "";
+
+  for (const key of AGENTIC_INLINE_PROSE_KEYS) {
     const v = obj[key];
     if (typeof v === "string" && v.trim().length > 0) {
-      // Structured JSONL transcript as a single string: extract agentic prose.
       const trimmed = v.trim();
       if (
         trimmed.includes("\n") &&
@@ -5616,14 +5638,47 @@ export function extractSignalTextFromCapturePayload(payload: unknown): string {
         const fromJsonl = agenticProseFromTranscriptJsonl(trimmed);
         if (fromJsonl.length > 0) return fromJsonl;
       }
+      // Nested "message" may be metadata-ish; still accept non-empty prose.
       return trimmed;
     }
+    // Cursor/Codex sometimes nest { message: { content: "..." } } or content arrays.
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      const nested = digAgenticProse(v as Record<string, unknown>, depth + 1);
+      if (nested.length > 0) return nested;
+    }
+    if (Array.isArray(v)) {
+      const parts: string[] = [];
+      for (const item of v) {
+        if (typeof item === "string" && item.trim().length > 0) parts.push(item.trim());
+        else if (item !== null && typeof item === "object") {
+          const row = item as Record<string, unknown>;
+          if (typeof row.text === "string" && row.text.trim().length > 0) {
+            parts.push(row.text.trim());
+          } else if (typeof row.content === "string" && row.content.trim().length > 0) {
+            parts.push(row.content.trim());
+          }
+        }
+      }
+      if (parts.length > 0) return parts.join("\n").slice(0, 48_000);
+    }
   }
-  const path = obj.transcript_path ?? obj.transcriptPath;
-  if (typeof path === "string" && path.trim().length > 0) {
-    const fromPath = agenticProseFromTranscriptPath(path.trim());
-    if (fromPath.length > 0) return fromPath;
+
+  for (const pathKey of ["transcript_path", "transcriptPath"] as const) {
+    const path = obj[pathKey];
+    if (typeof path === "string" && path.trim().length > 0) {
+      const fromPath = agenticProseFromTranscriptPath(path.trim());
+      if (fromPath.length > 0) return fromPath;
+    }
   }
+
+  for (const nest of AGENTIC_NEST_KEYS) {
+    const child = obj[nest];
+    if (child !== null && typeof child === "object" && !Array.isArray(child)) {
+      const nested = digAgenticProse(child as Record<string, unknown>, depth + 1);
+      if (nested.length > 0) return nested;
+    }
+  }
+
   // No prose resolved — empty (do not stringify envelope metadata as body).
   return "";
 }
