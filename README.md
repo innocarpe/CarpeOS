@@ -21,8 +21,8 @@ on the happy path.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest package:** [`@innocarpe/carpeos@6.6.4`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [`v6.6.4`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.6.4)).
+**Latest package:** [`@innocarpe/carpeos@6.7.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [`v6.7.0`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.7.0)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -304,7 +304,7 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@6.6.4`. See [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@6.7.0`. See [CHANGELOG.md](CHANGELOG.md).
 Milestone DoDs (maintainers): [`docs/maintainers/`](docs/maintainers/) ·
 product index: [docs/PRD.md](docs/PRD.md).
 
@@ -409,7 +409,7 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 
 ## Product line (majors)
 
-Current npm package is **`@innocarpe/carpeos@6.6.4`** (`v6.6.4`): operator loop through
+Current npm package is **`@innocarpe/carpeos@6.7.0`** (`v6.7.0`): operator loop through
 adjudication + retrieval, Product 4 trust plane, opt-in Product 5 draft lane, and
 **Product 6 HITL-free Agentic Layer** (post-capture Flash brain;
 **promote-when-verified**, retract, day spend, **30m timer** — ADR 0018; capture
@@ -429,8 +429,8 @@ procedure auto-promote still hold-biased; live Flash remains opt-in network.
 
 ## What works today
 
-**Public package:** [`@innocarpe/carpeos@6.6.4`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v6.6.4` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
+**Public package:** [`@innocarpe/carpeos@6.7.0`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v6.7.0` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
 live Product 4 release authority.
 
 Default local loop (CI-gated):
