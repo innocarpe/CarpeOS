@@ -162,8 +162,7 @@ export function materializeAgenticProposal(
     }
   }
 
-  const wantPromote =
-    gateDecision === "promote" && input.allow_promote_materialize !== false;
+  const wantPromote = gateDecision === "promote" && input.allow_promote_materialize !== false;
   const disposition: "hold" | "promote" = wantPromote ? "promote" : "hold";
   const lifecycleStatus = wantPromote ? "active" : "draft";
   const targets = materializeTargetsForKind(proposal.candidate.kind);

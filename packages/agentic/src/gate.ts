@@ -92,13 +92,7 @@ export function evaluateAgenticGate(input: {
   const confidence_ok = typeof conf !== "number" || conf >= 0.55;
   const promoteEnabled = input.hold_first === true ? false : input.allow_auto_promote !== false;
 
-  if (
-    promoteEnabled &&
-    kind_allowlisted &&
-    input.cite_ok &&
-    input.secret_ok &&
-    confidence_ok
-  ) {
+  if (promoteEnabled && kind_allowlisted && input.cite_ok && input.secret_ok && confidence_ok) {
     return {
       schema: "carpeos.agentic.gate-result/v1",
       policy_version: AGENTIC_POLICY_VERSION,
@@ -122,9 +116,7 @@ export function evaluateAgenticGate(input: {
     schema: "carpeos.agentic.gate-result/v1",
     policy_version: AGENTIC_POLICY_VERSION,
     decision: "hold",
-    reason_codes: promoteEnabled
-      ? ["hold_confidence_or_features"]
-      : ["hold_first_debug_override"],
+    reason_codes: promoteEnabled ? ["hold_confidence_or_features"] : ["hold_first_debug_override"],
     features,
   };
 }

@@ -5,6 +5,7 @@
     "includes": [
       "**",
       "!.omx",
+      "!.omc",
       "!.carpeos",
       "!.wrangler",
       "!node_modules",
@@ -12,6 +13,7 @@
       "!dist",
       "!build",
       "!**/.omx",
+      "!**/.omc",
       "!.gjc",
       "!**/.gjc",
       "!**/.carpeos",

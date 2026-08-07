@@ -1242,7 +1242,10 @@ export class LocalCaptureStore {
       return { status: "failed", error: "humanConfirmed must be true" };
     }
     const decidedBy = input.decidedBy.trim();
-    if (decidedBy.length < 2 || /^(agent|system|llm|flash|auto|runner|bot)([._-]|$)/i.test(decidedBy)) {
+    if (
+      decidedBy.length < 2 ||
+      /^(agent|system|llm|flash|auto|runner|bot)([._-]|$)/i.test(decidedBy)
+    ) {
       return { status: "failed", error: "decidedBy must be a human actor id" };
     }
     const prior = this.listCanonicalEventSnapshots({
@@ -1379,7 +1382,13 @@ export class LocalCaptureStore {
               event_id, state, attempts, available_at, push_request_json, created_at, updated_at
             ) VALUES (?, 'pending', 0, ?, ?, ?, ?)
           `)
-          .run(event.event_id, recordedAt, stableJson({ schema_version: "v1", events: [event] }), recordedAt, recordedAt);
+          .run(
+            event.event_id,
+            recordedAt,
+            stableJson({ schema_version: "v1", events: [event] }),
+            recordedAt,
+            recordedAt,
+          );
         return { status: "recorded" as const, event, event_id: event.event_id };
       });
     } catch (error) {
@@ -4722,11 +4731,9 @@ export class LocalCaptureStore {
    * Atomically claim pending (or expired leased) feed rows for exclusive processing.
    * ADR 0018 D5 mutual exclusion for always-on / concurrent runners.
    */
-  claimAgenticCaptureFeed(input: {
-    limit?: number;
-    leaseMs?: number;
-    now?: Date;
-  } = {}): AgenticCaptureFeedRow[] {
+  claimAgenticCaptureFeed(
+    input: { limit?: number; leaseMs?: number; now?: Date } = {},
+  ): AgenticCaptureFeedRow[] {
     const limit = input.limit ?? 20;
     if (!Number.isInteger(limit) || limit < 1) {
       throw new Error("claimAgenticCaptureFeed limit must be a positive integer");

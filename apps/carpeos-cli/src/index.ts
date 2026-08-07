@@ -2137,7 +2137,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         writeJson(process.stdout, {
           ok: false,
           command: "agentic.timer",
-          error: "install-agentic-timer.sh not found; run from a checkout or set CARPEOS_TIMER_SCRIPT",
+          error:
+            "install-agentic-timer.sh not found; run from a checkout or set CARPEOS_TIMER_SCRIPT",
           action,
         });
         return 1;
