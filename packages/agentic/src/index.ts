@@ -21,6 +21,8 @@ export * from "./pack.js";
 export * from "./pipeline.js";
 export * from "./precision.js";
 export * from "./proposals.js";
+export * from "./quality-corpus.js";
+export * from "./quality-filter.js";
 export * from "./reconcile.js";
 export * from "./report.js";
 export * from "./runner.js";

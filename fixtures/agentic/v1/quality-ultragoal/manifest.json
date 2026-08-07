@@ -1,0 +1,97 @@
+{
+  "schema": "carpeos.agentic.quality-ultragoal/v1",
+  "policy_version": "agentic_v1.1",
+  "model_id": "deepseek-v4-flash",
+  "description": "Quality ultragoal corpus (Q2′): exact expect promote|no_promote|hold. Synthetic public-safe only. Baseline #1 characterization.",
+  "baseline": "quality-baseline-1",
+  "cases": [
+    {
+      "id": "q-dec-01",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "After review we decided to require make preflight before opening any pull request. Capture remains network-off."
+    },
+    {
+      "id": "q-con-01",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: capture hooks must never call the network or an LLM during SessionEnd. This is non-negotiable."
+    },
+    {
+      "id": "q-pref-01",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference recorded: default search remains promoted active knowledge only; held drafts stay out of MCP defaults."
+    },
+    {
+      "id": "q-meta-01",
+      "class": "metadata_only_session_end",
+      "expect_gate": "no_promote",
+      "must_not_promote": true,
+      "signal_source": "inline",
+      "pack_text": "The hook event is SessionEnd. The agent type is claude. The session ID is sess_synthetic_meta_01."
+    },
+    {
+      "id": "q-sid-01",
+      "class": "session_id_fact",
+      "expect_gate": "no_promote",
+      "must_not_promote": true,
+      "signal_source": "inline",
+      "pack_text": "The session ID is abcdef1234567890 and the last assistant message is find-me-token-77."
+    },
+    {
+      "id": "q-tool-01",
+      "class": "tool_noise_session_end",
+      "expect_gate": "no_promote",
+      "must_not_promote": true,
+      "signal_source": "inline",
+      "pack_text": "PostToolUse: ran git status --porcelain successfully with exit 0. 12 files clean."
+    },
+    {
+      "id": "q-long-01",
+      "class": "long_session_with_one_decision",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Chatter about weather and lunch plans continues for a while without binding choices. Later we decided to require make preflight before opening any pull request. More chatter follows."
+    },
+    {
+      "id": "q-path-01",
+      "class": "decision_with_absolute_path",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We decided to require make preflight before PRs. Notes live at /tmp/synthetic/workspace/repo and https://example.com/docs."
+    },
+    {
+      "id": "q-ko-01",
+      "class": "korean_decision_session",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "결정: PR을 열기 전에 반드시 make preflight를 요구한다. 캡처는 네트워크를 호출하지 않는다."
+    },
+    {
+      "id": "q-mixed-01",
+      "class": "mixed_ko_en_decision",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before any PR. 또한 캡처 훅은 LLM을 호출하지 않는다."
+    },
+    {
+      "id": "q-mixed-noise-01",
+      "class": "decision_with_tool_noise_lines",
+      "expect_gate": "promote",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before opening any pull request.\nPostToolUse: ran git status successfully with exit 0."
+    }
+  ]
+}

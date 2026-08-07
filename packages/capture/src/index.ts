@@ -62,6 +62,8 @@ export {
 } from "./adjudication.js";
 
 export {
+  agenticProseFromTranscriptJsonl,
+  agenticProseFromTranscriptPath,
   isAllowedTranscriptPath,
   readTranscriptTail,
   signalsFromTranscriptPath,

@@ -2,6 +2,10 @@
  * E1 Rule admit — adj_v3 sibling feed (ADR 0017 D5).
  * Drops PostToolUse-class noise before any Flash spend.
  * No LLM, no network, no canonical writes.
+ *
+ * Quality ultragoal Q2.5′: TOOL_NOISE and SECRETISH are line-scoped so a
+ * mixed SessionEnd (decision + tool chatter / “api key” mention) is not
+ * whole-signal dropped (H7/H8 / Q-S14).
  */
 
 import { AGENTIC_FEED_LIFECYCLE_HOOKS, normalizeAgenticFeedHook } from "@carpeos/capture";
@@ -34,6 +38,11 @@ export type AgenticAdmitResult = {
   trust_zone_id: string;
   /** Sidecar only until materialize. */
   canonical_effect: "none";
+  /**
+   * Line-scoped residual signal after dropping noise/secret lines (Q2.5′).
+   * When decision=admit, callers should prefer this over raw signal when non-empty.
+   */
+  residual_signal_text?: string;
 };
 
 /**
@@ -55,10 +64,6 @@ export function ruleAdmitEvidence(input: AgenticAdmitInput): AgenticAdmitResult 
     return { ...base, decision: "drop", reason_codes: ["empty_signal"] };
   }
 
-  if (SECRETISH.test(signal)) {
-    return { ...base, decision: "drop", reason_codes: ["secret_like_material"] };
-  }
-
   if (INJECTION.test(signal)) {
     return { ...base, decision: "drop", reason_codes: ["injection_or_exfil_pattern"] };
   }
@@ -71,25 +76,66 @@ export function ruleAdmitEvidence(input: AgenticAdmitInput): AgenticAdmitResult 
     return { ...base, decision: "drop", reason_codes: ["noise_only_signal"] };
   }
 
-  // Tool chatter must never reach Flash — even on lifecycle hooks (SessionEnd dumps).
-  if (TOOL_NOISE.test(signal)) {
-    return { ...base, decision: "drop", reason_codes: ["tool_noise_signal"] };
-  }
-
   if (!LIFECYCLE_ADMIT.has(normalized_hook)) {
-    // Non-lifecycle hooks: drop by default for Flash cost control (slice-1).
     return { ...base, decision: "drop", reason_codes: ["lifecycle_not_eligible"] };
   }
 
-  if (signal.length < 8) {
+  // Q2.5′: line-scope tool noise + secretish; keep residual prose lines.
+  const residual = residualProseLines(signal);
+  if (residual.kept.length === 0) {
+    if (residual.dropped_secretish > 0 && residual.dropped_tool === 0) {
+      return { ...base, decision: "drop", reason_codes: ["secret_like_material"] };
+    }
+    if (residual.dropped_tool > 0) {
+      return { ...base, decision: "drop", reason_codes: ["tool_noise_signal"] };
+    }
+    return { ...base, decision: "drop", reason_codes: ["noise_only_signal"] };
+  }
+
+  const residual_text = residual.kept.join("\n").trim();
+  if (residual_text.length < 8) {
     return { ...base, decision: "drop", reason_codes: ["signal_too_short"] };
   }
+
+  const reason_codes = ["lifecycle_boundary_signal", "rule_admit_v1"];
+  if (residual.dropped_tool > 0) reason_codes.push("line_scoped_tool_noise_stripped");
+  if (residual.dropped_secretish > 0) reason_codes.push("line_scoped_secretish_stripped");
 
   return {
     ...base,
     decision: "admit",
-    reason_codes: ["lifecycle_boundary_signal", "rule_admit_v1"],
+    reason_codes,
+    residual_signal_text: residual_text,
   };
+}
+
+/**
+ * Split signal into lines; drop pure tool-noise / secretish lines only.
+ * Blank lines are ignored. Mixed decision+noise sessions keep decision lines.
+ */
+export function residualProseLines(signal: string): {
+  kept: string[];
+  dropped_tool: number;
+  dropped_secretish: number;
+} {
+  const kept: string[] = [];
+  let dropped_tool = 0;
+  let dropped_secretish = 0;
+  for (const raw of signal.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.length === 0) continue;
+    if (SECRETISH.test(line)) {
+      dropped_secretish += 1;
+      continue;
+    }
+    if (TOOL_NOISE.test(line)) {
+      dropped_tool += 1;
+      continue;
+    }
+    if (NOISE_ONLY.test(line)) continue;
+    kept.push(line);
+  }
+  return { kept, dropped_tool, dropped_secretish };
 }
 
 function normalizeHook(raw: string): string {

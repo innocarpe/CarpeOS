@@ -12,6 +12,7 @@ import {
   makeProposalId,
   putAgenticProposal,
 } from "./proposals.js";
+import { qualityFilterCandidate } from "./quality-filter.js";
 import type { SqlDatabase } from "./sql.js";
 import { type AgenticStageMode, runExtractStage, runTriageStage } from "./stages.js";
 import { structureAgenticLinks } from "./structure.js";
@@ -130,14 +131,20 @@ export function runAgenticProposalPipeline(
     };
   }
 
+  // Q2.5′: pack residual prose after line-scoped tool/secret strip when available.
+  const body_text =
+    admit.residual_signal_text !== undefined && admit.residual_signal_text.length > 0
+      ? admit.residual_signal_text
+      : input.signal_text;
+
   const pack_id = makeAgenticPackId({
     trust_zone_id: input.trust_zone_id,
     source_event_id: input.source_event_id,
-    body_text: input.signal_text,
+    body_text,
   });
   const packed = packAgenticEvidence({
     pack_id,
-    body_text: input.signal_text,
+    body_text,
     now_iso: (input.now ?? new Date()).toISOString(),
   });
   if (!packed.ok) {
@@ -209,7 +216,14 @@ export function runAgenticProposalPipeline(
 
   const proposals: AgenticProposalRecord[] = [];
   let structure_edge_count = 0;
+  const quality_dropped: string[] = [];
   for (const candidate of extract.candidates) {
+    // Q5′: provenance-primary quality filter before E5/gate.
+    const qf = qualityFilterCandidate(candidate, extractView);
+    if (!qf.keep) {
+      quality_dropped.push(...qf.reason_codes);
+      continue;
+    }
     const verified = verifyExtractCandidate(candidate, extractView);
     // E6 structure/link before gate so gate reason trail can include lineage.
     const unitRef = makeProposalId({
@@ -270,7 +284,13 @@ export function runAgenticProposalPipeline(
     stage: "complete",
     proposals,
     structure_edge_count,
-    reason_codes: ["proposals_written", `structure_edges:${structure_edge_count}`],
+    reason_codes: [
+      "proposals_written",
+      `structure_edges:${structure_edge_count}`,
+      ...(quality_dropped.length > 0
+        ? [`quality_filtered:${quality_dropped.length}`, ...quality_dropped.slice(0, 8)]
+        : []),
+    ],
   };
 }
 

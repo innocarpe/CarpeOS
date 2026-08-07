@@ -308,3 +308,103 @@ function joinBounded(parts: readonly string[], max: number): string | undefined 
   if (joined.length === 0) return undefined;
   return joined.slice(0, max);
 }
+
+/** Agentic mode: larger bound than scoring's 8k; decisions often include "we will". */
+export const AGENTIC_TRANSCRIPT_MAX_CHARS = 48_000;
+export const AGENTIC_TRANSCRIPT_MAX_ITEMS = 64;
+
+/**
+ * Quality ultragoal Q3′ / QD5: agentic transcript extraction.
+ * Reuses file I/O + JSONL parsing only — NO isDurableProse / isFutureIntent /
+ * brace filter (those reject primary decision signals like "we will").
+ */
+export function agenticProseFromTranscriptJsonl(text: string): string {
+  const proseStream: string[] = [];
+  for (const line of text.split(/\n+/)) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    let row: unknown;
+    try {
+      row = JSON.parse(trimmed);
+    } catch {
+      // Plain prose line in a mixed file.
+      const plain = agenticSanitizeProse(trimmed);
+      if (plain !== undefined) proseStream.push(plain);
+      continue;
+    }
+    if (row === null || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    if (inferRole(record) === undefined) continue;
+    const prose = proseFromTranscriptRecordAgentic(record);
+    if (prose === undefined) continue;
+    proseStream.push(prose);
+    if (proseStream.length >= AGENTIC_TRANSCRIPT_MAX_ITEMS) break;
+  }
+  const joined = proseStream.join("\n").trim();
+  return joined.slice(0, AGENTIC_TRANSCRIPT_MAX_CHARS);
+}
+
+/** Resolve agentic prose from a local transcript_path (allowed roots only). */
+export function agenticProseFromTranscriptPath(filePath: string): string {
+  const text = readTranscriptTail(filePath.trim());
+  if (text === undefined || text.length === 0) return "";
+  return agenticProseFromTranscriptJsonl(text);
+}
+
+function proseFromTranscriptRecordAgentic(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  if (message !== null && typeof message === "object") {
+    const content = (message as Record<string, unknown>).content;
+    const fromContent = proseFromContentAgentic(content);
+    if (fromContent !== undefined) return fromContent;
+  }
+  for (const key of ["content", "text", "prompt", "last_prompt"] as const) {
+    const fromField = proseFromContentAgentic(record[key]);
+    if (fromField !== undefined) return fromField;
+  }
+  return undefined;
+}
+
+function proseFromContentAgentic(content: unknown): string | undefined {
+  if (typeof content === "string") {
+    return agenticSanitizeProse(stripUserQueryXml(content));
+  }
+  if (!Array.isArray(content)) return undefined;
+  const parts: string[] = [];
+  for (const item of content) {
+    if (typeof item === "string") {
+      const text = agenticSanitizeProse(stripUserQueryXml(item));
+      if (text !== undefined) parts.push(text);
+      continue;
+    }
+    if (item === null || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const type = String(row.type ?? "");
+    if (
+      type === "tool_use" ||
+      type === "tool_result" ||
+      type === "thinking" ||
+      type === "redacted_thinking"
+    ) {
+      continue;
+    }
+    if (type === "text" || type === "input_text" || type === "output_text") {
+      const text = agenticSanitizeProse(stripUserQueryXml(String(row.text ?? "")));
+      if (text !== undefined) parts.push(text);
+    }
+  }
+  if (parts.length === 0) return undefined;
+  return agenticSanitizeProse(parts.join(" "));
+}
+
+/** Agentic: keep braces and future-intent language; only drop secrets / pure noise. */
+function agenticSanitizeProse(value: string): string | undefined {
+  const normalized = value
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < 4) return undefined;
+  if (NOISE_LINE.test(normalized)) return undefined;
+  if (containsSecretLikeMaterial(normalized)) return undefined;
+  return normalized.slice(0, TRANSCRIPT_CANDIDATE_MAX_CHARS);
+}
