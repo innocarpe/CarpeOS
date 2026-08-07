@@ -77,7 +77,7 @@ describe("product loop: capture feed → runner → materialize", () => {
 
     const history = store.listDispositionHistory(captured.event.event_id);
     expect(
-      history.some((d) => d.policy_version === "agentic_v1" && d.disposition === "promote"),
+      history.some((d) => d.policy_version === "agentic_v1.1" && d.disposition === "promote"),
     ).toBe(true);
     expect(store.listAgenticCaptureFeed({ state: "pending" })).toHaveLength(0);
 
@@ -97,6 +97,37 @@ describe("product loop: capture feed → runner → materialize", () => {
     });
     expect(store.listAgenticCaptureFeed({ state: "pending" })).toHaveLength(0);
     store.close();
+  });
+
+  it("Q1′ empty capture signal is skipped without empty-capture placeholder", async () => {
+    const store = makeStore();
+    // Feed row present; force empty signal (H0 JSON.stringify of envelope is Q3′).
+    // Pre-Q1′ runner substituted "(empty capture …)" which admitted and spent.
+    const captured = store.captureHook(envelope({ source_event_id: "source_empty_signal" }), {
+      extract: false,
+    });
+    expect(captured.status).toBe("captured");
+    store.readCaptureSignalText = () => "";
+    const agenticDb = new DatabaseSync(join(tempDir(), "agentic-empty.sqlite"));
+    const report = await processAgenticOnce({
+      store,
+      agenticDb,
+      materialize: true,
+      allow_network: false,
+      now,
+    });
+    expect(report.feed_seen).toBe(1);
+    expect(report.feed_skipped).toBe(1);
+    expect(report.feed_done).toBe(0);
+    expect(report.materializations).toBe(0);
+    expect(report.flash_calls).toBe(0);
+    const pipeline = report.pipelines[0];
+    expect(pipeline?.admit_decision).toBe("drop");
+    expect(pipeline?.reason_codes).toContain("empty_signal");
+    // No synthetic placeholder ever entered the pipeline as admit-worthy body.
+    expect(JSON.stringify(report)).not.toMatch(/\(empty capture /);
+    store.close();
+    agenticDb.close();
   });
 
   it("PostToolUse never enters agentic feed (lifecycle-only enqueue)", async () => {

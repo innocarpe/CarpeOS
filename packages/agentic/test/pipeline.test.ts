@@ -79,6 +79,47 @@ describe("runAgenticProposalPipeline", () => {
     db.close();
   });
 
+  it("Q1′ drops empty signal at admit (no pack / no Flash views)", () => {
+    const db = makeDb();
+    const r = runAgenticProposalPipeline(db, {
+      trust_zone_id: "tz_synthetic",
+      source_event_id: "evt_empty",
+      hook_event_name: "SessionEnd",
+      signal_text: "",
+      now,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.stage).toBe("admit");
+    expect(r.admit_decision).toBe("drop");
+    expect(r.reason_codes).toContain("empty_signal");
+    expect(r.pack_digest).toBeNull();
+    expect(r.triage_view_text).toBeNull();
+    expect(r.extract_view_text).toBeNull();
+    expect(r.proposals).toEqual([]);
+    db.close();
+  });
+
+  it("Q1′ same-view bind: stages use prepared extract_view (paths scrubbed)", () => {
+    const db = makeDb();
+    const r = runAgenticProposalPipeline(db, {
+      trust_zone_id: "tz_synthetic",
+      source_event_id: "evt_path_dec",
+      hook_event_name: "SessionEnd",
+      signal_text:
+        "Decision: we will require make preflight before opening any pull request. Notes at /tmp/synthetic/workspace/repo.",
+      hint_kind: "decision",
+      now,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.extract_view_text).not.toBeNull();
+    expect(r.extract_view_text).toContain("[PATH]");
+    expect(r.extract_view_text).not.toMatch(/\/tmp\/synthetic\/workspace\/repo/);
+    expect(r.effective_view_digest).toMatch(/^sha256:/);
+    expect(r.policy_version).toBe("agentic_v1.1");
+    expect(r.proposals.some((p) => p.gate.decision === "promote")).toBe(true);
+    db.close();
+  });
+
   it("agentic-off writes nothing", () => {
     const db = makeDb();
     const r = runAgenticProposalPipeline(db, {

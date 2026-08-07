@@ -16,6 +16,7 @@ import type { SqlDatabase } from "./sql.js";
 import { type AgenticStageMode, runExtractStage, runTriageStage } from "./stages.js";
 import { structureAgenticLinks } from "./structure.js";
 import type { AgenticKnowledgeKind } from "./types.js";
+import { AGENTIC_POLICY_VERSION } from "./types.js";
 import { verifyExtractCandidate } from "./verify.js";
 
 export type AgenticPipelineInput = {
@@ -62,6 +63,14 @@ export type AgenticPipelineResult = {
   admit_decision: "admit" | "drop" | null;
   triage_decision: "keep" | "drop" | "need_context" | null;
   pack_digest: string | null;
+  /**
+   * Prepared effective views (QD0). Present after successful pack.
+   * Default report surfaces must not dump these (Q1.5′ redaction).
+   */
+  triage_view_text: string | null;
+  extract_view_text: string | null;
+  effective_view_digest: string | null;
+  policy_version: typeof AGENTIC_POLICY_VERSION;
   proposals: AgenticProposalRecord[];
   /** Aggregate structure edge count across proposals (P4). */
   structure_edge_count: number;
@@ -85,6 +94,10 @@ export function runAgenticProposalPipeline(
     admit_decision: null,
     triage_decision: null,
     pack_digest: null,
+    triage_view_text: null,
+    extract_view_text: null,
+    effective_view_digest: null,
+    policy_version: AGENTIC_POLICY_VERSION,
     proposals: [],
     structure_edge_count: 0,
     reason_codes: [],
@@ -136,9 +149,16 @@ export function runAgenticProposalPipeline(
     };
   }
   base.pack_digest = packed.pack_digest;
+  // QD0 same-view bind: stages + verifier operate on prepared effective views,
+  // never raw signal. Extract view is the cite/ground authority for E5.
+  base.triage_view_text = packed.triage_view_text;
+  base.extract_view_text = packed.extract_view_text;
+  base.effective_view_digest = packed.effective_view_digest;
+  const triageView = packed.triage_view_text;
+  const extractView = packed.extract_view_text;
 
   const triage = runTriageStage({
-    pack_text: packed.pack_text,
+    pack_text: triageView,
     pack_digest: packed.pack_digest,
     source_event_id: input.source_event_id,
     ...(input.mode !== undefined ? { mode: input.mode } : {}),
@@ -167,7 +187,7 @@ export function runAgenticProposalPipeline(
   }
 
   const extract = runExtractStage({
-    pack_text: packed.pack_text,
+    pack_text: extractView,
     pack_digest: packed.pack_digest,
     source_event_id: input.source_event_id,
     ...(input.mode !== undefined ? { mode: input.mode } : {}),
@@ -190,7 +210,7 @@ export function runAgenticProposalPipeline(
   const proposals: AgenticProposalRecord[] = [];
   let structure_edge_count = 0;
   for (const candidate of extract.candidates) {
-    const verified = verifyExtractCandidate(candidate, packed.pack_text);
+    const verified = verifyExtractCandidate(candidate, extractView);
     // E6 structure/link before gate so gate reason trail can include lineage.
     const unitRef = makeProposalId({
       trust_zone_id: input.trust_zone_id,

@@ -7,6 +7,7 @@ import type { LocalCaptureStore } from "@carpeos/local-store";
 import { callAgenticFlash, createFlashSpendState, type FlashSpendState } from "./flash.js";
 import { completeAgenticJob, enqueueAgenticJob, failAgenticJob, leaseAgenticJobs } from "./jobs.js";
 import { materializeAgenticProposal } from "./materialize.js";
+import { makeAgenticPackId, packAgenticEvidence } from "./pack.js";
 import { type AgenticPipelineResult, runAgenticProposalPipeline } from "./pipeline.js";
 import { type AgenticProposalRecord, listAgenticProposals } from "./proposals.js";
 import {
@@ -157,7 +158,9 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     });
     const lease = leased.find((l) => l.job.job_id === admitJob.job_id);
 
-    const signal = signal_text.length > 0 ? signal_text : `(empty capture ${row.source_event_id})`;
+    // QD0 / H6: never invent an "(empty capture …)" placeholder that admits and
+    // spends Flash. Empty signal stays empty → admit drops with empty_signal.
+    const signal = signal_text;
 
     const structureContext = {
       artifact_id: row.artifact_id,
@@ -182,75 +185,90 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
 
     // Live Flash second pass when admitted, pack succeeded, and network allowed.
     // Do not spend Flash tokens when pack/redact already failed.
+    // QD0: Flash receives prepared effective views only — never raw signal.
     if (
       allow_network &&
+      signal.trim().length > 0 &&
       pipeline.admit_decision === "admit" &&
       pipeline.ok &&
       pipeline.pack_digest !== null &&
       pipeline.pack_digest !== undefined
     ) {
-      const triageRes = await callAgenticFlash({
-        stage: "triage",
-        pack_text: signal,
-        allow_network: true,
-        spend,
-        ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
+      const prepared = packAgenticEvidence({
+        pack_id: makeAgenticPackId({
+          trust_zone_id: row.trust_zone_id,
+          source_event_id: row.source_event_id,
+          body_text: signal,
+        }),
+        body_text: signal,
+        now_iso: (input.now ?? new Date()).toISOString(),
       });
-      let flash_triage_text: string | null = null;
-      let flash_extract_text: string | null = null;
-      report.flash_calls += 1;
-      if (triageRes.ok) {
-        flash_triage_text = triageRes.text;
-        report.network_used = true;
+      if (!prepared.ok) {
+        report.reason_codes.push(`flash_prepare_${prepared.error_code}`);
       } else {
-        report.reason_codes.push(`flash_triage_${triageRes.error}`);
-      }
-      const triageKeep =
-        flash_triage_text !== null &&
-        !/"decision"\s*:\s*"drop"/i.test(flash_triage_text) &&
-        !/\bdrop\b/i.test(flash_triage_text.slice(0, 80));
-      // Prefer structured parse; fallback keep if triage failed open to extract for admit path
-      let shouldExtract = triageRes.ok;
-      if (triageRes.ok && flash_triage_text) {
-        try {
-          const parsed = JSON.parse(flash_triage_text) as { decision?: string };
-          shouldExtract = parsed.decision === "keep" || parsed.decision === "need_context";
-        } catch {
-          shouldExtract = triageKeep;
-        }
-      }
-      if (shouldExtract) {
-        const extractRes = await callAgenticFlash({
-          stage: "extract",
-          pack_text: signal,
+        const triageRes = await callAgenticFlash({
+          stage: "triage",
+          view_text: prepared.triage_view_text,
           allow_network: true,
           spend,
           ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
         });
+        let flash_triage_text: string | null = null;
+        let flash_extract_text: string | null = null;
         report.flash_calls += 1;
-        if (extractRes.ok) {
-          flash_extract_text = extractRes.text;
+        if (triageRes.ok) {
+          flash_triage_text = triageRes.text;
           report.network_used = true;
         } else {
-          report.reason_codes.push(`flash_extract_${extractRes.error}`);
+          report.reason_codes.push(`flash_triage_${triageRes.error}`);
         }
-      }
-      if (flash_triage_text !== null || flash_extract_text !== null) {
-        pipeline = runAgenticProposalPipeline(input.agenticDb, {
-          trust_zone_id: row.trust_zone_id,
-          source_event_id: row.source_event_id,
-          hook_event_name: row.hook_event_name,
-          signal_text: signal,
-          mode: "flash",
-          allow_network: true,
-          allow_auto_promote: input.allow_auto_promote !== false,
-          ...(input.hold_first === true ? { hold_first: true } : {}),
-          agentic_enabled: true,
-          flash_triage_text,
-          flash_extract_text,
-          ...structureContext,
-          ...nowOpt,
-        });
+        const triageKeep =
+          flash_triage_text !== null &&
+          !/"decision"\s*:\s*"drop"/i.test(flash_triage_text) &&
+          !/\bdrop\b/i.test(flash_triage_text.slice(0, 80));
+        // Prefer structured parse; fallback keep if triage failed open to extract for admit path
+        let shouldExtract = triageRes.ok;
+        if (triageRes.ok && flash_triage_text) {
+          try {
+            const parsed = JSON.parse(flash_triage_text) as { decision?: string };
+            shouldExtract = parsed.decision === "keep" || parsed.decision === "need_context";
+          } catch {
+            shouldExtract = triageKeep;
+          }
+        }
+        if (shouldExtract) {
+          const extractRes = await callAgenticFlash({
+            stage: "extract",
+            view_text: prepared.extract_view_text,
+            allow_network: true,
+            spend,
+            ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
+          });
+          report.flash_calls += 1;
+          if (extractRes.ok) {
+            flash_extract_text = extractRes.text;
+            report.network_used = true;
+          } else {
+            report.reason_codes.push(`flash_extract_${extractRes.error}`);
+          }
+        }
+        if (flash_triage_text !== null || flash_extract_text !== null) {
+          pipeline = runAgenticProposalPipeline(input.agenticDb, {
+            trust_zone_id: row.trust_zone_id,
+            source_event_id: row.source_event_id,
+            hook_event_name: row.hook_event_name,
+            signal_text: signal,
+            mode: "flash",
+            allow_network: true,
+            allow_auto_promote: input.allow_auto_promote !== false,
+            ...(input.hold_first === true ? { hold_first: true } : {}),
+            agentic_enabled: true,
+            flash_triage_text,
+            flash_extract_text,
+            ...structureContext,
+            ...nowOpt,
+          });
+        }
       }
     }
 

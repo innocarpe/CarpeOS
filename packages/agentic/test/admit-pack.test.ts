@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ruleAdmitEvidence } from "../src/admit.js";
-import { makeAgenticPackId, packAgenticEvidence } from "../src/pack.js";
+import {
+  AGENTIC_EXTRACT_VIEW_MAX_CHARS,
+  AGENTIC_TRIAGE_VIEW_MAX_CHARS,
+  deriveAgenticEffectiveViews,
+  makeAgenticPackId,
+  packAgenticEvidence,
+  scrubAgenticPackText,
+} from "../src/pack.js";
+import { AGENTIC_POLICY_VERSION } from "../src/types.js";
 
 describe("E1 ruleAdmitEvidence", () => {
   it("admits SessionEnd decision-class text", () => {
@@ -137,6 +145,47 @@ describe("E2 packAgenticEvidence", () => {
     expect(r.pack_text).toContain("[PATH]");
     expect(r.pack_text).toContain("[URI]");
     expect(r.pack_text).not.toMatch(/\/tmp\/synthetic\/workspace\/repo/);
+  });
+
+  it("Q1′ broadens scrub roots (opt/private/Volumes/mnt/srv)", () => {
+    const scrubbed = scrubAgenticPackText(
+      "Decision at /opt/homebrew/bin/x /private/var/tmp/y /Volumes/Data/z /mnt/data/a /srv/app/b ~/dot/c",
+    );
+    expect(scrubbed).not.toMatch(/\/opt\/homebrew/);
+    expect(scrubbed).not.toMatch(/\/private\/var/);
+    expect(scrubbed).not.toMatch(/\/Volumes\//);
+    expect(scrubbed).not.toMatch(/\/mnt\//);
+    expect(scrubbed).not.toMatch(/\/srv\//);
+    expect(scrubbed).not.toMatch(/~\//);
+    expect(scrubbed).toContain("[PATH]");
+  });
+
+  it("Q1′ prepared pack exposes effective views + policy_version agentic_v1.1", () => {
+    const r = packAgenticEvidence({
+      pack_id: "pack-views-01",
+      body_text: "Decision: we will require make preflight before opening any pull request.",
+      now_iso: "2026-08-07T12:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("pack failed");
+    expect(r.policy_version).toBe(AGENTIC_POLICY_VERSION);
+    expect(r.policy_version).toBe("agentic_v1.1");
+    expect(r.triage_view_text).toContain("preflight");
+    expect(r.extract_view_text).toContain("preflight");
+    expect(r.effective_view_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(r.pack_text_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it("Q1′ long packs bound triage head+tail and extract prefix", () => {
+    const long = "Decision A. ".repeat(2000) + "FINAL_DECISION_TAIL_MARKER_xyz";
+    expect(long.length).toBeGreaterThan(AGENTIC_EXTRACT_VIEW_MAX_CHARS);
+    const views = deriveAgenticEffectiveViews(long);
+    expect(views.triage_view_text.length).toBeLessThanOrEqual(AGENTIC_TRIAGE_VIEW_MAX_CHARS);
+    expect(views.extract_view_text.length).toBeLessThanOrEqual(AGENTIC_EXTRACT_VIEW_MAX_CHARS);
+    expect(views.triage_view_text).toContain("…[truncated]…");
+    expect(views.triage_view_text).toContain("FINAL_DECISION_TAIL_MARKER_xyz");
+    expect(views.extract_view_text.startsWith("Decision A.")).toBe(true);
+    expect(views.extract_view_text).not.toContain("FINAL_DECISION_TAIL_MARKER_xyz");
   });
 
   it("accepts long SessionEnd-sized bodies under agentic pack limits", () => {

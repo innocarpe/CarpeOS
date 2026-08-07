@@ -73,7 +73,7 @@ describe("evaluateAgenticGate promote-when-verified", () => {
     });
     expect(g.decision).toBe("promote");
     expect(g.reason_codes).toContain("promote_when_verified");
-    expect(g.policy_version).toBe("agentic_v1");
+    expect(g.policy_version).toBe("agentic_v1.1");
   });
 
   it("rejects when cite fails", () => {
