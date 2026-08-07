@@ -14,6 +14,49 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.0] - 2026-08-07
+
+### Added
+
+- **Agentic quality ultragoal substrate** (plan v2.1): prepared pack + bounded Flash
+  `triage_view_text` / `extract_view_text` (never raw capture signal).
+- Default operator JSON redaction for statements, citation quotes, and pack views on
+  `agentic flush` / `run` / `list-held` / `list-claims`; opt-in with **`--verbose`**.
+  Timer path stays non-verbose so `agentic-timer.log` does not log private prose.
+- Live-mode **zero fake side effects**: no proposal-writing fake pipeline before Flash;
+  transient Flash failure requeues the feed row (retryable).
+- Line-scoped admit for tool-noise and secret-like lines so mixed decision+noise
+  SessionEnds keep residual prose (H7/H8).
+- Agentic transcript recovery mode: prose fields + `transcript_path` without durability
+  lexicon / future-intent filters; no `JSON.stringify` of the full envelope as body.
+- CJK-safe statement grounding (NFC both sides; Hangul/CJK bigrams).
+- Post-extract provenance-primary quality filter (quote ⊆ extract view; metadata
+  restatement belt); kill switch `CARPEOS_AGENTIC_QUALITY_FILTERS=off`.
+- Quality corpus fixtures under `fixtures/agentic/v1/quality-ultragoal/` (baseline #1).
+- Bulk retract dry-run / apply by explicit event ids (`humanBulkRetractAgenticUnits`).
+- Architecture note: `docs/architecture/agentic-quality.md`.
+
+### Changed
+
+- Formation / disposition policy stamp **`agentic_v1.1`** (was `agentic_v1`) so quality-era
+  units can be selected without freezing all historical agentic_v1 rows together.
+- Live Flash path: `need_context` does not call extract.
+- Soft-scrub path roots broadened (`/opt`, `/private`, `/Volumes`, `/mnt`, `/srv`).
+
+### Fixed
+
+- Pack/Flash text mismatch (H0b/H0e): E5 verify binds to the same extract view Flash saw.
+- Empty capture no longer invents an admit-worthy `(empty capture …)` placeholder.
+- Live network failure no longer promotes fake offline candidates (H0d).
+
+### Operator notes
+
+- Inspect private statements in CLI output only with `--verbose`.
+- Historical held units under `agentic_v1` still addressable by explicit policy version
+  on human-review paths.
+- Residual: denser multi-record pack segment classes; recorded-Flash JSON expansion;
+  dogfood promote density remains the product success measure (Q-S5 advisory).
+
 ## [6.6.4] - 2026-08-07
 
 ### Fixed
