@@ -23,7 +23,8 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 | **Feed backfill** | historical Evidence → agentic feed | `carpeos agentic backfill` | **complete** |
 | **npm 6.5.0** | complete topology residuals | E10 + human review + backfill | **complete** |
 
-| **ADR 0018** | HITL-free compound loop (promote-when-verified + 30m batch brain) | design + reviews | **proposed** |
+| **ADR 0018** | HITL-free compound loop (promote-when-verified + 30m batch brain) | design + reviews (PR #291) + implementation | **implementing** (npm 6.6.0 target) |
+| **npm 6.6.0** | promote-when-verified defaults + retract + day spend + 30m timer | E5 grounding, licensing corpus, S1–S7 | **in progress** |
 
 ## Hard fences
 
@@ -37,15 +38,20 @@ Status truth table for CarpeOS 6.0.0 Agentic Layer. Update only with test/receip
 
 ```sh
 carpeos agentic status
-# Product path: capture writes feed (no LLM) → runner drains:
+# Product path (HITL-free): capture writes feed (no LLM) → promote-when-verified:
 carpeos agentic run --once --materialize
+# Always-on 30m batch (ADR 0018 S3):
+carpeos agentic timer install   # or: bash scripts/install-agentic-timer.sh install
+# Correction only (not the happy path):
 carpeos agentic list-held
-carpeos agentic materialize --proposal-id <id> --artifact-id <id>
+carpeos agentic promote-held --event-id <evt_…>
+carpeos agentic retract --event-id <evt_…> --reason "…" --decided-by <human> --human-confirmed
 carpeos agentic run --once --golden
-# Live Flash (operator only):
+# Live Flash (operator only; network off by default):
 DEEPSEEK_API_KEY=… carpeos agentic run --once --allow-network --spend-cap-usd 1
-# Kill switch (skips capture feed + runner):
+# Kill / debug staging:
 CARPEOS_AGENTIC=off carpeos capture-hook …
+CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 ```
 
 ## Recompute / eval
