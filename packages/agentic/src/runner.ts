@@ -9,8 +9,8 @@ import { completeAgenticJob, enqueueAgenticJob, failAgenticJob, leaseAgenticJobs
 import { materializeAgenticProposal } from "./materialize.js";
 import { type AgenticPipelineResult, runAgenticProposalPipeline } from "./pipeline.js";
 import { type AgenticProposalRecord, listAgenticProposals } from "./proposals.js";
-import type { SqlDatabase } from "./sql.js";
 import { addDaySpend, daySpendExceeded, loadDaySpend } from "./spend.js";
+import type { SqlDatabase } from "./sql.js";
 
 export type AgenticRunnerReport = {
   schema: "carpeos.agentic.runner-report/v1";
@@ -171,10 +171,12 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
       });
       let flash_triage_text: string | null = null;
       let flash_extract_text: string | null = null;
+      report.flash_calls += 1;
       if (triageRes.ok) {
         flash_triage_text = triageRes.text;
         report.network_used = true;
-        report.flash_calls += 1;
+      } else {
+        report.reason_codes.push(`flash_triage_${triageRes.error}`);
       }
       const triageKeep =
         flash_triage_text !== null &&
@@ -198,10 +200,12 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           spend,
           ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
         });
+        report.flash_calls += 1;
         if (extractRes.ok) {
           flash_extract_text = extractRes.text;
           report.network_used = true;
-          report.flash_calls += 1;
+        } else {
+          report.reason_codes.push(`flash_extract_${extractRes.error}`);
         }
       }
       if (flash_triage_text !== null || flash_extract_text !== null) {

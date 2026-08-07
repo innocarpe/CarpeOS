@@ -79,10 +79,11 @@ export async function callAgenticFlash(input: {
       ? `Pack:\n${input.pack_text.slice(0, 12_000)}\n\nReply JSON only.`
       : `Pack:\n${input.pack_text.slice(0, 12_000)}\n\nExtract cited candidates. quote MUST be exact substring. Reply JSON only.`;
 
+  // deepseek-v4-flash may spend tokens on reasoning_content; budget enough for JSON body.
   const body = {
     model: model_id,
     temperature: 0,
-    max_tokens: input.stage === "triage" ? 256 : 1024,
+    max_tokens: input.stage === "triage" ? 1024 : 2048,
     messages: [
       { role: "system", content: prompt.system },
       { role: "user", content: userContent },
@@ -119,10 +120,13 @@ export async function callAgenticFlash(input: {
   }
 
   const raw = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{
+      message?: { content?: string | null; reasoning_content?: string | null };
+      finish_reason?: string;
+    }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  const text = raw.choices?.[0]?.message?.content?.trim() ?? "";
+  const text = extractFlashMessageText(raw.choices?.[0]?.message);
   if (text.length === 0) {
     return { ok: false, error: "empty_model_response", network_used: true, model_id };
   }
@@ -142,6 +146,30 @@ export async function callAgenticFlash(input: {
     model_id,
     usage: { prompt_tokens, completion_tokens },
   };
+}
+
+/**
+ * deepseek-v4-flash often returns JSON in `content`, but sometimes spends the
+ * token budget on `reasoning_content` with empty `content`. Prefer content;
+ * fall back to trailing JSON in reasoning, then full reasoning text.
+ */
+export function extractFlashMessageText(message?: {
+  content?: string | null;
+  reasoning_content?: string | null;
+}): string {
+  const content = (message?.content ?? "").trim();
+  if (content.length > 0) return content;
+  const reasoning = (message?.reasoning_content ?? "").trim();
+  if (reasoning.length === 0) return "";
+  // Last JSON object in reasoning (models often conclude with the payload).
+  const objects = reasoning.match(/\{[\s\S]*?\}(?=\s*$|\s*[^,{}\s])/g);
+  if (objects !== null && objects.length > 0) {
+    const last = objects[objects.length - 1]!.trim();
+    if (last.startsWith("{") && last.endsWith("}")) return last;
+  }
+  const greedy = reasoning.match(/\{[\s\S]*\}\s*$/);
+  if (greedy !== null) return greedy[0]!.trim();
+  return reasoning;
 }
 
 // Re-export model constant for callers that import flash only.

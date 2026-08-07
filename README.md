@@ -444,7 +444,8 @@ hooks → encrypted evidence → agentic_capture_feed (no LLM in capture)
 
 # Kill: CARPEOS_AGENTIC=off
 # Staging: CARPEOS_AGENTIC_HOLD_FIRST=1
-# Live Flash: carpeos agentic run --once --allow-network --materialize
+# Offline (no Flash): CARPEOS_AGENTIC_NETWORK=off or --allow-network false
+# Credentials: DEEPSEEK_API_KEY or ~/.carpeos/v5-provider.env
 ```
 
 | Area | Status |

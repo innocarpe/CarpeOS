@@ -242,9 +242,24 @@ describe("carpeos CLI", () => {
       command: "agentic.status",
       capture_llm: false,
       auto_acceptance_decision: false,
-      network_disabled_by_default: true,
+      flash_default: true,
     });
     expect(status.stdout.model_id).toBe("deepseek-v4-flash");
+    expect(status.stdout.feed).toMatchObject({
+      pending: expect.any(Number),
+      leased: expect.any(Number),
+      done: expect.any(Number),
+      skipped: expect.any(Number),
+      actionable: expect.any(Number),
+    });
+
+    const feed = await runCliJson(["agentic", "feed", "--home", context.home], context);
+    expect(feed.status).toBe(0);
+    expect(feed.stdout).toMatchObject({
+      ok: true,
+      command: "agentic.feed",
+      actionable: 0,
+    });
 
     const golden = await runCliJson(
       ["agentic", "golden", "--home", context.home, "--path", goldenPath],
