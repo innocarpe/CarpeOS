@@ -14,6 +14,18 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.6.3] - 2026-08-07
+
+### Added
+
+- Lifecycle-only agentic feed policy: only SessionEnd / Stop / PreCompact enqueue for Flash.
+- `skipIneligibleAgenticFeed` + flush default `--skip-ineligible` to clear legacy PostToolUse flood.
+- Claim order prefers SessionEnd → Stop → PreCompact.
+
+### Fixed
+
+- Dogfood FIFO starvation: noise no longer blocks meaning-bearing hooks on the product path.
+
 ## [6.6.2] - 2026-08-07
 
 ### Fixed
