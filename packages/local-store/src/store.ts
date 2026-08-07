@@ -564,6 +564,8 @@ export const LOCAL_STORE_MIGRATION_IDS = [
   "006_capture_worktree_identity",
   /** Post-capture agentic feed (no LLM; runner drains asynchronously). */
   "007_agentic_capture_feed",
+  /** Feed mutual-exclusion leases for always-on / concurrent runners (ADR 0018 D5). */
+  "008_agentic_capture_feed_lease",
 ] as const;
 
 export type LocalStoreMigrationId = (typeof LOCAL_STORE_MIGRATION_IDS)[number];
@@ -576,6 +578,8 @@ const WORKTREE_IDENTITY_MIGRATION_ID: LocalStoreMigrationId = "006_capture_workt
 const DISPOSITION_POLICY_KEY_MIGRATION_ID: LocalStoreMigrationId =
   "005_knowledge_dispositions_policy_key";
 const AGENTIC_CAPTURE_FEED_MIGRATION_ID: LocalStoreMigrationId = "007_agentic_capture_feed";
+const AGENTIC_CAPTURE_FEED_LEASE_MIGRATION_ID: LocalStoreMigrationId =
+  "008_agentic_capture_feed_lease";
 
 /** Durable post-capture feed row for Product 6 agentic runner (no LLM in capture). */
 export type AgenticCaptureFeedRow = {
@@ -584,10 +588,12 @@ export type AgenticCaptureFeedRow = {
   trust_zone_id: string;
   hook_event_name: string;
   protected_value_id: string;
-  state: "pending" | "done" | "skipped";
+  state: "pending" | "leased" | "done" | "skipped";
   created_at: string;
   finished_at: string | null;
   skip_reason: string | null;
+  lease_id?: string | null;
+  lease_expires_at?: string | null;
 };
 
 export type ProtectedValueTransferExport = {
@@ -1212,6 +1218,176 @@ export class LocalCaptureStore {
         valid_time_defaulted: input.validTime === undefined,
       };
     });
+  }
+
+  /**
+   * Human correction: supersede a wrongly promoted unit (ADR 0018 D4b).
+   * Removes it from default search via append-only Supersession (no rewrite).
+   */
+  recordHumanSupersession(input: {
+    supersedesEventId: string;
+    reason: string;
+    decidedBy: string;
+    humanConfirmed: true;
+    replacementEventId?: string;
+    idempotencyKey?: string;
+  }):
+    | {
+        status: "recorded" | "replay";
+        event: CanonicalEvent<"Supersession">;
+        event_id: string;
+      }
+    | { status: "failed"; error: string } {
+    if (input.humanConfirmed !== true) {
+      return { status: "failed", error: "humanConfirmed must be true" };
+    }
+    const decidedBy = input.decidedBy.trim();
+    if (decidedBy.length < 2 || /^(agent|system|llm|flash|auto|runner|bot)([._-]|$)/i.test(decidedBy)) {
+      return { status: "failed", error: "decidedBy must be a human actor id" };
+    }
+    const prior = this.listCanonicalEventSnapshots({
+      visibleTrustZoneIds: [this.trustZone.trust_zone_id],
+    }).find((s) => s.event_id === input.supersedesEventId);
+    if (prior === undefined) {
+      return { status: "failed", error: `event not found: ${input.supersedesEventId}` };
+    }
+    if (prior.event.event_type !== "Observation" && prior.event.event_type !== "Claim") {
+      return { status: "failed", error: "only Observation or Claim can be superseded here" };
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 4) {
+      return { status: "failed", error: "reason is required" };
+    }
+    const recordedAt = this.clock.now().toISOString();
+    const normalized = {
+      supersedes_event_id: input.supersedesEventId,
+      replacement_event_id: input.replacementEventId ?? null,
+      reason,
+      decided_by: decidedBy,
+      human_confirmed: true as const,
+      trust_zone_id: this.trustZone.trust_zone_id,
+    };
+    const requestFingerprint = fingerprintObject({
+      tool: "human_supersession",
+      ...normalized,
+    });
+    const idempotencyKey =
+      input.idempotencyKey ?? `idem_${hashHex(stableJson(normalized)).slice(0, 32)}`;
+    if (!isIdempotencyKey(idempotencyKey)) {
+      return { status: "failed", error: "invalid idempotency key" };
+    }
+    const eventDigest = hashHex(
+      stableJson({
+        trust_zone_id: this.trustZone.trust_zone_id,
+        idempotency_key: idempotencyKey,
+        request_fingerprint: requestFingerprint,
+      }),
+    );
+    const protectedValueId = `pv_${eventDigest.slice(0, 24)}`;
+    const protectedPayload = Buffer.from(
+      stableJson({ tool: "human_supersession", at: recordedAt, ...normalized }),
+      "utf8",
+    );
+    const encrypted = encrypt(protectedPayload, this.keyBytes);
+    const event: CanonicalEvent<"Supersession"> = {
+      schema_version: "v1",
+      event_id: `evt_${eventDigest.slice(0, 32)}`,
+      event_type: "Supersession",
+      subject_ref: prior.event.subject_ref,
+      valid_time: { start: recordedAt, end: null },
+      recorded_time: { start: recordedAt, end: null },
+      lifecycle_status: "active",
+      epistemic_authority: "verified",
+      trust_zone: this.trustZone,
+      provenance: [
+        {
+          ref_type: "event",
+          ref_id: input.supersedesEventId,
+          relationship: "supersedes",
+        },
+      ],
+      idempotency_key: idempotencyKey,
+      request_fingerprint: requestFingerprint,
+      payload: {
+        supersession_id: `sup_${eventDigest.slice(32, 56)}`,
+        supersedes_event_id: input.supersedesEventId,
+        reason: `${reason} [by:${decidedBy}]`,
+        ...(input.replacementEventId !== undefined
+          ? { replacement_event_id: input.replacementEventId }
+          : {}),
+      },
+    };
+    try {
+      assertCanonicalEventConformance(event);
+    } catch (error) {
+      return {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    try {
+      return this.withImmediateTransaction(() => {
+        const existing = this.findEventByIdempotency(this.trustZone.trust_zone_id, idempotencyKey);
+        if (existing !== undefined) {
+          const existingEvent = JSON.parse(existing.event_json) as CanonicalEvent<"Supersession">;
+          return {
+            status: "replay" as const,
+            event: existingEvent,
+            event_id: existingEvent.event_id,
+          };
+        }
+        this.db
+          .prepare(`
+            INSERT INTO protected_values (
+              protected_value_id, vault_ref, key_ref, nonce_ref, tag_ref,
+              nonce, tag, ciphertext, plaintext_digest, size_bytes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            protectedValueId,
+            "vault_local",
+            "key_local_active",
+            `nonce_${protectedValueId.slice(3)}`,
+            `tag_${protectedValueId.slice(3)}`,
+            encrypted.nonce,
+            encrypted.tag,
+            encrypted.ciphertext,
+            hashHex(protectedPayload),
+            protectedPayload.byteLength,
+            recordedAt,
+          );
+        this.db
+          .prepare(`
+            INSERT INTO canonical_events (
+              event_id, event_type, trust_zone_id, idempotency_key, request_fingerprint,
+              protected_value_id, event_json, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            event.event_id,
+            event.event_type,
+            this.trustZone.trust_zone_id,
+            idempotencyKey,
+            requestFingerprint,
+            protectedValueId,
+            stableJson(event),
+            recordedAt,
+          );
+        this.db
+          .prepare(`
+            INSERT INTO outbox (
+              event_id, state, attempts, available_at, push_request_json, created_at, updated_at
+            ) VALUES (?, 'pending', 0, ?, ?, ?, ?)
+          `)
+          .run(event.event_id, recordedAt, stableJson({ schema_version: "v1", events: [event] }), recordedAt, recordedAt);
+        return { status: "recorded" as const, event, event_id: event.event_id };
+      });
+    } catch (error) {
+      return {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   /**
@@ -4461,11 +4637,49 @@ export class LocalCaptureStore {
           .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
           .run(AGENTIC_CAPTURE_FEED_MIGRATION_ID, this.clock.now().toISOString());
       }
+
+      const feedLeaseExisting = this.db
+        .prepare("SELECT migration_id FROM schema_migrations WHERE migration_id = ?")
+        .get(AGENTIC_CAPTURE_FEED_LEASE_MIGRATION_ID);
+      if (feedLeaseExisting === undefined) {
+        // SQLite CHECK changes require rebuild for leased state + lease columns.
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS agentic_capture_feed_lease_mig (
+            source_event_id TEXT PRIMARY KEY,
+            artifact_id TEXT NOT NULL,
+            trust_zone_id TEXT NOT NULL,
+            hook_event_name TEXT NOT NULL,
+            protected_value_id TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('pending', 'leased', 'done', 'skipped')),
+            created_at TEXT NOT NULL,
+            finished_at TEXT,
+            skip_reason TEXT,
+            lease_id TEXT,
+            lease_expires_at TEXT
+          );
+          INSERT OR IGNORE INTO agentic_capture_feed_lease_mig (
+            source_event_id, artifact_id, trust_zone_id, hook_event_name,
+            protected_value_id, state, created_at, finished_at, skip_reason,
+            lease_id, lease_expires_at
+          )
+          SELECT source_event_id, artifact_id, trust_zone_id, hook_event_name,
+                 protected_value_id, state, created_at, finished_at, skip_reason,
+                 NULL, NULL
+          FROM agentic_capture_feed;
+          DROP TABLE agentic_capture_feed;
+          ALTER TABLE agentic_capture_feed_lease_mig RENAME TO agentic_capture_feed;
+          CREATE INDEX IF NOT EXISTS idx_agentic_capture_feed_zone_state
+            ON agentic_capture_feed (trust_zone_id, state, created_at);
+        `);
+        this.db
+          .prepare("INSERT INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+          .run(AGENTIC_CAPTURE_FEED_LEASE_MIGRATION_ID, this.clock.now().toISOString());
+      }
     });
   }
 
   /**
-   * List pending agentic capture-feed rows for the active trust zone.
+   * List agentic capture-feed rows for the active trust zone.
    * No LLM. Used by Product 6 runner only.
    */
   listAgenticCaptureFeed(
@@ -4480,7 +4694,8 @@ export class LocalCaptureStore {
       .prepare(
         `
           SELECT source_event_id, artifact_id, trust_zone_id, hook_event_name,
-                 protected_value_id, state, created_at, finished_at, skip_reason
+                 protected_value_id, state, created_at, finished_at, skip_reason,
+                 lease_id, lease_expires_at
           FROM agentic_capture_feed
           WHERE trust_zone_id = ? AND state = ?
           ORDER BY created_at ASC, source_event_id ASC
@@ -4497,21 +4712,103 @@ export class LocalCaptureStore {
       created_at: string;
       finished_at: string | null;
       skip_reason: string | null;
+      lease_id: string | null;
+      lease_expires_at: string | null;
     }>;
-    return rows.map((r) => ({
-      source_event_id: r.source_event_id,
-      artifact_id: r.artifact_id,
-      trust_zone_id: r.trust_zone_id,
-      hook_event_name: r.hook_event_name,
-      protected_value_id: r.protected_value_id,
-      state: r.state,
-      created_at: r.created_at,
-      finished_at: r.finished_at,
-      skip_reason: r.skip_reason,
-    }));
+    return rows.map((r) => this.mapAgenticCaptureFeedRow(r));
   }
 
-  /** Mark feed row terminal (done or skipped). Idempotent. */
+  /**
+   * Atomically claim pending (or expired leased) feed rows for exclusive processing.
+   * ADR 0018 D5 mutual exclusion for always-on / concurrent runners.
+   */
+  claimAgenticCaptureFeed(input: {
+    limit?: number;
+    leaseMs?: number;
+    now?: Date;
+  } = {}): AgenticCaptureFeedRow[] {
+    const limit = input.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("claimAgenticCaptureFeed limit must be a positive integer");
+    }
+    const leaseMs = input.leaseMs ?? 120_000;
+    if (!Number.isInteger(leaseMs) || leaseMs < 1) {
+      throw new Error("claimAgenticCaptureFeed leaseMs must be a positive integer");
+    }
+    const now = input.now ?? this.clock.now();
+    const nowIso = now.toISOString();
+    const leaseExpiresAt = new Date(now.getTime() + leaseMs).toISOString();
+    const leaseId = `lease_${hashHex(`${nowIso}:${Math.random()}`).slice(0, 24)}`;
+
+    return this.withImmediateTransaction(() => {
+      const candidates = this.db
+        .prepare(
+          `
+            SELECT source_event_id
+            FROM agentic_capture_feed
+            WHERE trust_zone_id = ?
+              AND (
+                state = 'pending'
+                OR (state = 'leased' AND (lease_expires_at IS NULL OR lease_expires_at <= ?))
+              )
+            ORDER BY created_at ASC, source_event_id ASC
+            LIMIT ?
+          `,
+        )
+        .all(this.trustZone.trust_zone_id, nowIso, limit) as Array<{ source_event_id: string }>;
+
+      const claimed: AgenticCaptureFeedRow[] = [];
+      const update = this.db.prepare(
+        `
+          UPDATE agentic_capture_feed
+          SET state = 'leased', lease_id = ?, lease_expires_at = ?, finished_at = NULL, skip_reason = NULL
+          WHERE source_event_id = ? AND trust_zone_id = ?
+            AND (
+              state = 'pending'
+              OR (state = 'leased' AND (lease_expires_at IS NULL OR lease_expires_at <= ?))
+            )
+        `,
+      );
+      const select = this.db.prepare(
+        `
+          SELECT source_event_id, artifact_id, trust_zone_id, hook_event_name,
+                 protected_value_id, state, created_at, finished_at, skip_reason,
+                 lease_id, lease_expires_at
+          FROM agentic_capture_feed
+          WHERE source_event_id = ? AND trust_zone_id = ?
+        `,
+      );
+      for (const c of candidates) {
+        const result = update.run(
+          leaseId,
+          leaseExpiresAt,
+          c.source_event_id,
+          this.trustZone.trust_zone_id,
+          nowIso,
+        ) as { changes?: number };
+        if (Number(result.changes ?? 0) === 0) continue;
+        const row = select.get(c.source_event_id, this.trustZone.trust_zone_id) as
+          | {
+              source_event_id: string;
+              artifact_id: string;
+              trust_zone_id: string;
+              hook_event_name: string;
+              protected_value_id: string;
+              state: AgenticCaptureFeedRow["state"];
+              created_at: string;
+              finished_at: string | null;
+              skip_reason: string | null;
+              lease_id: string | null;
+              lease_expires_at: string | null;
+            }
+          | undefined;
+        if (row !== undefined) claimed.push(this.mapAgenticCaptureFeedRow(row));
+      }
+      return claimed;
+    });
+  }
+
+  /** Mark feed row terminal (done or skipped). Accepts pending or leased. Idempotent. */
   finishAgenticCaptureFeed(input: {
     source_event_id: string;
     state: "done" | "skipped";
@@ -4522,8 +4819,9 @@ export class LocalCaptureStore {
       .prepare(
         `
           UPDATE agentic_capture_feed
-          SET state = ?, finished_at = ?, skip_reason = ?
-          WHERE source_event_id = ? AND trust_zone_id = ? AND state = 'pending'
+          SET state = ?, finished_at = ?, skip_reason = ?, lease_id = NULL, lease_expires_at = NULL
+          WHERE source_event_id = ? AND trust_zone_id = ?
+            AND state IN ('pending', 'leased')
         `,
       )
       .run(
@@ -4534,6 +4832,34 @@ export class LocalCaptureStore {
         this.trustZone.trust_zone_id,
       ) as { changes?: number };
     return Number(result.changes ?? 0) > 0;
+  }
+
+  private mapAgenticCaptureFeedRow(r: {
+    source_event_id: string;
+    artifact_id: string;
+    trust_zone_id: string;
+    hook_event_name: string;
+    protected_value_id: string;
+    state: AgenticCaptureFeedRow["state"];
+    created_at: string;
+    finished_at: string | null;
+    skip_reason: string | null;
+    lease_id?: string | null;
+    lease_expires_at?: string | null;
+  }): AgenticCaptureFeedRow {
+    return {
+      source_event_id: r.source_event_id,
+      artifact_id: r.artifact_id,
+      trust_zone_id: r.trust_zone_id,
+      hook_event_name: r.hook_event_name,
+      protected_value_id: r.protected_value_id,
+      state: r.state,
+      created_at: r.created_at,
+      finished_at: r.finished_at,
+      skip_reason: r.skip_reason,
+      lease_id: r.lease_id ?? null,
+      lease_expires_at: r.lease_expires_at ?? null,
+    };
   }
 
   /**
@@ -4570,7 +4896,7 @@ export class LocalCaptureStore {
     protected_value_id: string;
     created_at: string;
   }): void {
-    // Defensive for concurrent first-open races: ensure table exists.
+    // Defensive for concurrent first-open races: ensure table exists (lease-capable schema).
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS agentic_capture_feed (
         source_event_id TEXT PRIMARY KEY,
@@ -4578,10 +4904,12 @@ export class LocalCaptureStore {
         trust_zone_id TEXT NOT NULL,
         hook_event_name TEXT NOT NULL,
         protected_value_id TEXT NOT NULL,
-        state TEXT NOT NULL CHECK (state IN ('pending', 'done', 'skipped')),
+        state TEXT NOT NULL CHECK (state IN ('pending', 'leased', 'done', 'skipped')),
         created_at TEXT NOT NULL,
         finished_at TEXT,
-        skip_reason TEXT
+        skip_reason TEXT,
+        lease_id TEXT,
+        lease_expires_at TEXT
       );
     `);
     this.db
@@ -4589,8 +4917,9 @@ export class LocalCaptureStore {
         `
           INSERT OR IGNORE INTO agentic_capture_feed (
             source_event_id, artifact_id, trust_zone_id, hook_event_name,
-            protected_value_id, state, created_at, finished_at, skip_reason
-          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, NULL)
+            protected_value_id, state, created_at, finished_at, skip_reason,
+            lease_id, lease_expires_at
+          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, NULL, NULL, NULL)
         `,
       )
       .run(
