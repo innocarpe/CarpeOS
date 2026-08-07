@@ -15,9 +15,9 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-The current public release is **`6.6.0`** (HITL-free Agentic Layer /
-promote-when-verified). Activate with the exact version pin and
-`carpeos setup doctor`. Optional always-on brain:
+The current public release is **`6.6.1`** (HITL-free Agentic Layer with
+**deepseek-v4-flash product path**, plus `agentic feed` / `flush`). Activate with
+the exact version pin and `carpeos setup doctor`. Always-on Flash batch:
 `carpeos agentic timer install`. Versions follow
 [SemVer](https://semver.org/). See the repo
 [CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md) and
