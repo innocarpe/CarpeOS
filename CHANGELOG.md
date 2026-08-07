@@ -14,6 +14,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.6.2] - 2026-08-07
+
+### Fixed
+
+- **Agentic pack soft-scrubs paths/URIs** before V5 redact so SessionEnd transcripts with absolute paths can reach Flash extract instead of hard-failing with `redact_path_or_uri`.
+- Do not call Flash when pack fails (`pack_digest` required) — avoids spend with zero materializations.
+- Pack failure now sets pipeline `ok: false`.
+
 ## [6.6.1] - 2026-08-07
 
 ### Fixed
