@@ -101,8 +101,11 @@ export function evaluateQualityManifest(
       (c.flash_extract_json !== undefined && c.flash_extract_json.trim().length > 0);
     const useFlash = recorded;
 
+    // Per-case trust zone so cross-session near-dup (recent promotes) does not
+    // couple independent fixtures that share decision wording.
+    const case_zone = `${trust_zone_id}_${c.id}`;
     const pipeline = runAgenticProposalPipeline(db, {
-      trust_zone_id,
+      trust_zone_id: case_zone,
       source_event_id: `evt_quality_${c.id}`,
       hook_event_name: "SessionEnd",
       signal_text: c.pack_text,
