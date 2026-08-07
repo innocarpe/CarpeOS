@@ -36,7 +36,15 @@ export function isAllowedTranscriptPath(filePath: string): boolean {
     return false;
   }
   const home = homedir();
-  const allowedRoots = [resolve(home, ".claude"), resolve(home, ".codex"), resolve(home, ".grok")];
+  // denser host adapters: allow common agent harness transcript roots (local only).
+  const allowedRoots = [
+    resolve(home, ".claude"),
+    resolve(home, ".codex"),
+    resolve(home, ".grok"),
+    resolve(home, ".cursor"),
+    resolve(home, ".gajae"),
+    resolve(home, ".agents"),
+  ];
   return allowedRoots.some(
     (root) =>
       resolved === root || resolved.startsWith(`${root}/`) || resolved.startsWith(`${root}\\`),
@@ -358,7 +366,19 @@ function proseFromTranscriptRecordAgentic(record: Record<string, unknown>): stri
     const fromContent = proseFromContentAgentic(content);
     if (fromContent !== undefined) return fromContent;
   }
-  for (const key of ["content", "text", "prompt", "last_prompt"] as const) {
+  // denser host adapters: Codex/Cursor/Grok alternate prose field names.
+  for (const key of [
+    "content",
+    "text",
+    "prompt",
+    "last_prompt",
+    "output_text",
+    "response",
+    "final_message",
+    "assistant_message",
+    "user_message",
+    "completion",
+  ] as const) {
     const fromField = proseFromContentAgentic(record[key]);
     if (fromField !== undefined) return fromField;
   }

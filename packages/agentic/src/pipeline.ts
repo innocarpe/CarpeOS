@@ -219,6 +219,8 @@ export function runAgenticProposalPipeline(
   const quality_dropped: string[] = [];
   /** Within-pack near-dup: same normalized statement only promotes once. */
   const promotedStatementKeys = new Set<string>();
+  /** Cross-session near-dup: recent promotes in this trust zone (optional polish). */
+  const recentPromoteKeys = loadRecentPromoteStatementKeys(db, input.trust_zone_id);
   let candidateOrdinal = 0;
   for (const candidate of extract.candidates) {
     // Q5′: provenance-primary quality filter before E5/gate.
@@ -256,7 +258,7 @@ export function runAgenticProposalPipeline(
       allow_auto_promote: input.allow_auto_promote !== false,
       ...(input.hold_first === true ? { hold_first: true } : {}),
     });
-    // Near-dup hold (optional residual): identical statement within one pack.
+    // Near-dup hold: identical statement within pack, then recent promotes in zone.
     if (gate.decision === "promote") {
       const key = normalizeStatementKey(candidate.statement);
       if (promotedStatementKeys.has(key)) {
@@ -265,8 +267,16 @@ export function runAgenticProposalPipeline(
           decision: "hold",
           reason_codes: [...gate.reason_codes, "near_duplicate_statement"],
         };
+      } else if (recentPromoteKeys.has(key)) {
+        gate = {
+          ...gate,
+          decision: "hold",
+          reason_codes: [...gate.reason_codes, "near_duplicate_statement_recent"],
+        };
       } else {
         promotedStatementKeys.add(key);
+        // Same flush may promote once; later candidates in this pack still see it.
+        recentPromoteKeys.add(key);
       }
     }
     const gateWithStructure = {
@@ -331,4 +341,25 @@ export function normalizeStatementKey(statement: string): string {
     .replace(/[“”"'`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** How many recent promotes to scan for cross-session near-dup. */
+export const AGENTIC_NEAR_DUP_RECENT_LIMIT = 200;
+
+function loadRecentPromoteStatementKeys(
+  db: SqlDatabase,
+  trust_zone_id: string,
+): Set<string> {
+  const rows = listAgenticProposals(db, {
+    trust_zone_id,
+    gate_decision: "promote",
+    limit: AGENTIC_NEAR_DUP_RECENT_LIMIT,
+    order: "desc",
+  });
+  const keys = new Set<string>();
+  for (const row of rows) {
+    const key = normalizeStatementKey(row.candidate.statement);
+    if (key.length > 0) keys.add(key);
+  }
+  return keys;
 }

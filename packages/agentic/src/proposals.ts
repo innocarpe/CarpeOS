@@ -180,6 +180,8 @@ export function listAgenticProposals(
     trust_zone_id?: string;
     gate_decision?: "promote" | "hold" | "reject";
     limit?: number;
+    /** Default asc (legacy). Use desc for recent-first near-dup windows. */
+    order?: "asc" | "desc";
   } = {},
 ): AgenticProposalRecord[] {
   migrateAgenticProposals(db);
@@ -197,7 +199,8 @@ export function listAgenticProposals(
     sql += ` AND gate_decision = ?`;
     params.push(input.gate_decision);
   }
-  sql += ` ORDER BY created_at ASC, proposal_id ASC LIMIT ?`;
+  const order = input.order === "desc" ? "DESC" : "ASC";
+  sql += ` ORDER BY created_at ${order}, proposal_id ${order} LIMIT ?`;
   params.push(limit);
   const rows = db.prepare(sql).all(...params) as ProposalRow[];
   return rows.map((r) => normalizeProposal(JSON.parse(r.proposal_json)));
