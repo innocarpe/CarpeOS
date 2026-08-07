@@ -49,9 +49,13 @@ export type AgenticPackResult = AgenticPackOk | AgenticPackFail;
 /**
  * Build a V5 EvidencePack from plain text via redact envelope + buildEvidencePack.
  * Pack digest is stable for identical body/title/limits bindings.
+ *
+ * Real session transcripts almost always contain absolute paths / URIs. V5
+ * redactEnvelope fail-closes on those; for agentic E2 we soft-scrub them first
+ * so Flash can still extract meaning. Secrets still fail closed.
  */
 export function packAgenticEvidence(input: AgenticPackInput): AgenticPackResult {
-  const body = input.body_text.trim();
+  const body = scrubAgenticPackText(input.body_text.trim());
   if (body.length === 0) {
     return {
       ok: false,
@@ -64,7 +68,7 @@ export function packAgenticEvidence(input: AgenticPackInput): AgenticPackResult 
   const limits = input.limits ?? DEFAULT_PROFILE_LIMITS;
   const outer = buildPlainTextRedactOuter({
     body,
-    title: input.title ?? "agentic.evidence",
+    title: scrubAgenticPackText(input.title ?? "agentic.evidence"),
   });
 
   const redaction = redactEnvelope(outer, limits, {
@@ -187,4 +191,17 @@ function packTextFromRedaction(redaction: RedactOk): string {
     .map((r) => r.normalized)
     .filter((s) => s.length > 0)
     .join("\n");
+}
+
+/**
+ * Soft-scrub path/URI shapes that would make V5 redactEnvelope fail-close.
+ * Does not claim to be a full secret redactor — secret detectors still run.
+ */
+export function scrubAgenticPackText(text: string): string {
+  return text
+    .replace(/https?:\/\/[^\s"'`<>]+/gi, "[URI]")
+    .replace(/file:\/\/[^\s"'`<>]+/gi, "[URI]")
+    .replace(/(?:^|[\s"'`])(\/(?:tmp|var|home|Users|etc)\/[^\s"'`]+)/g, " [PATH]")
+    .replace(/(?:^|[\s"'`])([A-Za-z]:\\[^\s"'`]+)/g, " [PATH]")
+    .replace(/(?:^|[\s"'`])(~\/[^\s"'`]+)/g, " [PATH]");
 }
