@@ -22,6 +22,10 @@ Usage: $0 install|uninstall|status
 Installs a 30-minute (default) Flash batch runner:
   carpeos agentic run --once --materialize --allow-network --spend-cap-usd ${SPEND_CAP_USD}
 
+Default CLI JSON redacts statements/quotes/pack views (Q1.5′ / QD7) so
+\$CARPEOS_HOME/logs/agentic-timer.log stays free of private prose. Do not
+add --verbose to the unit.
+
 Product path uses deepseek-v4-flash. carpeos loads DEEPSEEK_API_KEY from the
 environment or from \$CARPEOS_HOME/v5-provider.env (never written into the unit).
 

@@ -30,6 +30,9 @@ import {
   processAgenticOnce,
   putReconcileReceipt,
   reconcileAgenticUnits,
+  redactAgenticPipelineResultForReport,
+  redactAgenticProposalForReport,
+  redactAgenticRunnerReport,
   runAgenticProposalPipeline,
   unitsFromCanonicalEvents,
 } from "@carpeos/agentic";
@@ -1553,6 +1556,11 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           "skip-ineligible": { type: "boolean", default: true },
           /** Prefer SessionEnd/Stop/PreCompact when claiming (default true). */
           "prefer-lifecycle": { type: "boolean", default: true },
+          /**
+           * Q1.5′ / QD7: default redacts statements, quotes, pack views.
+           * --verbose opts into private text (debug only; never for timer logs).
+           */
+          verbose: { type: "boolean", default: false },
         },
         allowPositionals: false,
         strict: true,
@@ -1567,6 +1575,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
       const networkKill =
         env.CARPEOS_AGENTIC_NETWORK === "0" || env.CARPEOS_AGENTIC_NETWORK === "off";
       const allowNetwork = !networkKill && parsed.values["allow-network"] !== false;
+      const verboseReport = parsed.values.verbose === true;
       const providerEnv = applyPrivateProviderEnv(runtimeDir, env);
       if (allowNetwork && !(env.DEEPSEEK_API_KEY ?? "").trim()) {
         throw new CliUsageError(
@@ -1642,7 +1651,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           prefer_lifecycle: preferLifecycle,
           feed_before: before.counts,
           feed_after: after.counts,
-          report,
+          report: redactAgenticRunnerReport(report, { verbose: verboseReport }),
           model_id: AGENTIC_FLASH_MODEL_ID,
           allow_network: allowNetwork,
           network_used: report.network_used,
@@ -1650,6 +1659,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           credential_source: credentialSource,
           structure_edge_count: report.structure_edge_count,
           project_invoked: report.project_invoked,
+          verbose: verboseReport,
           next:
             after.counts.pending + after.counts.leased > 0
               ? "carpeos agentic flush   # more remaining"
@@ -1684,6 +1694,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           golden: { type: "boolean", default: false },
           "golden-path": { type: "string" },
           limit: { type: "string" },
+          /** Q1.5′: default redacts statements/quotes; opt-in for debug. */
+          verbose: { type: "boolean", default: false },
         },
         allowPositionals: false,
         strict: true,
@@ -1699,6 +1711,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
       const networkKill =
         env.CARPEOS_AGENTIC_NETWORK === "0" || env.CARPEOS_AGENTIC_NETWORK === "off";
       const allowNetwork = !networkKill && parsed.values["allow-network"] !== false;
+      const verboseReport = parsed.values.verbose === true;
       const providerEnv = applyPrivateProviderEnv(runtimeDir, env);
       if (allowNetwork && !(env.DEEPSEEK_API_KEY ?? "").trim()) {
         throw new CliUsageError(
@@ -1757,9 +1770,10 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           writeJson(process.stdout, {
             ok: result.ok,
             command: "agentic.run.text",
-            result,
+            result: redactAgenticPipelineResultForReport(result, { verbose: verboseReport }),
             model_id: AGENTIC_FLASH_MODEL_ID,
             network_used: result.network_used,
+            verbose: verboseReport,
             canonical_effect: "none",
           });
           return result.ok ? 0 : 1;
@@ -1801,7 +1815,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             once: true,
             feed_before: before.counts,
             feed_after: after.counts,
-            report,
+            report: redactAgenticRunnerReport(report, { verbose: verboseReport }),
             model_id: AGENTIC_FLASH_MODEL_ID,
             allow_network: allowNetwork,
             network_used: report.network_used,
@@ -1809,6 +1823,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             credential_source: credentialSource,
             structure_edge_count: report.structure_edge_count,
             project_invoked: report.project_invoked,
+            verbose: verboseReport,
           });
           return report.ok ? 0 : 1;
         } finally {
@@ -1825,6 +1840,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           home: { type: "string" },
           "trust-zone": { type: "string" },
           limit: { type: "string" },
+          /** Q1.5′: statements redacted unless --verbose. */
+          verbose: { type: "boolean", default: false },
         },
         allowPositionals: false,
         strict: true,
@@ -1835,6 +1852,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         parsed.values["trust-zone"],
       );
       const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const verboseReport = parsed.values.verbose === true;
       const db = openAgenticDb(runtimeDir);
       try {
         const limit = Number(parsed.values.limit ?? "50");
@@ -1848,16 +1866,21 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           command: "agentic.list-held",
           policy_version: AGENTIC_POLICY_VERSION,
           count: held.length,
-          proposals: held.map((p) => ({
-            proposal_id: p.proposal_id,
-            source_event_id: p.source_event_id,
-            kind: p.candidate.kind,
-            statement: p.candidate.statement,
-            gate: p.gate.decision,
-            reason_codes: p.gate.reason_codes,
-            materialized_event_id: p.materialized_event_id,
-            materialized_claim_event_id: p.materialized_claim_event_id,
-          })),
+          redacted: !verboseReport,
+          verbose: verboseReport,
+          proposals: held.map((p) => {
+            const view = redactAgenticProposalForReport(p, { verbose: verboseReport });
+            return {
+              proposal_id: view.proposal_id,
+              source_event_id: view.source_event_id,
+              kind: view.candidate.kind,
+              statement: view.candidate.statement,
+              gate: view.gate.decision,
+              reason_codes: view.gate.reason_codes,
+              materialized_event_id: view.materialized_event_id,
+              materialized_claim_event_id: view.materialized_claim_event_id,
+            };
+          }),
         });
         return 0;
       } finally {
@@ -1871,6 +1894,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           home: { type: "string" },
           "trust-zone": { type: "string" },
           limit: { type: "string" },
+          /** Q1.5′: statements redacted unless --verbose. */
+          verbose: { type: "boolean", default: false },
         },
         allowPositionals: false,
         strict: true,
@@ -1881,6 +1906,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         parsed.values["trust-zone"],
       );
       const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const verboseReport = parsed.values.verbose === true;
       const db = openAgenticDb(runtimeDir);
       try {
         const limit = Number(parsed.values.limit ?? "50");
@@ -1894,15 +1920,20 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           policy_version: AGENTIC_POLICY_VERSION,
           count: claims.length,
           auto_acceptance_decision: false,
-          proposals: claims.map((p) => ({
-            proposal_id: p.proposal_id,
-            source_event_id: p.source_event_id,
-            kind: p.candidate.kind,
-            statement: p.candidate.statement,
-            gate: p.gate.decision,
-            materialized_event_id: p.materialized_event_id,
-            materialized_claim_event_id: p.materialized_claim_event_id,
-          })),
+          redacted: !verboseReport,
+          verbose: verboseReport,
+          proposals: claims.map((p) => {
+            const view = redactAgenticProposalForReport(p, { verbose: verboseReport });
+            return {
+              proposal_id: view.proposal_id,
+              source_event_id: view.source_event_id,
+              kind: view.candidate.kind,
+              statement: view.candidate.statement,
+              gate: view.gate.decision,
+              materialized_event_id: view.materialized_event_id,
+              materialized_claim_event_id: view.materialized_claim_event_id,
+            };
+          }),
         });
         return 0;
       } finally {
@@ -2784,9 +2815,9 @@ export function formatCommandHelp(command: string): string {
 USAGE
   carpeos agentic status [--home <path>] [--trust-zone <id>]
   carpeos agentic feed [--limit N] [--preview]     # inspect capture queue
-  carpeos agentic flush [--limit N] [--skip-ineligible]  # process NOW (Flash; prefer SessionEnd)
-  carpeos agentic run --once [--materialize] [--limit N]
-  carpeos agentic run --once --text <signal> [--hook-event SessionEnd]
+  carpeos agentic flush [--limit N] [--skip-ineligible] [--verbose]
+  carpeos agentic run --once [--materialize] [--limit N] [--verbose]
+  carpeos agentic run --once --text <signal> [--hook-event SessionEnd] [--verbose]
   carpeos agentic run --once --golden [--golden-path <manifest.json>]
   carpeos agentic timer install|uninstall|status
   carpeos agentic list-held|list-claims|promote-held|accept-claim|retract …
