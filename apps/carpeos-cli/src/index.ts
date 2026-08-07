@@ -18,6 +18,7 @@ import {
   evaluateGoldenManifest,
   getAgenticProposal,
   humanAcceptAgenticClaim,
+  humanRetractAgenticUnit,
   humanReviewAgenticHeld,
   listAgenticDraftClaimProposals,
   listAgenticHeldProposals,
@@ -1416,7 +1417,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag|reconcile|backfill|promote-held|accept-claim). See: carpeos help agentic",
+      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag|reconcile|backfill|promote-held|accept-claim|retract|timer). See: carpeos help agentic",
     );
   }
 
@@ -1482,7 +1483,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           once: { type: "boolean", default: true },
           "allow-network": { type: "boolean", default: false },
           materialize: { type: "boolean", default: true },
-          "allow-auto-promote": { type: "boolean", default: false },
+          "allow-auto-promote": { type: "boolean", default: true },
+          "hold-first": { type: "boolean", default: false },
           "spend-cap-usd": { type: "string" },
           text: { type: "string" },
           "source-event-id": { type: "string" },
@@ -1541,7 +1543,11 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             agentic_enabled: agenticEnabled,
             mode: allowNetwork ? "flash" : "fake",
             allow_network: allowNetwork,
-            allow_auto_promote: parsed.values["allow-auto-promote"] === true,
+            allow_auto_promote: parsed.values["allow-auto-promote"] !== false,
+            hold_first:
+              parsed.values["hold-first"] === true ||
+              env.CARPEOS_AGENTIC_HOLD_FIRST === "1" ||
+              env.CARPEOS_AGENTIC_HOLD_FIRST === "true",
           });
           writeJson(process.stdout, {
             ok: result.ok,
@@ -1559,13 +1565,18 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         try {
           const spendCap = Number(parsed.values["spend-cap-usd"] ?? "1");
           const limit = Number(parsed.values.limit ?? "20");
+          const holdFirst =
+            parsed.values["hold-first"] === true ||
+            env.CARPEOS_AGENTIC_HOLD_FIRST === "1" ||
+            env.CARPEOS_AGENTIC_HOLD_FIRST === "true";
           const report = await processAgenticOnce({
             store,
             agenticDb: db,
             allow_network: allowNetwork,
             agentic_enabled: agenticEnabled,
             materialize: parsed.values.materialize !== false,
-            allow_auto_promote: parsed.values["allow-auto-promote"] === true,
+            allow_auto_promote: holdFirst ? false : parsed.values["allow-auto-promote"] !== false,
+            hold_first: holdFirst,
             limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20,
             spend: createFlashSpendState({
               spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
@@ -2042,6 +2053,110 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         store.close();
       }
     }
+    case "retract": {
+      // Human correction only (ADR 0018 D4b) — not the happy path for usable meaning.
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "event-id": { type: "string" },
+          reason: { type: "string" },
+          "decided-by": { type: "string" },
+          "human-confirmed": { type: "boolean", default: false },
+          "replacement-event-id": { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const eventId = parsed.values["event-id"]?.trim();
+      const reason = parsed.values.reason?.trim();
+      const decidedBy = parsed.values["decided-by"]?.trim();
+      if (eventId === undefined || eventId.length === 0) {
+        throw new CliUsageError("agentic retract requires --event-id <evt_…>");
+      }
+      if (reason === undefined || reason.length < 4) {
+        throw new CliUsageError("agentic retract requires --reason <text>");
+      }
+      if (decidedBy === undefined || decidedBy.length === 0) {
+        throw new CliUsageError("agentic retract requires --decided-by <human-actor-id>");
+      }
+      if (parsed.values["human-confirmed"] !== true) {
+        throw new CliUsageError(
+          "agentic retract requires --human-confirmed (correction-only; no auto retract)",
+        );
+      }
+      const options = compactCommonOptions(
+        parsed.values.home,
+        undefined,
+        parsed.values["trust-zone"],
+      );
+      const store = openStore(options, env);
+      try {
+        const result = humanRetractAgenticUnit({
+          store,
+          event_id: eventId,
+          reason,
+          decided_by: decidedBy,
+          human_confirmed: true,
+          ...(parsed.values["replacement-event-id"] !== undefined
+            ? { replacement_event_id: parsed.values["replacement-event-id"] }
+            : {}),
+        });
+        writeJson(process.stdout, {
+          ok: result.ok,
+          command: "agentic.retract",
+          result,
+        });
+        return result.ok ? 0 : 1;
+      } finally {
+        store.close();
+      }
+    }
+    case "timer": {
+      // Always-on 30m batch (ADR 0018 D5 Phase B). Delegates to scripts/install-agentic-timer.sh.
+      const action = rest[0]?.trim() || "status";
+      if (!["install", "uninstall", "status"].includes(action)) {
+        throw new CliUsageError(
+          "agentic timer requires install|uninstall|status (default interval 30m)",
+        );
+      }
+      const { spawnSync } = await import("node:child_process");
+      const { existsSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const here = fileURLToPath(import.meta.url);
+      // apps/carpeos-cli/src → repo root; packaged binary may use CARPEOS_TIMER_SCRIPT.
+      const candidates = [
+        env.CARPEOS_TIMER_SCRIPT,
+        resolve(process.cwd(), "scripts/install-agentic-timer.sh"),
+        resolve(here, "../../../../scripts/install-agentic-timer.sh"),
+        resolve(here, "../../../scripts/install-agentic-timer.sh"),
+      ].filter((p): p is string => typeof p === "string" && p.length > 0);
+      const script = candidates.find((p) => existsSync(p));
+      if (script === undefined) {
+        writeJson(process.stdout, {
+          ok: false,
+          command: "agentic.timer",
+          error: "install-agentic-timer.sh not found; run from a checkout or set CARPEOS_TIMER_SCRIPT",
+          action,
+        });
+        return 1;
+      }
+      const result = spawnSync("bash", [script, action], {
+        encoding: "utf8",
+        env: { ...env },
+      });
+      writeJson(process.stdout, {
+        ok: result.status === 0,
+        command: "agentic.timer",
+        action,
+        script,
+        stdout: (result.stdout ?? "").trim(),
+        stderr: (result.stderr ?? "").trim(),
+        status: result.status,
+      });
+      return result.status === 0 ? 0 : 1;
+    }
     case "graphrag": {
       const parsed = parseArgs({
         args: [...rest],
@@ -2360,6 +2475,8 @@ USAGE
   carpeos agentic backfill [--limit N]
   carpeos agentic promote-held --event-id <evt_…> [--reject]
   carpeos agentic accept-claim --claim-id <claim_…> --decided-by <human> --human-confirmed [--decision accepted|rejected|needs_review]
+  carpeos agentic retract --event-id <evt_…> --reason <text> --decided-by <human> --human-confirmed
+  carpeos agentic timer install|uninstall|status
 
 SUBCOMMANDS
   status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
@@ -2373,8 +2490,10 @@ SUBCOMMANDS
   graphrag     P6 offline GraphRAG query set (typed promoted units > evidence residue)
   reconcile    E10 deterministic dedupe/contradict proposals (human hold path only)
   backfill     Enqueue historical EvidenceArtifact rows into agentic capture feed
-  promote-held Human promote/reject agentic_v1 held Observation disposition
-  accept-claim Human AcceptanceDecision for a draft Claim (requires --human-confirmed)
+  promote-held Human correction of side-channel holds (not happy path; ADR 0018)
+  accept-claim Optional formal AcceptanceDecision stamp (never required for usable meaning)
+  retract      Human correction: supersede wrongly promoted unit (requires --human-confirmed)
+  timer        Install/uninstall 30m always-on batch runner (launchd/systemd user)
 
 HARD FENCES
   - Capture inserts feed only (no LLM/network/await in capture transaction)
