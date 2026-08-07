@@ -483,12 +483,18 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
 
   // E9 projection hook (rebuildable; never SoT).
   if (observationIds.length > 0 && input.on_project !== undefined) {
-    await input.on_project({
-      trust_zone_id,
-      observation_event_ids: observationIds,
-    });
-    report.project_invoked = true;
-    report.reason_codes.push("project_hook_invoked");
+    try {
+      await input.on_project({
+        trust_zone_id,
+        observation_event_ids: observationIds,
+      });
+      report.project_invoked = true;
+      report.reason_codes.push("project_hook_invoked");
+    } catch {
+      // Retrieval rebuild must not fail-close a successful materialize drain.
+      report.project_invoked = false;
+      report.reason_codes.push("project_hook_failed");
+    }
   }
 
   return report;

@@ -217,6 +217,9 @@ export function runAgenticProposalPipeline(
   const proposals: AgenticProposalRecord[] = [];
   let structure_edge_count = 0;
   const quality_dropped: string[] = [];
+  /** Within-pack near-dup: same normalized statement only promotes once. */
+  const promotedStatementKeys = new Set<string>();
+  let candidateOrdinal = 0;
   for (const candidate of extract.candidates) {
     // Q5′: provenance-primary quality filter before E5/gate.
     const qf = qualityFilterCandidate(candidate, extractView);
@@ -225,12 +228,16 @@ export function runAgenticProposalPipeline(
       continue;
     }
     const verified = verifyExtractCandidate(candidate, extractView);
+    candidateOrdinal += 1;
     // E6 structure/link before gate so gate reason trail can include lineage.
+    // Ordinal keeps near-identical candidates from collapsing to one proposal_id
+    // (putAgenticProposal returns existing promote and would skip hold).
     const unitRef = makeProposalId({
       trust_zone_id: input.trust_zone_id,
       source_event_id: input.source_event_id,
       pack_digest: packed.pack_digest,
       candidate,
+      candidate_ordinal: candidateOrdinal,
     });
     const structured = structureAgenticLinks({
       unit_ref: unitRef,
@@ -241,7 +248,7 @@ export function runAgenticProposalPipeline(
       sibling_unit_event_ids: input.sibling_unit_event_ids ?? [],
     });
     structure_edge_count += structured.edges.length;
-    const gate = evaluateAgenticGate({
+    let gate = evaluateAgenticGate({
       candidate,
       cite_ok: verified.cite_ok,
       secret_ok: verified.secret_ok,
@@ -249,6 +256,19 @@ export function runAgenticProposalPipeline(
       allow_auto_promote: input.allow_auto_promote !== false,
       ...(input.hold_first === true ? { hold_first: true } : {}),
     });
+    // Near-dup hold (optional residual): identical statement within one pack.
+    if (gate.decision === "promote") {
+      const key = normalizeStatementKey(candidate.statement);
+      if (promotedStatementKeys.has(key)) {
+        gate = {
+          ...gate,
+          decision: "hold",
+          reason_codes: [...gate.reason_codes, "near_duplicate_statement"],
+        };
+      } else {
+        promotedStatementKeys.add(key);
+      }
+    }
     const gateWithStructure = {
       ...gate,
       reason_codes: [
@@ -270,6 +290,7 @@ export function runAgenticProposalPipeline(
       gate: gateWithStructure,
       edges: structured.edges,
       structure_reason_codes: structured.reason_codes,
+      candidate_ordinal: candidateOrdinal,
       ...(input.now !== undefined ? { now: input.now } : {}),
     });
     if (proposal.canonical_effect !== "none") {
@@ -300,4 +321,14 @@ export function listProposalsForZone(
   limit = 50,
 ): AgenticProposalRecord[] {
   return listAgenticProposals(db, { trust_zone_id, limit });
+}
+
+/** NFC + casefold + whitespace collapse for near-dup statement keys. */
+export function normalizeStatementKey(statement: string): string {
+  return statement
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[“”"'`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

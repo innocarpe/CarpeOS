@@ -62,6 +62,8 @@ export function makeProposalId(input: {
   source_event_id: string;
   pack_digest: string;
   candidate: AgenticExtractCandidate;
+  /** Disambiguate identical candidates within one pack (near-dup hold path). */
+  candidate_ordinal?: number;
 }): string {
   return `agp_${digestSha256({
     schema: "carpeos.agentic.proposal-id/v1",
@@ -71,6 +73,7 @@ export function makeProposalId(input: {
     kind: input.candidate.kind,
     statement: input.candidate.statement,
     citations: input.candidate.citations,
+    candidate_ordinal: input.candidate_ordinal ?? 0,
   }).slice("sha256:".length, "sha256:".length + 40)}`;
 }
 
@@ -88,11 +91,20 @@ export function putAgenticProposal(
     gate: AgenticGateResult;
     edges?: readonly AgenticEdgeProposal[];
     structure_reason_codes?: readonly string[];
+    candidate_ordinal?: number;
     now?: Date;
   },
 ): AgenticProposalRecord {
   migrateAgenticProposals(db);
-  const proposal_id = makeProposalId(input);
+  const proposal_id = makeProposalId({
+    trust_zone_id: input.trust_zone_id,
+    source_event_id: input.source_event_id,
+    pack_digest: input.pack_digest,
+    candidate: input.candidate,
+    ...(input.candidate_ordinal !== undefined
+      ? { candidate_ordinal: input.candidate_ordinal }
+      : {}),
+  });
   const existing = getAgenticProposal(db, proposal_id);
   if (existing !== undefined) {
     return existing;

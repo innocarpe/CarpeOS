@@ -179,6 +179,19 @@ describe("E2 packAgenticEvidence", () => {
     expect(scrubbed).toContain("[PATH]");
   });
 
+  it("residual closeout scrubs emails, IPs, and DNS hostnames", () => {
+    const scrubbed = scrubAgenticPackText(
+      "Contact ops@example.com at 10.0.0.5 or host.internal. Contact https://docs.example.com/x.",
+    );
+    expect(scrubbed).toContain("[EMAIL]");
+    expect(scrubbed).toContain("[IP]");
+    expect(scrubbed).toContain("[HOST]");
+    expect(scrubbed).toContain("[URI]");
+    expect(scrubbed).not.toMatch(/ops@example\.com/);
+    expect(scrubbed).not.toMatch(/10\.0\.0\.5/);
+    expect(scrubbed).not.toMatch(/host\.internal/);
+  });
+
   it("Q1′ prepared pack exposes effective views + policy_version agentic_v1.1", () => {
     const r = packAgenticEvidence({
       pack_id: "pack-views-01",

@@ -42,13 +42,14 @@ export const AGENTIC_TRIAGE_VIEW_MAX_CHARS = 8_000;
 export const AGENTIC_EXTRACT_VIEW_MAX_CHARS = 12_000;
 
 /**
- * Known scrub residuals deliberately *not* rewritten yet (emails, IPs, hostnames).
- * Path roots below are scrubbed in Q1′; residual classes stay documented for Q9′.
+ * Scrub residual classes that are intentionally soft-replaced (not full PII redaction).
+ * Paths/URIs scrubbed since Q1′; emails/IPs/hostnames added in residual closeout.
  */
 export const AGENTIC_SCRUB_RESIDUAL_CLASSES = [
   "email_addresses",
   "ipv4_ipv6",
-  "bare_hostnames",
+  "dns_hostnames",
+  "path_and_uri",
 ] as const;
 
 export type AgenticPackInput = {
@@ -301,21 +302,37 @@ function packTextFromRedaction(redaction: RedactOk): string {
 }
 
 /**
- * Soft-scrub path/URI shapes that would make V5 redactEnvelope fail-close
+ * Soft-scrub path/URI/PII-ish shapes that would make V5 redactEnvelope fail-close
  * and that must not appear in Flash request bodies (QD0 privacy fence).
  * Does not claim to be a full secret redactor — secret detectors still run.
  *
- * Q1′ broadened roots: tmp/var/home/Users/etc plus opt/private/Volumes/mnt/srv.
- * Residual (documented, not scrubbed): emails, bare IPs, bare hostnames.
+ * Q1′ paths: tmp/var/home/Users/etc plus opt/private/Volumes/mnt/srv.
+ * Residual closeout: emails, IPv4/IPv6, common DNS hostnames.
  */
 export function scrubAgenticPackText(text: string): string {
-  return text
-    .replace(/https?:\/\/[^\s"'`<>]+/gi, "[URI]")
-    .replace(/file:\/\/[^\s"'`<>]+/gi, "[URI]")
-    .replace(
-      /(?:^|[\s"'`])(\/(?:tmp|var|home|Users|etc|opt|private|Volumes|mnt|srv)\/[^\s"'`]+)/g,
-      " [PATH]",
-    )
-    .replace(/(?:^|[\s"'`])([A-Za-z]:\\[^\s"'`]+)/g, " [PATH]")
-    .replace(/(?:^|[\s"'`])(~\/[^\s"'`]+)/g, " [PATH]");
+  return (
+    text
+      .replace(/https?:\/\/[^\s"'`<>]+/gi, "[URI]")
+      .replace(/file:\/\/[^\s"'`<>]+/gi, "[URI]")
+      .replace(
+        /(?:^|[\s"'`])(\/(?:tmp|var|home|Users|etc|opt|private|Volumes|mnt|srv)\/[^\s"'`]+)/g,
+        " [PATH]",
+      )
+      .replace(/(?:^|[\s"'`])([A-Za-z]:\\[^\s"'`]+)/g, " [PATH]")
+      .replace(/(?:^|[\s"'`])(~\/[^\s"'`]+)/g, " [PATH]")
+      // Emails before host/IP so user@host is not partially mangled.
+      .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL]")
+      // IPv4
+      .replace(
+        /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g,
+        "[IP]",
+      )
+      // Compressed IPv6 (conservative)
+      .replace(/\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{0,4}\b/g, "[IP]")
+      // DNS-like hostnames (require a dotted publicish TLD to avoid "make.preflight" false hits)
+      .replace(
+        /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|org|net|io|dev|app|local|internal|example|edu|gov|co|kr|jp|ai)\b/gi,
+        "[HOST]",
+      )
+  );
 }
