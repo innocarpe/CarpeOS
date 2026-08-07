@@ -10,31 +10,74 @@ const manifestPath = resolve(
   "../../fixtures/agentic/v1/quality-ultragoal/manifest.json",
 );
 
-describe("Q2′ quality corpus (baseline #1)", () => {
-  it("runs exact-expect corpus under fake promote defaults", () => {
+describe("quality corpus DoD (baseline #2)", () => {
+  it("Q-S1/S2: full exact-expect green under fake + recorded-Flash inject", () => {
     const db = new DatabaseSync(":memory:");
     const manifest = loadQualityManifest(manifestPath);
     const report = evaluateQualityManifest(db, manifest, { now });
-    // Characterization: print failures for baseline tracking.
     const fails = report.results.filter((r) => !r.pass);
     if (fails.length > 0) {
       // eslint-disable-next-line no-console
       console.log(
-        "quality baseline fails",
-        fails.map((f) => ({ id: f.id, observed: f.observed, notes: f.notes })),
+        "quality DoD fails",
+        fails.map((f) => ({
+          id: f.id,
+          observed: f.observed,
+          kind: f.observed_kind,
+          notes: f.notes,
+        })),
       );
     }
-    expect(report.case_count).toBeGreaterThanOrEqual(10);
+    expect(report.case_count).toBeGreaterThanOrEqual(40);
     expect(report.counters.must_not_promote_leaks).toBe(0);
-    // Strong gate for must_not_promote cases always.
+    expect(report.pass).toBe(true);
+    expect(report.pass_count).toBe(report.case_count);
+    // Recorded-Flash inject cases present (no live HTTP in this harness).
+    expect(report.results.some((r) => r.recorded_flash)).toBe(true);
+    expect(report.results.filter((r) => r.recorded_flash).every((r) => r.pass)).toBe(true);
+    db.close();
+  });
+
+  it("Q-S2: every must_not_promote case never promotes", () => {
+    const db = new DatabaseSync(":memory:");
+    const report = evaluateQualityManifest(db, loadQualityManifest(manifestPath), { now });
     for (const r of report.results.filter((x) => x.expect_gate === "no_promote")) {
       expect(r.observed).not.toBe("promote");
       expect(r.pass).toBe(true);
     }
-    // Promote class: require majority green on baseline #1 (recall floor partial).
-    const promoteCases = report.results.filter((r) => r.expect_gate === "promote");
-    const promotePass = promoteCases.filter((r) => r.pass).length;
-    expect(promotePass / promoteCases.length).toBeGreaterThanOrEqual(0.5);
+    db.close();
+  });
+
+  it("Q-S3: per-kind recall ≥80% with ≥10 fixtures for decision/constraint/preference", () => {
+    const db = new DatabaseSync(":memory:");
+    const report = evaluateQualityManifest(db, loadQualityManifest(manifestPath), { now });
+    for (const kind of ["decision", "constraint", "preference"] as const) {
+      const stats = report.per_kind_recall[kind];
+      expect(stats, `missing kind stats for ${kind}`).toBeDefined();
+      expect(stats!.expected).toBeGreaterThanOrEqual(10);
+      expect(stats!.recall).toBeGreaterThanOrEqual(0.8);
+    }
+    db.close();
+  });
+
+  it("Q-S13: signal_source_counts include inline and alternate shapes", () => {
+    const db = new DatabaseSync(":memory:");
+    const report = evaluateQualityManifest(db, loadQualityManifest(manifestPath), { now });
+    expect(report.signal_source_counts.inline).toBeGreaterThan(0);
+    expect(Object.keys(report.signal_source_counts).length).toBeGreaterThanOrEqual(2);
+    db.close();
+  });
+
+  it("Q-S9 style: promoted statements exclude metadata boilerplate", () => {
+    const db = new DatabaseSync(":memory:");
+    const report = evaluateQualityManifest(db, loadQualityManifest(manifestPath), { now });
+    const meta =
+      /hook event is SessionEnd|session id is|The agent type is|agentic\.evidence/i;
+    for (const r of report.results.filter((x) => x.observed === "promote")) {
+      for (const p of r.pipeline.proposals.filter((x) => x.gate.decision === "promote")) {
+        expect(meta.test(p.candidate.statement)).toBe(false);
+      }
+    }
     db.close();
   });
 });
