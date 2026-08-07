@@ -128,7 +128,7 @@ describe("E2 packAgenticEvidence", () => {
     const r = packAgenticEvidence({
       pack_id: "pack-path-01",
       body_text:
-        "We decided to require make preflight before PRs. See /Users/example/Projects/carpeos and https://example.com/docs for notes.",
+        "We decided to require make preflight before PRs. See /tmp/synthetic/workspace/repo and https://example.com/docs for notes.",
       now_iso: "2026-08-07T12:00:00.000Z",
     });
     expect(r.ok).toBe(true);
@@ -136,7 +136,7 @@ describe("E2 packAgenticEvidence", () => {
     expect(r.pack_text).toContain("preflight");
     expect(r.pack_text).toContain("[PATH]");
     expect(r.pack_text).toContain("[URI]");
-    expect(r.pack_text).not.toMatch(/\/Users\/example/);
+    expect(r.pack_text).not.toMatch(/\/tmp\/synthetic\/workspace\/repo/);
   });
 
   it("makeAgenticPackId is stable", () => {
