@@ -41,12 +41,17 @@ describe("agentic day spend (ADR 0018 D5)", () => {
   it("reports exceeded when spend or calls hit caps", () => {
     const db = makeDb();
     const now = new Date("2026-08-07T12:00:00Z");
-    addDaySpend(db, { spend_usd: 1.0, calls: 0 }, now);
-    expect(daySpendExceeded(db, { spend_cap_usd: 1.0, max_calls: 16 }, now)).toBe(true);
+    addDaySpend(db, { spend_usd: 5.0, calls: 0 }, now);
+    expect(daySpendExceeded(db, { spend_cap_usd: 5.0, max_calls: 500 }, now)).toBe(true);
     const db2 = makeDb();
-    addDaySpend(db2, { spend_usd: 0.01, calls: 16 }, now);
-    expect(daySpendExceeded(db2, { spend_cap_usd: 1.0, max_calls: 16 }, now)).toBe(true);
+    addDaySpend(db2, { spend_usd: 0.01, calls: 500 }, now);
+    expect(daySpendExceeded(db2, { spend_cap_usd: 5.0, max_calls: 500 }, now)).toBe(true);
+    // Under product day caps, modest dogfood usage must not trip the gate.
+    const db3 = makeDb();
+    addDaySpend(db3, { spend_usd: 0.01, calls: 24 }, now);
+    expect(daySpendExceeded(db3, { spend_cap_usd: 5.0, max_calls: 500 }, now)).toBe(false);
     db.close();
     db2.close();
+    db3.close();
   });
 });

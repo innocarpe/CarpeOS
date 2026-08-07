@@ -4,6 +4,13 @@
 
 import type { SqlDatabase } from "./sql.js";
 
+/** Product defaults: allow a full day of 30m batches + manual flush dogfood. */
+export const AGENTIC_DAY_SPEND_CAP_USD = 5.0;
+/** Each SessionEnd may use 2 Flash calls (triage+extract); ~250 items/day headroom. */
+export const AGENTIC_DAY_MAX_CALLS = 500;
+/** Single processAgenticOnce run headroom (not the day total). */
+export const AGENTIC_RUN_MAX_CALLS = 64;
+
 export type DaySpendRow = {
   day_utc: string;
   spend_usd: number;

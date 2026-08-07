@@ -9,7 +9,14 @@ import { completeAgenticJob, enqueueAgenticJob, failAgenticJob, leaseAgenticJobs
 import { materializeAgenticProposal } from "./materialize.js";
 import { type AgenticPipelineResult, runAgenticProposalPipeline } from "./pipeline.js";
 import { type AgenticProposalRecord, listAgenticProposals } from "./proposals.js";
-import { addDaySpend, daySpendExceeded, loadDaySpend } from "./spend.js";
+import {
+  addDaySpend,
+  AGENTIC_DAY_MAX_CALLS,
+  AGENTIC_DAY_SPEND_CAP_USD,
+  AGENTIC_RUN_MAX_CALLS,
+  daySpendExceeded,
+  loadDaySpend,
+} from "./spend.js";
 import type { SqlDatabase } from "./sql.js";
 
 export type AgenticRunnerReport = {
@@ -100,21 +107,28 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     report.reason_codes.push("feed_empty");
   }
   // Seed in-process spend from durable day caps so always-on timers share a budget.
+  // Day caps are higher than a single-run budget so 30m batches + flush dogfood work.
   const dayCaps = {
-    spend_cap_usd: input.spend?.spend_cap_usd ?? 1.0,
-    max_calls: input.spend?.max_calls ?? 16,
+    spend_cap_usd: input.spend?.spend_cap_usd ?? AGENTIC_DAY_SPEND_CAP_USD,
+    max_calls: AGENTIC_DAY_MAX_CALLS,
   };
   const dayRow = loadDaySpend(input.agenticDb);
   if (daySpendExceeded(input.agenticDb, dayCaps, input.now)) {
     report.reason_codes.push("day_spend_cap_exceeded");
   }
-  const spend = input.spend ?? createFlashSpendState(dayCaps);
-  // Align in-memory counters with durable day totals when caller did not pass a custom spend.
-  if (input.spend === undefined) {
-    spend.spend_usd = dayRow.spend_usd;
-    spend.calls = dayRow.calls;
+  // Per-run Flash budget starts at 0. Day totals only gate network on/off via daySpendExceeded;
+  // they are persisted as deltas at the end (multi-process share without starving each run).
+  const spend =
+    input.spend ??
+    createFlashSpendState({
+      spend_cap_usd: dayCaps.spend_cap_usd,
+      max_calls: AGENTIC_RUN_MAX_CALLS,
+    });
+  if (spend.max_calls < AGENTIC_RUN_MAX_CALLS) {
+    spend.max_calls = AGENTIC_RUN_MAX_CALLS;
   }
   const spendAtStart = { spend_usd: spend.spend_usd, calls: spend.calls };
+  void dayRow;
   let allow_network = input.allow_network === true;
   if (allow_network && daySpendExceeded(input.agenticDb, dayCaps, input.now)) {
     allow_network = false;

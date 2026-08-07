@@ -139,6 +139,21 @@ describe("E2 packAgenticEvidence", () => {
     expect(r.pack_text).not.toMatch(/\/tmp\/synthetic\/workspace\/repo/);
   });
 
+  it("accepts long SessionEnd-sized bodies under agentic pack limits", () => {
+    const longBody =
+      "We decided to require make preflight before every PR. ".repeat(40) +
+      "Constraint: capture hooks must never call the network or an LLM.";
+    expect(longBody.length).toBeGreaterThan(1000);
+    const r = packAgenticEvidence({
+      pack_id: "pack-long-01",
+      body_text: longBody,
+      now_iso: "2026-08-07T12:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error(`pack failed: ${r.error_code} ${r.detail}`);
+    expect(r.pack_text).toContain("preflight");
+  });
+
   it("makeAgenticPackId is stable", () => {
     const id1 = makeAgenticPackId({
       trust_zone_id: "tz",

@@ -41,9 +41,9 @@ export function createFlashSpendState(input?: {
 }): FlashSpendState {
   return {
     spend_usd: 0,
-    spend_cap_usd: input?.spend_cap_usd ?? 1.0,
+    spend_cap_usd: input?.spend_cap_usd ?? 5.0,
     calls: 0,
-    max_calls: input?.max_calls ?? 16,
+    max_calls: input?.max_calls ?? 64,
   };
 }
 
