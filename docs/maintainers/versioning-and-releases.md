@@ -4,7 +4,7 @@ Status: maintainer policy for the public npm package and Git tags.
 
 This document is the source of truth for how CarpeOS versions are chosen, tagged,
 and published. Follow it before the first and every subsequent npm release.
-Current public release: **`@innocarpe/carpeos@6.7.1`** (6.7.0 quality substrate + legacy agentic_v1 job lease compat). See [product-6.0.0.md](product-6.0.0.md).
+Current public release: **`@innocarpe/carpeos@6.7.2`** (Flash timeout + empty-signal flush scan; quality substrate from 6.7.0). See [product-6.0.0.md](product-6.0.0.md).
 Independent Product 4 live release authority remains out of band / fail-closed.
 Shipped `adj_v3` keeps automatic Claim creation off. B0 reconciliation is
 preview-only; B1 apply remains deferred. V5 is opt-in with `canonical_effect: "none"`.
