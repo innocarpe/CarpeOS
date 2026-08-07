@@ -64,10 +64,7 @@ export type QualityReport = {
   /** Q-S13: counts of fixture signal_source labels. */
   signal_source_counts: Record<string, number>;
   /** Q-S3: per-kind promote recall among cases with expect_kind. */
-  per_kind_recall: Record<
-    string,
-    { expected: number; observed_promote: number; recall: number }
-  >;
+  per_kind_recall: Record<string, { expected: number; observed_promote: number; recall: number }>;
   canonical_effect: "none";
   network_used: boolean;
 };
@@ -212,7 +209,12 @@ function judgeQualityCase(
   if (c.expect_gate === "promote") {
     const ok = observed === "promote";
     if (!ok) notes.push(`expected promote got ${observed} stage=${pipeline.stage}`);
-    if (ok && c.expect_kind !== undefined && observed_kind !== null && observed_kind !== c.expect_kind) {
+    if (
+      ok &&
+      c.expect_kind !== undefined &&
+      observed_kind !== null &&
+      observed_kind !== c.expect_kind
+    ) {
       // Kind mismatch is a soft fail for mixed packs (decision+constraint line).
       // Still pass gate if promote, but note for recall metrics.
       notes.push(`kind_mismatch expected=${c.expect_kind} got=${observed_kind}`);
