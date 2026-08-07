@@ -97,18 +97,12 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
   }
 
   const limit = input.limit ?? 20;
-  // Mutual exclusion: claim pending (and expired leased) rows before processing (ADR 0018 D5).
-  const feed = input.store.claimAgenticCaptureFeed({
-    limit,
-    leaseMs: 120_000,
-    // Prefer SessionEnd/Stop/PreCompact over residual noise rows (legacy queue).
-    prefer_lifecycle: input.prefer_lifecycle !== false,
-    ...(input.now !== undefined ? { now: input.now } : {}),
-  });
-  report.feed_seen = feed.length;
-  if (feed.length === 0) {
-    report.reason_codes.push("feed_empty");
-  }
+  /**
+   * Empty Stop/PreCompact rows would burn the entire --limit before SessionEnd
+   * prose is reached. Scan up to 5× limit (capped at 100) while only counting
+   * non-empty_signal rows toward the operator limit.
+   */
+  const maxScan = Math.min(Math.max(limit * 5, limit), 100);
   // Seed in-process spend from durable day caps so always-on timers share a budget.
   // Day caps are higher than a single-run budget so 30m batches + flush dogfood work.
   const dayCaps = {
@@ -140,298 +134,333 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
   const observationIds: string[] = [];
   const trust_zone_id = input.store.trustZone.trust_zone_id;
 
-  for (const row of feed) {
-    const signal_text = input.store.readCaptureSignalText(row.source_event_id);
-    const model_id = allow_network ? ("deepseek-v4-flash" as const) : ("fake" as const);
-
-    const nowOpt = input.now !== undefined ? { now: input.now } : {};
-    const admitJob = enqueueAgenticJob(input.agenticDb, {
-      trust_zone_id: row.trust_zone_id,
-      source_event_id: row.source_event_id,
-      stage: "admit",
-      model_id,
-      ...nowOpt,
-    });
-    const leased = leaseAgenticJobs(input.agenticDb, {
-      limit: 8,
+  let usefulRemaining = limit;
+  let scanBudget = maxScan;
+  let claimedAny = false;
+  const seenSourceIds = new Set<string>();
+  while (usefulRemaining > 0 && scanBudget > 0) {
+    const batch = Math.min(usefulRemaining, scanBudget, 8);
+    const feed = input.store.claimAgenticCaptureFeed({
+      limit: batch,
       leaseMs: 120_000,
-      trust_zone_id: row.trust_zone_id,
-      ...nowOpt,
+      prefer_lifecycle: input.prefer_lifecycle !== false,
+      ...(input.now !== undefined ? { now: input.now } : {}),
     });
-    const lease = leased.find((l) => l.job.job_id === admitJob.job_id);
+    if (feed.length === 0) {
+      if (!claimedAny) {
+        report.reason_codes.push("feed_empty");
+      }
+      break;
+    }
+    claimedAny = true;
 
-    // QD0 / H6: never invent an "(empty capture …)" placeholder that admits and
-    // spends Flash. Empty signal stays empty → admit drops with empty_signal.
-    const signal = signal_text;
+    for (const row of feed) {
+      if (scanBudget <= 0) break;
+      if (seenSourceIds.has(row.source_event_id)) continue;
+      seenSourceIds.add(row.source_event_id);
+      scanBudget -= 1;
+      report.feed_seen += 1;
+      const signal_text = input.store.readCaptureSignalText(row.source_event_id);
+      const model_id = allow_network ? ("deepseek-v4-flash" as const) : ("fake" as const);
 
-    const structureContext = {
-      artifact_id: row.artifact_id,
-      subject_ref: input.store.projectId,
-      sibling_unit_event_ids: observationIds,
-    };
-
-    /**
-     * Q7′ / QD9 / H0d:
-     * - Offline (!allow_network): fake pipeline is the product path.
-     * - Live (allow_network): NEVER run a proposal-writing fake pipeline first.
-     *   Flash-only proposals; transient Flash fail → requeue (retryable), zero
-     *   fake materializations.
-     */
-    let pipeline: AgenticPipelineResult;
-    let liveTransientRetry = false;
-
-    if (!allow_network) {
-      pipeline = runAgenticProposalPipeline(input.agenticDb, {
+      const nowOpt = input.now !== undefined ? { now: input.now } : {};
+      const admitJob = enqueueAgenticJob(input.agenticDb, {
         trust_zone_id: row.trust_zone_id,
         source_event_id: row.source_event_id,
-        hook_event_name: row.hook_event_name,
-        signal_text: signal,
-        mode: "fake",
-        allow_network: false,
-        allow_auto_promote: input.allow_auto_promote !== false,
-        ...(input.hold_first === true ? { hold_first: true } : {}),
-        agentic_enabled: true,
-        ...structureContext,
+        stage: "admit",
+        model_id,
         ...nowOpt,
       });
-    } else {
-      // Live: admit + pack only (no proposal writes) before Flash.
-      const emptyPipeline = (): AgenticPipelineResult => ({
-        schema: "carpeos.agentic.pipeline-result/v1",
-        ok: true,
-        stage: "admit",
-        admit_decision: null,
-        triage_decision: null,
-        pack_digest: null,
-        triage_view_text: null,
-        extract_view_text: null,
-        effective_view_digest: null,
-        policy_version: AGENTIC_POLICY_VERSION,
-        proposals: [],
-        structure_edge_count: 0,
-        reason_codes: [],
-        canonical_effect: "none",
-        network_used: false,
-      });
-
-      const admit = ruleAdmitEvidence({
-        source_event_id: row.source_event_id,
+      const leased = leaseAgenticJobs(input.agenticDb, {
+        limit: 8,
+        leaseMs: 120_000,
         trust_zone_id: row.trust_zone_id,
-        hook_event_name: row.hook_event_name,
-        signal_text: signal,
+        ...nowOpt,
       });
-      if (admit.decision === "drop") {
-        pipeline = {
-          ...emptyPipeline(),
-          admit_decision: "drop",
-          reason_codes: admit.reason_codes,
-        };
-      } else {
-        const body_text =
-          admit.residual_signal_text !== undefined && admit.residual_signal_text.length > 0
-            ? admit.residual_signal_text
-            : signal;
-        const prepared = packAgenticEvidence({
-          pack_id: makeAgenticPackId({
-            trust_zone_id: row.trust_zone_id,
-            source_event_id: row.source_event_id,
-            body_text,
-          }),
-          body_text,
-          now_iso: (input.now ?? new Date()).toISOString(),
+      const lease = leased.find((l) => l.job.job_id === admitJob.job_id);
+
+      // QD0 / H6: never invent an "(empty capture …)" placeholder that admits and
+      // spends Flash. Empty signal stays empty → admit drops with empty_signal.
+      const signal = signal_text;
+
+      const structureContext = {
+        artifact_id: row.artifact_id,
+        subject_ref: input.store.projectId,
+        sibling_unit_event_ids: observationIds,
+      };
+
+      /**
+       * Q7′ / QD9 / H0d:
+       * - Offline (!allow_network): fake pipeline is the product path.
+       * - Live (allow_network): NEVER run a proposal-writing fake pipeline first.
+       *   Flash-only proposals; transient Flash fail → requeue (retryable), zero
+       *   fake materializations.
+       */
+      let pipeline: AgenticPipelineResult;
+      let liveTransientRetry = false;
+
+      if (!allow_network) {
+        pipeline = runAgenticProposalPipeline(input.agenticDb, {
+          trust_zone_id: row.trust_zone_id,
+          source_event_id: row.source_event_id,
+          hook_event_name: row.hook_event_name,
+          signal_text: signal,
+          mode: "fake",
+          allow_network: false,
+          allow_auto_promote: input.allow_auto_promote !== false,
+          ...(input.hold_first === true ? { hold_first: true } : {}),
+          agentic_enabled: true,
+          ...structureContext,
+          ...nowOpt,
         });
-        if (!prepared.ok) {
-          report.reason_codes.push(`flash_prepare_${prepared.error_code}`);
+      } else {
+        // Live: admit + pack only (no proposal writes) before Flash.
+        const emptyPipeline = (): AgenticPipelineResult => ({
+          schema: "carpeos.agentic.pipeline-result/v1",
+          ok: true,
+          stage: "admit",
+          admit_decision: null,
+          triage_decision: null,
+          pack_digest: null,
+          triage_view_text: null,
+          extract_view_text: null,
+          effective_view_digest: null,
+          policy_version: AGENTIC_POLICY_VERSION,
+          proposals: [],
+          structure_edge_count: 0,
+          reason_codes: [],
+          canonical_effect: "none",
+          network_used: false,
+        });
+
+        const admit = ruleAdmitEvidence({
+          source_event_id: row.source_event_id,
+          trust_zone_id: row.trust_zone_id,
+          hook_event_name: row.hook_event_name,
+          signal_text: signal,
+        });
+        if (admit.decision === "drop") {
           pipeline = {
             ...emptyPipeline(),
-            ok: false,
-            stage: "pack",
-            admit_decision: "admit",
-            reason_codes: [prepared.error_code, prepared.detail],
+            admit_decision: "drop",
+            reason_codes: admit.reason_codes,
           };
         } else {
-          const triageRes = await callAgenticFlash({
-            stage: "triage",
-            view_text: prepared.triage_view_text,
-            allow_network: true,
-            spend,
-            ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
+          const body_text =
+            admit.residual_signal_text !== undefined && admit.residual_signal_text.length > 0
+              ? admit.residual_signal_text
+              : signal;
+          const prepared = packAgenticEvidence({
+            pack_id: makeAgenticPackId({
+              trust_zone_id: row.trust_zone_id,
+              source_event_id: row.source_event_id,
+              body_text,
+            }),
+            body_text,
+            now_iso: (input.now ?? new Date()).toISOString(),
           });
-          let flash_triage_text: string | null = null;
-          let flash_extract_text: string | null = null;
-          report.flash_calls += 1;
-          if (triageRes.ok) {
-            flash_triage_text = triageRes.text;
-            report.network_used = true;
+          if (!prepared.ok) {
+            report.reason_codes.push(`flash_prepare_${prepared.error_code}`);
+            pipeline = {
+              ...emptyPipeline(),
+              ok: false,
+              stage: "pack",
+              admit_decision: "admit",
+              reason_codes: [prepared.error_code, prepared.detail],
+            };
           } else {
-            report.reason_codes.push(`flash_triage_${triageRes.error}`);
-          }
-
-          // Q6′ partial: need_context does not extract (QD3).
-          let shouldExtract = false;
-          if (triageRes.ok && flash_triage_text) {
-            try {
-              const parsed = JSON.parse(flash_triage_text) as { decision?: string };
-              shouldExtract = parsed.decision === "keep";
-            } catch {
-              const triageKeep =
-                !/"decision"\s*:\s*"drop"/i.test(flash_triage_text) &&
-                !/\bdrop\b/i.test(flash_triage_text.slice(0, 80));
-              shouldExtract = triageKeep;
-            }
-          }
-
-          let extractFailed = false;
-          let extractError = "";
-          if (shouldExtract) {
-            const extractRes = await callAgenticFlash({
-              stage: "extract",
-              view_text: prepared.extract_view_text,
+            const triageRes = await callAgenticFlash({
+              stage: "triage",
+              view_text: prepared.triage_view_text,
               allow_network: true,
               spend,
               ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
             });
+            let flash_triage_text: string | null = null;
+            let flash_extract_text: string | null = null;
             report.flash_calls += 1;
-            if (extractRes.ok) {
-              flash_extract_text = extractRes.text;
+            if (triageRes.ok) {
+              flash_triage_text = triageRes.text;
               report.network_used = true;
             } else {
-              extractFailed = true;
-              extractError = extractRes.error;
-              report.reason_codes.push(`flash_extract_${extractRes.error}`);
+              report.reason_codes.push(`flash_triage_${triageRes.error}`);
             }
-          }
 
-          const triageErr = triageRes.ok ? null : triageRes.error;
-          const transient =
-            isTransientFlashErrorCode(triageErr) ||
-            (extractFailed && isTransientFlashErrorCode(extractError));
+            // Q6′ partial: need_context does not extract (QD3).
+            let shouldExtract = false;
+            if (triageRes.ok && flash_triage_text) {
+              try {
+                const parsed = JSON.parse(flash_triage_text) as { decision?: string };
+                shouldExtract = parsed.decision === "keep";
+              } catch {
+                const triageKeep =
+                  !/"decision"\s*:\s*"drop"/i.test(flash_triage_text) &&
+                  !/\bdrop\b/i.test(flash_triage_text.slice(0, 80));
+                shouldExtract = triageKeep;
+              }
+            }
 
-          if (transient && flash_triage_text === null && flash_extract_text === null) {
-            liveTransientRetry = true;
-            pipeline = {
-              ...emptyPipeline(),
-              admit_decision: "admit",
-              pack_digest: prepared.pack_digest,
-              triage_view_text: prepared.triage_view_text,
-              extract_view_text: prepared.extract_view_text,
-              effective_view_digest: prepared.effective_view_digest,
-              reason_codes: ["flash_transient_retry", ...admit.reason_codes],
-            };
-            report.reason_codes.push("flash_transient_retry");
-          } else if (flash_triage_text !== null || flash_extract_text !== null) {
-            pipeline = runAgenticProposalPipeline(input.agenticDb, {
-              trust_zone_id: row.trust_zone_id,
-              source_event_id: row.source_event_id,
-              hook_event_name: row.hook_event_name,
-              signal_text: body_text,
-              mode: "flash",
-              allow_network: true,
-              allow_auto_promote: input.allow_auto_promote !== false,
-              ...(input.hold_first === true ? { hold_first: true } : {}),
-              agentic_enabled: true,
-              flash_triage_text,
-              flash_extract_text,
-              ...structureContext,
-              ...nowOpt,
-            });
-          } else {
-            pipeline = {
-              ...emptyPipeline(),
-              admit_decision: "admit",
-              pack_digest: prepared.pack_digest,
-              triage_view_text: prepared.triage_view_text,
-              extract_view_text: prepared.extract_view_text,
-              effective_view_digest: prepared.effective_view_digest,
-              reason_codes: ["flash_no_usable_response", ...admit.reason_codes],
-            };
+            let extractFailed = false;
+            let extractError = "";
+            if (shouldExtract) {
+              const extractRes = await callAgenticFlash({
+                stage: "extract",
+                view_text: prepared.extract_view_text,
+                allow_network: true,
+                spend,
+                ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
+              });
+              report.flash_calls += 1;
+              if (extractRes.ok) {
+                flash_extract_text = extractRes.text;
+                report.network_used = true;
+              } else {
+                extractFailed = true;
+                extractError = extractRes.error;
+                report.reason_codes.push(`flash_extract_${extractRes.error}`);
+              }
+            }
+
+            const triageErr = triageRes.ok ? null : triageRes.error;
+            const transient =
+              isTransientFlashErrorCode(triageErr) ||
+              (extractFailed && isTransientFlashErrorCode(extractError));
+
+            if (transient && flash_triage_text === null && flash_extract_text === null) {
+              liveTransientRetry = true;
+              pipeline = {
+                ...emptyPipeline(),
+                admit_decision: "admit",
+                pack_digest: prepared.pack_digest,
+                triage_view_text: prepared.triage_view_text,
+                extract_view_text: prepared.extract_view_text,
+                effective_view_digest: prepared.effective_view_digest,
+                reason_codes: ["flash_transient_retry", ...admit.reason_codes],
+              };
+              report.reason_codes.push("flash_transient_retry");
+            } else if (flash_triage_text !== null || flash_extract_text !== null) {
+              pipeline = runAgenticProposalPipeline(input.agenticDb, {
+                trust_zone_id: row.trust_zone_id,
+                source_event_id: row.source_event_id,
+                hook_event_name: row.hook_event_name,
+                signal_text: body_text,
+                mode: "flash",
+                allow_network: true,
+                allow_auto_promote: input.allow_auto_promote !== false,
+                ...(input.hold_first === true ? { hold_first: true } : {}),
+                agentic_enabled: true,
+                flash_triage_text,
+                flash_extract_text,
+                ...structureContext,
+                ...nowOpt,
+              });
+            } else {
+              pipeline = {
+                ...emptyPipeline(),
+                admit_decision: "admit",
+                pack_digest: prepared.pack_digest,
+                triage_view_text: prepared.triage_view_text,
+                extract_view_text: prepared.extract_view_text,
+                effective_view_digest: prepared.effective_view_digest,
+                reason_codes: ["flash_no_usable_response", ...admit.reason_codes],
+              };
+            }
           }
         }
       }
-    }
 
-    report.structure_edge_count += pipeline.structure_edge_count;
-    report.pipelines.push(pipeline);
+      report.structure_edge_count += pipeline.structure_edge_count;
+      report.pipelines.push(pipeline);
 
-    if (lease !== undefined) {
-      if (liveTransientRetry) {
-        failAgenticJob(input.agenticDb, {
-          jobId: lease.job.job_id,
-          leaseId: lease.lease_id,
-          error_code: "flash_transient_retry",
-          ...nowOpt,
-        });
-      } else if (pipeline.ok) {
-        completeAgenticJob(input.agenticDb, {
-          jobId: lease.job.job_id,
-          leaseId: lease.lease_id,
-          output_digest: pipeline.pack_digest,
-          canonical_effect: input.materialize === true ? "observation" : "none",
-          ...nowOpt,
-        });
-      } else {
-        failAgenticJob(input.agenticDb, {
-          jobId: lease.job.job_id,
-          leaseId: lease.lease_id,
-          error_code: "pipeline_failed",
-          ...nowOpt,
-        });
+      if (lease !== undefined) {
+        if (liveTransientRetry) {
+          failAgenticJob(input.agenticDb, {
+            jobId: lease.job.job_id,
+            leaseId: lease.lease_id,
+            error_code: "flash_transient_retry",
+            ...nowOpt,
+          });
+        } else if (pipeline.ok) {
+          completeAgenticJob(input.agenticDb, {
+            jobId: lease.job.job_id,
+            leaseId: lease.lease_id,
+            output_digest: pipeline.pack_digest,
+            canonical_effect: input.materialize === true ? "observation" : "none",
+            ...nowOpt,
+          });
+        } else {
+          failAgenticJob(input.agenticDb, {
+            jobId: lease.job.job_id,
+            leaseId: lease.lease_id,
+            error_code: "pipeline_failed",
+            ...nowOpt,
+          });
+        }
       }
-    }
 
-    if (liveTransientRetry) {
-      input.store.requeueAgenticCaptureFeed({
-        source_event_id: row.source_event_id,
-        skip_reason: "flash_transient_retry",
-      });
-      report.reason_codes.push("feed_requeued");
-      continue;
-    }
+      if (liveTransientRetry) {
+        input.store.requeueAgenticCaptureFeed({
+          source_event_id: row.source_event_id,
+          skip_reason: "flash_transient_retry",
+        });
+        report.reason_codes.push("feed_requeued");
+        // Count toward limit so a timeout does not re-claim the same row forever.
+        usefulRemaining -= 1;
+        continue;
+      }
 
-    if (pipeline.admit_decision === "drop" || pipeline.proposals.length === 0) {
+      if (pipeline.admit_decision === "drop" || pipeline.proposals.length === 0) {
+        input.store.finishAgenticCaptureFeed({
+          source_event_id: row.source_event_id,
+          state: "skipped",
+          skip_reason: pipeline.reason_codes.join(",") || "no_proposals",
+        });
+        report.feed_skipped += 1;
+        // empty_signal does not consume the operator --limit (scan more for SessionEnd).
+        const emptyDrop =
+          pipeline.admit_decision === "drop" && pipeline.reason_codes.includes("empty_signal");
+        if (!emptyDrop) {
+          usefulRemaining -= 1;
+        }
+        continue;
+      }
+
+      if (input.materialize === true) {
+        for (const proposal of pipeline.proposals) {
+          const mat = materializeAgenticProposal({
+            store: input.store,
+            agenticDb: input.agenticDb,
+            proposal,
+            artifact_id: row.artifact_id,
+            allow_promote_materialize:
+              input.hold_first === true ? false : input.allow_auto_promote !== false,
+            subject_ref: input.store.projectId,
+          });
+          if (mat.ok) {
+            if (mat.observation_event_id !== null) {
+              report.materializations += 1;
+              observationIds.push(mat.observation_event_id);
+            }
+            if (mat.claim_event_id !== null) {
+              report.draft_claims += 1;
+              // Claim is a meaning_unit for E9 graph density.
+              observationIds.push(mat.claim_event_id);
+              if (mat.observation_event_id === null) {
+                report.materializations += 1;
+              }
+            }
+          }
+        }
+      }
+
       input.store.finishAgenticCaptureFeed({
         source_event_id: row.source_event_id,
-        state: "skipped",
-        skip_reason: pipeline.reason_codes.join(",") || "no_proposals",
+        state: "done",
       });
-      report.feed_skipped += 1;
-      continue;
+      report.feed_done += 1;
+      usefulRemaining -= 1;
     }
-
-    if (input.materialize === true) {
-      for (const proposal of pipeline.proposals) {
-        const mat = materializeAgenticProposal({
-          store: input.store,
-          agenticDb: input.agenticDb,
-          proposal,
-          artifact_id: row.artifact_id,
-          allow_promote_materialize:
-            input.hold_first === true ? false : input.allow_auto_promote !== false,
-          subject_ref: input.store.projectId,
-        });
-        if (mat.ok) {
-          if (mat.observation_event_id !== null) {
-            report.materializations += 1;
-            observationIds.push(mat.observation_event_id);
-          }
-          if (mat.claim_event_id !== null) {
-            report.draft_claims += 1;
-            // Claim is a meaning_unit for E9 graph density.
-            observationIds.push(mat.claim_event_id);
-            if (mat.observation_event_id === null) {
-              report.materializations += 1;
-            }
-          }
-        }
-      }
-    }
-
-    input.store.finishAgenticCaptureFeed({
-      source_event_id: row.source_event_id,
-      state: "done",
-    });
-    report.feed_done += 1;
-  }
+  } // while usefulRemaining / scanBudget
 
   // Persist day spend deltas so multi-process timers share ADR 0018 D5 caps.
   const deltaSpend = Math.max(0, spend.spend_usd - spendAtStart.spend_usd);
@@ -463,6 +492,7 @@ function isTransientFlashErrorCode(error: string | null | undefined): boolean {
   if (error == null || error.length === 0) return false;
   return (
     error === "transport_failure" ||
+    error === "timeout" ||
     error === "http_429" ||
     error === "http_5xx" ||
     error === "empty_model_response" ||

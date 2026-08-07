@@ -41,6 +41,50 @@ const DEEPSEEK_BASE = "https://api.deepseek.com";
 /** Conservative default price snapshot (USD / 1M tokens) — operator can lower spend_cap. */
 const DEFAULT_INPUT_PER_M = 0.14;
 const DEFAULT_OUTPUT_PER_M = 0.28;
+/**
+ * Default Flash HTTP timeout. Hang without this blocked agentic flush for minutes
+ * (dogfood 6.7.x). Override with CARPEOS_AGENTIC_FLASH_TIMEOUT_MS (min 5s, max 180s).
+ */
+export const AGENTIC_FLASH_TIMEOUT_MS_DEFAULT = 45_000;
+
+export function resolveAgenticFlashTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+  explicit?: number,
+): number {
+  if (typeof explicit === "number" && Number.isFinite(explicit) && explicit > 0) {
+    return Math.min(180_000, Math.max(5_000, Math.floor(explicit)));
+  }
+  const raw = (env.CARPEOS_AGENTIC_FLASH_TIMEOUT_MS ?? "").trim();
+  if (raw.length > 0) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) {
+      return Math.min(180_000, Math.max(5_000, Math.floor(n)));
+    }
+  }
+  return AGENTIC_FLASH_TIMEOUT_MS_DEFAULT;
+}
+
+/** Build an AbortSignal that fires after ms (Node 18+ AbortSignal.timeout when present). */
+export function flashTimeoutSignal(ms: number): AbortSignal {
+  const timeoutFn = (AbortSignal as unknown as { timeout?: (delay: number) => AbortSignal })
+    .timeout;
+  if (typeof timeoutFn === "function") {
+    return timeoutFn.call(AbortSignal, ms);
+  }
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+  // Avoid keeping the process alive solely for the timer in tests.
+  if (typeof t === "object" && t !== null && "unref" in t) {
+    (t as { unref: () => void }).unref();
+  }
+  return controller.signal;
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error === null || typeof error !== "object") return false;
+  const name = (error as { name?: unknown }).name;
+  return name === "AbortError" || name === "TimeoutError";
+}
 
 export function createFlashSpendState(input?: {
   spend_cap_usd?: number;
@@ -141,6 +185,8 @@ export async function callAgenticFlash(input: {
   spend?: FlashSpendState;
   fetch_impl?: typeof fetch;
   base_url?: string;
+  /** HTTP timeout ms (default AGENTIC_FLASH_TIMEOUT_MS_DEFAULT / env). */
+  timeout_ms?: number;
 }): Promise<FlashCallResult> {
   const model_id = AGENTIC_FLASH_MODEL_ID;
   const view_text = (input.view_text ?? input.pack_text ?? "").trim();
@@ -212,6 +258,7 @@ export async function callAgenticFlash(input: {
   }
 
   const url = `${(input.base_url ?? DEEPSEEK_BASE).replace(/\/$/, "")}/chat/completions`;
+  const timeout_ms = resolveAgenticFlashTimeoutMs(process.env, input.timeout_ms);
   let res: Response;
   try {
     res = await fetchFn(url, {
@@ -221,8 +268,18 @@ export async function callAgenticFlash(input: {
         authorization: `Bearer ${key}`,
       },
       body: JSON.stringify(body),
+      signal: flashTimeoutSignal(timeout_ms),
     });
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) {
+      return {
+        ok: false,
+        error: "timeout",
+        network_used: true,
+        model_id,
+        declared_view_text: view_text,
+      };
+    }
     return {
       ok: false,
       error: "transport_failure",
@@ -242,13 +299,33 @@ export async function callAgenticFlash(input: {
     };
   }
 
-  const raw = (await res.json()) as {
+  let raw: {
     choices?: Array<{
       message?: { content?: string | null; reasoning_content?: string | null };
       finish_reason?: string;
     }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
+  try {
+    raw = (await res.json()) as typeof raw;
+  } catch (error) {
+    if (isAbortError(error)) {
+      return {
+        ok: false,
+        error: "timeout",
+        network_used: true,
+        model_id,
+        declared_view_text: view_text,
+      };
+    }
+    return {
+      ok: false,
+      error: "transport_failure",
+      network_used: true,
+      model_id,
+      declared_view_text: view_text,
+    };
+  }
   const text = extractFlashMessageText(raw.choices?.[0]?.message);
   if (text.length === 0) {
     return {

@@ -6,6 +6,7 @@ import {
   callAgenticFlash,
   createFlashSpendState,
   extractFlashMessageText,
+  resolveAgenticFlashTimeoutMs,
 } from "../src/flash.js";
 import { packAgenticEvidence, scrubAgenticPackText } from "../src/pack.js";
 
@@ -112,5 +113,34 @@ describe("Q1′ Flash effective views (QD0)", () => {
     expect(body.declared_view_text).toBe(view);
     expect(body.user_content).toContain(view);
     expect(body.messages[1]?.content).toBe(body.user_content);
+  });
+
+  it("resolves Flash timeout with clamps and env override", () => {
+    expect(resolveAgenticFlashTimeoutMs({}, undefined)).toBe(45_000);
+    expect(resolveAgenticFlashTimeoutMs({}, 1_000)).toBe(5_000);
+    expect(resolveAgenticFlashTimeoutMs({}, 999_000)).toBe(180_000);
+    expect(resolveAgenticFlashTimeoutMs({ CARPEOS_AGENTIC_FLASH_TIMEOUT_MS: "12000" })).toBe(
+      12_000,
+    );
+  });
+
+  it("maps aborted fetch to timeout (transient requeue path)", async () => {
+    const fetch_impl: typeof fetch = async () => {
+      const err = new Error("The operation was aborted");
+      err.name = "AbortError";
+      throw err;
+    };
+    const res = await callAgenticFlash({
+      stage: "triage",
+      view_text: "Decision: we will require make preflight.",
+      allow_network: true,
+      api_key: "sk-test-synthetic-not-real",
+      spend: createFlashSpendState({ max_calls: 2 }),
+      fetch_impl,
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected fail");
+    expect(res.error).toBe("timeout");
+    expect(res.network_used).toBe(true);
   });
 });
