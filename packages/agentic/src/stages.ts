@@ -14,6 +14,7 @@ import {
   type AgenticKnowledgeKind,
   type AgenticTriageDecision,
 } from "./types.js";
+import { verifyExtractCandidate } from "./verify.js";
 
 export type AgenticStageMode = "fake" | "flash";
 
@@ -296,8 +297,9 @@ function extractFake(input: AgenticExtractInput): AgenticExtractResult {
     });
   }
 
-  const kind = input.hint_kind ?? inferKind(text);
   // Prefer a contiguous quote that is a true substring of pack_text.
+  // Infer kind from the chosen span so pack titles like "agentic.evidence"
+  // do not steal decision/constraint lines.
   const quote = pickQuote(text, pack);
   if (quote === null) {
     return finalizeExtract({
@@ -309,6 +311,7 @@ function extractFake(input: AgenticExtractInput): AgenticExtractResult {
       network_used: false,
     });
   }
+  const kind = input.hint_kind ?? inferKind(quote);
   const start = pack.indexOf(quote);
   const candidate: AgenticExtractCandidate = {
     kind,
@@ -367,6 +370,11 @@ function extractFlash(input: AgenticExtractInput): AgenticExtractResult {
       }
       const quote = (c.quote ?? c.statement ?? "").trim();
       if (quote.length === 0 || !input.pack_text.includes(quote)) continue;
+      // Reject pack-title / schema labels as knowledge quotes (dogfood: agentic.evidence).
+      if (isPackMetaQuote(quote)) {
+        reason_codes.push("flash_quote_pack_meta");
+        continue;
+      }
       const kindRaw = normalizeKind(c.kind) ?? input.hint_kind ?? null;
       if (kindRaw === null || !isEmitKind(kindRaw)) {
         reason_codes.push("kind_not_emittable");
@@ -378,9 +386,12 @@ function extractFlash(input: AgenticExtractInput): AgenticExtractResult {
         typeof c.confidence === "number" && Number.isFinite(c.confidence)
           ? Math.min(1, Math.max(0, c.confidence))
           : 0.55;
-      candidates.push({
+      const statement = (c.statement ?? quote).trim();
+      // Flash often paraphrases: long statement + short quote → cite_ok false at gate.
+      // Prefer quote as statement when paraphrase is not grounded in citations.
+      let candidate: AgenticExtractCandidate = {
         kind: kindRaw,
-        statement: (c.statement ?? quote).trim(),
+        statement,
         confidence,
         citations: [
           {
@@ -391,9 +402,29 @@ function extractFlash(input: AgenticExtractInput): AgenticExtractResult {
             quote,
           },
         ],
-      });
+      };
+      const grounded = verifyExtractCandidate(candidate, input.pack_text);
+      if (!grounded.cite_ok) {
+        const clampedStatement = quote.length > 200 ? `${quote.slice(0, 197)}...` : quote;
+        const clamped: AgenticExtractCandidate = {
+          ...candidate,
+          statement: clampedStatement,
+        };
+        const clampedOk = verifyExtractCandidate(clamped, input.pack_text);
+        if (clampedOk.cite_ok && !isPackMetaQuote(clampedStatement)) {
+          reason_codes.push("statement_clamped_to_quote");
+          candidate = clamped;
+        } else {
+          reason_codes.push("flash_candidate_cite_fail");
+          continue;
+        }
+      } else if (isPackMetaQuote(candidate.statement)) {
+        reason_codes.push("flash_statement_pack_meta");
+        continue;
+      }
+      candidates.push(candidate);
     }
-    // If model returned only non-emittable kinds, fall back locally for decision packs.
+    // Empty after cite filter / non-emittable only → local extract for decision packs.
     if (candidates.length === 0 && hasLoadBearingDecisionSignal(input.pack_text)) {
       const fake = extractFake({ ...input, mode: "fake", allow_network: false });
       return {
@@ -565,21 +596,70 @@ function inferKind(text: string): AgenticKnowledgeKind {
   return "fact_candidate";
 }
 
+/** Pack titles / schema labels that must never win as knowledge quotes. */
+const PACK_META_LINE_RE =
+  /^(agentic\.|schema:|title:|pack_|sha256:|evidence_event|source_event|hook_event|session[_ ]id|segment_id|prepared.?pack)/i;
+
+function isPackMetaQuote(value: string): boolean {
+  const t = value.trim();
+  if (t.length === 0) return true;
+  if (PACK_META_LINE_RE.test(t)) return true;
+  // Exact short pack defaults (no prose).
+  if (/^agentic\.evidence$/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Prefer load-bearing decision/constraint/preference lines over pack metadata
+ * (e.g. default title "agentic.evidence").
+ */
 function pickQuote(text: string, pack: string): string | null {
-  // Prefer first non-empty line that appears in pack.
   const lines = text
     .split(/\n+/)
     .map((l) => l.trim())
-    .filter((l) => l.length >= 8);
-  for (const line of lines) {
-    if (pack.includes(line)) return line;
+    .filter((l) => l.length >= 8 && pack.includes(l) && !PACK_META_LINE_RE.test(l));
+
+  if (lines.length > 0) {
+    const scored = lines
+      .map((line) => ({ line, score: scoreQuoteLine(line) }))
+      .sort((a, b) => b.score - a.score || b.line.length - a.line.length);
+    const best = scored[0];
+    if (best !== undefined && best.score > -10) return best.line;
   }
-  // Fallback: whole trimmed text if subset.
-  if (pack.includes(text) && text.length >= 8) return text;
-  // Window: take a mid slice present in pack
-  const window = text.slice(0, Math.min(120, text.length)).trim();
-  if (window.length >= 8 && pack.includes(window)) return window;
+
+  // Fallback: whole trimmed text if subset and not pure meta.
+  if (pack.includes(text) && text.length >= 8 && !PACK_META_LINE_RE.test(text)) return text;
+  // Window: skip meta-only first line when possible.
+  for (const window of [
+    text.slice(0, Math.min(160, text.length)).trim(),
+    text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .find((l) => l.length >= 8 && !PACK_META_LINE_RE.test(l) && pack.includes(l)),
+  ]) {
+    if (
+      typeof window === "string" &&
+      window.length >= 8 &&
+      pack.includes(window) &&
+      !PACK_META_LINE_RE.test(window)
+    ) {
+      return window;
+    }
+  }
   return null;
+}
+
+function scoreQuoteLine(line: string): number {
+  let score = 0;
+  if (DECISION_RE.test(line)) score += 12;
+  if (/\b(decision|constraint|preference|we will|must never|require|prefer)\b/i.test(line)) {
+    score += 6;
+  }
+  if (/(결정|제약|선호|반드시|기본값)/.test(line)) score += 6;
+  if (PACK_META_LINE_RE.test(line)) score -= 30;
+  if (line.length < 16) score -= 3;
+  if (line.length >= 40) score += 2;
+  return score;
 }
 
 /** Prompt templates for Flash (same model, different stage schemas). */
