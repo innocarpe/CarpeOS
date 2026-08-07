@@ -1,6 +1,6 @@
 # Design: HITL-free Agentic compound loop (restore original intent)
 
-Status: **Implementing** — external reviews landed (PR #291); code on feat/hitl-free-promote-verified  
+Status: **Shipped** — `@innocarpe/carpeos@6.6.0` (PRs #291–#295)  
 Date: 2026-08-07  
 Normative ADR: [ADR 0018](../adr/0018-agentic-hitl-free-compound-loop.md)  
 Related: [ADR 0017](../adr/0017-agentic-layer-write-time-knowledge.md), [PRD-v6](../PRD-v6.md)

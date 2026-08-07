@@ -1,11 +1,11 @@
 # CarpeOS Architecture Overview
 
-Status: current-main architecture audit after **Product 6.0.0** package ship
-(`@innocarpe/carpeos@6.0.0`) — **hold-first Agentic Layer** (ADR 0017 P0–P2
-product loop on npm). Local canonical + adjudication + retrieval remain the
-default operator loop; agentic is post-capture and optional-kill. Product 4
-trust/evidence and Product 5 draft cortex remain as shipped. Hosted deployment
-is still not claimed.
+Status: current-main architecture after **`@innocarpe/carpeos@6.6.0`** —
+**HITL-free Agentic Layer** (ADR 0017 machinery + ADR 0018 promote-when-verified).
+Local canonical store + adjudication + retrieval remain core; agentic is the
+post-capture brain that compounds usable meaning **without required human
+review**. Product 4 trust/evidence and Product 5 draft cortex remain as shipped.
+Hosted deployment is still not claimed.
 
 CarpeOS keeps private knowledge in a local canonical store and derives
 rebuildable, non-authoritative read models from it. The canonical boundary is not
@@ -26,7 +26,7 @@ a graph, vector index, MCP response, export, or provider payload.
 | Product 4 trust/evidence plane (P4_0, evaluator, raw producer, publisher schemas, observed sandbox) | **Shipped** on npm `@innocarpe/carpeos@4.0.0` | Fail-closed without independent live authority; synthetic fixtures are not live authority |
 | Product 4 live trust-plane workflows | In tree; **workflow_dispatch-only** until ownership activation | Not every-PR; not self-granted authority |
 | Product 5 draft lane (`carpeos v5`) | **Shipped on npm** through `@innocarpe/carpeos@5.x` | `canonical_effect: "none"`; not capture hot path; M8 authority seam deferred |
-| Product 6 Agentic Layer (`@carpeos/agentic`) | **Hold-first shipped** on npm `@innocarpe/carpeos@6.0.0` | Post-capture feed + Flash-only multi-stage + `agentic_v1` hold materialize; no capture LLM; no auto AcceptanceDecision; P3–P6 residual |
+| Product 6 Agentic Layer (`@carpeos/agentic`) | **HITL-free shipped** on npm `@innocarpe/carpeos@6.6.0` | Post-capture feed + Flash-only multi-stage + **promote-when-verified** usable Observations; retract + day spend + 30m timer; no capture LLM; no auto AcceptanceDecision |
 
 Source evidence: [local store](../../packages/local-store/src/store.ts),
 [retrieval](../../packages/retrieval/src/query.ts),
@@ -37,11 +37,41 @@ tests under the corresponding `test/` directories.
 
 ## System shape
 
+```mermaid
+flowchart LR
+  subgraph sensory [Sensory plane]
+    H[Provider hooks] --> Cap[Local capture]
+    Cap --> Ev[EvidenceArtifact]
+  end
+
+  subgraph brains [Write-time meaning]
+    Ev --> Adj[adj_v3 prefilter]
+    Ev --> Feed[agentic_capture_feed]
+    Feed --> Ag[Agentic Layer<br/>promote-when-verified]
+    Adj --> Disp[Dispositions]
+    Ag --> Obs[Active Observation]
+    Ag --> Draft[Draft Claim optional]
+  end
+
+  subgraph read [Read plane — rebuildable]
+    Obs --> Ret[Retrieval / GraphRAG]
+    Draft --> Ret
+    Disp --> Ret
+    Ret --> MCP[MCP / CLI / Obsidian / OKF]
+  end
+
+  subgraph optional [Optional]
+    Cap --> Sync[Private sync Worker]
+  end
+```
+
 ```text
 provider hook
   -> provider-neutral local capture adapter
   -> protected value + metadata-only EvidenceArtifact
-  -> local append-only canonical and review/disposition history
+  -> agentic_capture_feed (fail-open; no LLM in capture)
+  -> agentic runner (30m timer or manual) OR adj_v3 path
+  -> append-only canonical events + dispositions
   -> policy-checked query-time derivation
   -> rebuildable local retrieval, graph, vector, MCP, and export projections
 ```
@@ -93,23 +123,32 @@ proposal reduce, and DeepSeek Direct–primary extract. Every V5 record keeps
 `canonical_effect: "none"`. Capture hooks never call the draft pipeline. See
 [product-5.0.0.md](../maintainers/product-5.0.0.md) and [PRD-v5](../PRD-v5.md).
 
-## Product 6.0 boundary (target)
+## Product 6.0 boundary (HITL-free compound loop)
 
-Product 6 adds a post-capture **Agentic Layer** that forms grounded, typed,
+Product 6 is a post-capture **Agentic Layer** that forms grounded, typed,
 graph-linked knowledge under `agentic_v1` without putting LLM on the capture hot
-path. Real model id is frozen to **`deepseek-v4-flash` only**. V5 supplies cortex
-primitives; agentic owns jobs, verify, gate, and materialization bridge. See
-[agentic-layer.md](agentic-layer.md), [ADR 0017](../adr/0017-agentic-layer-write-time-knowledge.md),
+path. Real model id is frozen to **`deepseek-v4-flash` only**.
+
+From **6.6.0** (ADR 0018), the product default is **promote-when-verified**:
+E5 statement grounding + allowlisted kinds become **active Observations** in
+default search **without** human promote. Humans retract mistakes, stamp formal
+acceptance, or clear side-channel holds — they are not required for compound
+value. A **30-minute** user timer keeps the brain breathing. See
+[agentic-layer.md](agentic-layer.md),
+[ADR 0017](../adr/0017-agentic-layer-write-time-knowledge.md),
+[ADR 0018](../adr/0018-agentic-hitl-free-compound-loop.md),
 [PRD-v6](../PRD-v6.md), and [product-6.0.0.md](../maintainers/product-6.0.0.md).
 
 ```text
 provider hook
   -> local capture (Evidence only; fail-open)
-  -> [optional] adj_v3 noise prefilter
-  -> agentic jobs (Flash multi-stage; async)
-  -> agentic_v1 gate (hold-first; narrow auto-promote later)
-  -> Observation / draft Claim + provenance
+  -> agentic_capture_feed (+ optional adj_v3 noise prefilter)
+  -> agentic jobs (Flash multi-stage when network on; fake offline)
+  -> E5 statement-grounded verify
+  -> agentic_v1 gate (promote-when-verified default)
+  -> active Observation / optional draft Claim + provenance
   -> rebuildable retrieval + graph projections
+  -> human retract / accept-claim only as correction
 ```
 
 ## Synthetic example

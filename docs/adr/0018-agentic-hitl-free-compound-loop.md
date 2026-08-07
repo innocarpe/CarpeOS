@@ -1,6 +1,6 @@
 # ADR 0018: Agentic Layer completes the CarpeOS loop without required HITL
 
-Status: **Proposed — revised after external design review**  
+Status: **Accepted — implemented in `@innocarpe/carpeos@6.6.0`**  
 Date: 2026-08-07  
 Supersedes in part: [ADR 0017](0017-agentic-layer-write-time-knowledge.md)
 **D6 default hold-first, D7 fact_candidate “draft Claim only as sole landing” for product

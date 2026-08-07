@@ -12,10 +12,11 @@
 **Capture context. Compound knowledge.**
 
 CarpeOS is a personal knowledge OS for AI-assisted work. It captures agent
-sessions with provenance, **adjudicates** what is worth keeping as durable
-meaning (`promote` | `hold` | `reject`), keeps accepted decisions searchable,
-and helps you and your agents retrieve that context later via MCP, CLI, and
-Obsidian — all local-first.
+sessions with provenance, forms **durable meaning** at write time (cheap
+`adj_v3` rules plus a post-capture **Agentic Layer**), keeps promoted decisions
+searchable by default, and helps you and your agents retrieve that context later
+via MCP, CLI, and Obsidian — all local-first, **without required human review**
+on the happy path.
 
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
@@ -52,7 +53,8 @@ once suggested X.”
 | Common problem | Approach here |
 | --- | --- |
 | Chat history disappears or is hard to trust | Append-only events with provenance |
-| Session noise floods “memory” | Post-capture adjudication; default search is **promoted only** |
+| Session noise floods “memory” | Post-capture adjudication + agentic gate; default search is **promoted only** |
+| Next agent forgets last session’s decisions | HITL-free Agentic Layer promotes verified meaning for default retrieval |
 | “Memory” is mostly embeddings | Claims, acceptance, and supersession stay separate records |
 | Each tool keeps its own silo | Shared capture + MCP retrieval, provider-agnostic |
 | Generated notes become the only source of truth | Notes and indexes are rebuildable projections |
@@ -89,26 +91,31 @@ Hooks map selected lifecycle events from Codex, Claude Code, and Grok Build into
 a common capture shape. Raw payloads sit in encrypted storage; the event log
 keeps metadata and references. Host hooks stay **fail-open and fast**.
 
-### Adjudicate before “memory”
+### Form meaning before “memory” (two planes)
 
-After capture, the precision-first `adj_v3` rule adjudicator reduces recognized
-session noise by assigning dispositions:
+After capture, two write-time paths can assign what is worth keeping:
+
+| Plane | Role | Default path |
+| --- | --- | --- |
+| **`adj_v3`** | Cheap rule prefilter / noise reject | Still available; comparison baseline |
+| **Agentic Layer** (`agentic_v1`) | Typed, cited brain (Flash-only when network on) | **Product 6 happy path** from 6.6.0 |
 
 | Disposition | Meaning unit | Default search |
 | --- | --- | --- |
 | **promote** | Active Observation | Included |
-| **hold** | Draft Observation (review queue) | Excluded unless `--include-held` / `include_held` |
+| **hold** | Draft Observation (side channel) | Excluded unless `--include-held` / `include_held` |
 | **reject** | Disposition only (evidence may remain) | Excluded |
 
-Held review is policy-aware, terminal, and append-only:
-`carpeos adjudicate list-held|promote-held|reject-held` requires the relevant
-policy version. Re-adjudication appends history rather than rewriting it.
-Neither adjudication nor held review automatically creates a Claim or an
-`AcceptanceDecision`.
+**Agentic (ADR 0018):** verified allowlisted extracts (`decision` /
+`constraint` / `preference`) **promote by default** when E5 grounds the
+statement in cited spans — no human click required. `procedure` and
+`fact_candidate` stay hold-biased. Humans **retract** mistakes, optionally
+**accept-claim**, or clear holds — correction only.
 
-Adjudication foundation is **`adj_v3`** (landed in 3.2, still the default in
-current packages). Synthetic evidence-only evaluators and the preview-only B0
-policy reconciliation remain available:
+Held review remains policy-aware and append-only for both planes. Neither path
+automatically creates an `AcceptanceDecision`.
+
+`adj_v3` foundation (3.2+) and B0 policy reconciliation preview remain available:
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -130,25 +137,32 @@ into one paragraph of vector text.
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> J[Adjudicate adj_v3]
-  J -->|promote| O[Observation active]
-  J -->|hold| H[Observation draft]
-  J -->|reject| R[Evidence only]
-  O --> C[Claim]
-  C --> A[AcceptanceDecision]
-  C --> S[Supersession]
+  E[EvidenceArtifact] --> Feed[agentic_capture_feed]
+  E --> J[adj_v3 optional]
+  Feed --> Ag[Agentic E1–E8]
+  Ag -->|promote-when-verified| O[Observation active]
+  Ag -->|hold side channel| H[Observation draft]
+  Ag -->|reject| R[Evidence only]
+  J -->|promote| O
+  J -->|hold| H
+  O --> C[Claim draft optional]
+  C --> A[AcceptanceDecision<br/>human only]
+  O --> S[Supersession<br/>human retract]
   A --> F[Accepted fact<br/>derived at query time]
   S --> F
 ```
 
 ### Interfaces for people and agents
 
-- **CLI** — `capture-hook`, `extract`, **`adjudicate`** (including the B0
-  `reconcile-policy` preview), `retrieval rebuild`, `memory search|get|context-pack`
-  (default promoted-only; `--include-held` opt-in), `sync status|push|pull|once|cycle`
+- **CLI** — `capture-hook`, `extract`, **`adjudicate`**, **`agentic`** (run /
+  timer / retract / golden / graphrag…), `retrieval rebuild`,
+  `memory search|get|context-pack` (default promoted-only; `--include-held`
+  opt-in), `sync status|push|pull|once|cycle`
 - **MCP (stdio)** — eight local tools (`memory_search`, `memory_get`,
   `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
   `memory_capture`, `memory_propose_claim`)
+- **Always-on agentic** — optional 30m timer:
+  `carpeos agentic timer install` (network off by default)
 - **Obsidian projection** — Markdown files generated from the local store
   (projection only; not the source of truth)
 - **OKF v0.2 export projection** — `carpeos okf export|rebuild` writes a
@@ -197,30 +211,39 @@ flowchart TB
 ## How it fits together
 
 ```mermaid
-flowchart LR
-  A[Agent hooks] --> B[Local capture]
-  B --> J[Adjudicate]
-  J --> C[Event store + dispositions]
-  C --> D[Promoted meaning first]
+flowchart TB
+  A[Agent hooks<br/>fail-open] --> B[Local capture<br/>no LLM]
+  B --> F1[agentic_capture_feed]
+  B --> F2[adj_v3 optional]
+  F1 --> T[30m timer or<br/>agentic run]
+  T --> G[E5 ground + gate<br/>promote-when-verified]
+  G --> C[Event store]
+  F2 --> C
+  C --> D[Promoted / active meaning]
   C --> E[Projections]
-  E --> F[MCP / CLI / Obsidian]
-  D --> F
+  D --> M[MCP / CLI / Obsidian]
+  E --> M
+  H[Human retract / accept<br/>correction only] -.-> C
 ```
 
 Rules worth knowing up front:
 
 1. The event log is append-only; dispositions are append-only by policy version.
 2. Default search is **promoted/active** meaning — not every captured session.
-3. “Accepted” is computed at query time — we do not rewrite a claim in place.
-4. Sensitive plaintext is not stored inside the event body.
-5. Trust zones are real isolation boundaries, not labels for show.
-6. Notes, vectors, and context packs can be deleted and rebuilt; they are not
+3. Agentic **promote-when-verified** closes the loop without load-bearing HITL
+   (ADR 0018); formal `AcceptanceDecision` is still human-only and optional.
+4. “Accepted” is computed at query time — we do not rewrite a claim in place.
+5. Sensitive plaintext is not stored inside the event body.
+6. Trust zones are real isolation boundaries, not labels for show.
+7. Notes, vectors, and context packs can be deleted and rebuilt; they are not
    the canonical store.
 
 More detail:
 [Architecture overview](docs/architecture/overview.md),
+[Agentic Layer](docs/architecture/agentic-layer.md),
 [Memory capacity](docs/architecture/memory-capacity.md),
-[ADR 0009](docs/adr/0009-memory-capacity-model.md),
+[ADR 0017](docs/adr/0017-agentic-layer-write-time-knowledge.md),
+[ADR 0018](docs/adr/0018-agentic-hitl-free-compound-loop.md),
 [ADRs](docs/adr/),
 [spec/v1](spec/v1/).
 
@@ -299,29 +322,34 @@ node scripts/install-local.mjs doctor
 For monorepo work without global install: `pnpm install && pnpm build`, then use
 `node apps/carpeos-cli/dist/index.js …` (see [local capture](docs/guides/local-capture.md)).
 
-### Product path: install → session → adjudicate → search
+### Product path: install → session → compound → search
 
 ```sh
 # 1) Runtime + MCP
 carpeos setup run --apply
 # 2) Capture hooks (Claude / Codex / Grok; merge-safe, does not wipe user hooks)
 carpeos setup hooks install --apply
-# 3) Doctor (hooks, store, adjudication health, promoted-only default search)
+# 3) Always-on Agentic brain (30 minutes; network off by default)
+carpeos agentic timer install
+# 4) Doctor (hooks, store, adjudication health, promoted-only default search)
 carpeos setup doctor
-# 4) After a host session (or synthetic capture-hook), rebuild + search promoted meaning
+# 5) After a host session, meaning compounds without manual review:
+#    capture → feed → agentic run (timer or:)
+carpeos agentic run --once --materialize
 carpeos retrieval rebuild --trust-zone tz_local_default
 carpeos memory search \
   --query "durable decision" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
-# optional: include held/draft
-# carpeos memory search --include-held --query "…" …
 
-# Operator review queue (held drafts)
-carpeos adjudicate --stats
-carpeos adjudicate list-held --limit 50
-# carpeos adjudicate promote-held --event-id evt_…
-# carpeos adjudicate reject-held --event-id evt_…
+# Correction only (not the happy path)
+# carpeos agentic retract --event-id evt_… --reason "…" --decided-by human --human-confirmed
+# carpeos agentic promote-held --event-id evt_…
+# carpeos adjudicate list-held --limit 50
+
+# Kill / staging
+# CARPEOS_AGENTIC=off …
+# CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 ```
 
 `carpeos setup doctor` reports hook install status, recent `EvidenceArtifact`
@@ -369,6 +397,8 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 | Product 3.0 DoD (retrieval-first graph) | [docs/maintainers/product-3.0.0.md](docs/maintainers/product-3.0.0.md) |
 | Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
 | Product 3.2 DoD (B0 reconciliation preview) | [docs/maintainers/product-3.2.0.md](docs/maintainers/product-3.2.0.md) |
+| Product 6 Agentic architecture | [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md) |
+| Product 6 DoD | [docs/maintainers/product-6.0.0.md](docs/maintainers/product-6.0.0.md) |
 | Versioning & releases | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Compatibility / deprecations | [docs/maintainers/compatibility-and-deprecations.md](docs/maintainers/compatibility-and-deprecations.md) |
 | Local store migrations | [docs/architecture/local-store-migrations.md](docs/architecture/local-store-migrations.md) |
@@ -380,18 +410,20 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 ## Product line (majors)
 
 Current npm package is **`@innocarpe/carpeos@6.6.0`** (`v6.6.0`): operator loop through
-adjudication + retrieval, plus Product 4 trust plane, opt-in Product 5 draft lane, and
-**Product 6 Agentic Layer** (post-capture Flash brain; **promote-when-verified** HITL-free
-defaults per ADR 0018; capture stays dumb; human tools are correction-only).
+adjudication + retrieval, Product 4 trust plane, opt-in Product 5 draft lane, and
+**Product 6 HITL-free Agentic Layer** (post-capture Flash brain;
+**promote-when-verified**, retract, day spend, **30m timer** — ADR 0018; capture
+stays dumb; human tools are correction-only).
 Full major/minor thesis and DoD index:
 
 - [docs/PRD.md](docs/PRD.md) — one PRD per major
+- [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md) — service map
 - [docs/maintainers/](docs/maintainers/) — `product-N.0.0.md` receipts (e.g.
   [6.0.0](docs/maintainers/product-6.0.0.md), [5.0.0](docs/maintainers/product-5.0.0.md))
 
 Honest residuals (do not invent green): live Product 4 release authority out of band;
 B1 apply deferred; hosted graph/edge not claimed; V5 never on capture hot path;
-Product 6 Agentic Layer slices P0–P6 shipped through 6.4.0 (hosted graph still not claimed).
+procedure auto-promote still hold-biased; live Flash remains opt-in network.
 
 ---
 
@@ -404,33 +436,32 @@ live Product 4 release authority.
 Default local loop (CI-gated):
 
 ```text
-hooks → encrypted evidence → adjudicate (promote|hold|reject)
-  → promoted meaning → retrieval-first graph/hybrid recall → MCP / CLI
-  (+ local OKF v0.2 export, optional private sync, Obsidian projection)
+hooks → encrypted evidence → agentic_capture_feed (no LLM in capture)
+  → agentic run / 30m timer (promote-when-verified)
+  → active Observations in default search
+  → retrieval-first graph/hybrid recall → MCP / CLI
+  (+ adj_v3 baseline, local OKF export, optional private sync, Obsidian)
 
-# Product 6 post-capture (optional; kill: CARPEOS_AGENTIC=off):
-capture → agentic_capture_feed (no LLM)
-  → carpeos agentic run --once --materialize
-  → agentic_v1 hold draft Observations (Flash-only when --allow-network)
+# Kill: CARPEOS_AGENTIC=off
+# Staging: CARPEOS_AGENTIC_HOLD_FIRST=1
+# Live Flash: carpeos agentic run --once --allow-network --materialize
 ```
 
 | Area | Status |
 | --- | --- |
-| Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md), [ADR 0017](docs/adr/0017-agentic-layer-write-time-knowledge.md)) |
+| Specs, ontology, ADRs | In tree (incl. [ADR 0012](docs/adr/0012-knowledge-adjudication.md), [0017](docs/adr/0017-agentic-layer-write-time-knowledge.md), [0018](docs/adr/0018-agentic-hitl-free-compound-loop.md)) |
 | Local capture + outbox | Shipped |
-| Knowledge adjudication (`adj_v3`) | **Shipped** in 3.2 — precision/session de-noising, dispositions, policy-aware held review, policy history; no automatic Claim or `AcceptanceDecision` |
+| Knowledge adjudication (`adj_v3`) | **Shipped** in 3.2 — precision/session de-noising; no automatic Claim or `AcceptanceDecision` |
 | Default retrieval | **Promoted/active only**; held opt-in |
 | Doctor adjudication health | Shipped (`setup doctor`, `adjudicate --stats`) |
 | Sync Worker/client + bounded `sync cycle` | Code + local tests; no production edge claimed |
 | MCP stdio server (8 tools) | Local only |
 | Expert-slot context packs | CLI + MCP (local) |
-| Retrieval-first graph/hybrid recall | **Shipped** — indexed graph traversal, cross-repository partitions, worktree facets |
+| Retrieval-first graph/hybrid recall | **Shipped** — GraphRAG typed boosts in 6.4 |
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
-| Product 3.x (adj_v3, OKF export, graph/hybrid recall, B0 preview) | **Shipped** — see [product-3.2.0](docs/maintainers/product-3.2.0.md) |
-| Product 4 trust/evidence plane | **Shipped** in package — [product-4.0.0](docs/maintainers/product-4.0.0.md); live authority residual |
-| Product 5 draft lane (`carpeos v5`) | **Shipped** opt-in — [product-5.0.0](docs/maintainers/product-5.0.0.md); not capture hot path |
-| Product 6 Agentic Layer (`carpeos agentic`) | **Hold-first shipped** in 6.0 — [product-6.0.0](docs/maintainers/product-6.0.0.md); post-capture only; P3–P6 residual |
+| Product 3.x–5.x | **Shipped** — see product DoDs under `docs/maintainers/` |
+| Product 6 Agentic Layer (`carpeos agentic`) | **HITL-free shipped** in **6.6.0** — promote-when-verified, retract, day spend, 30m timer; [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md) |
 | `carpeos setup` / one-stop install | Shipped (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |

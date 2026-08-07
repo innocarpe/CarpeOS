@@ -10,7 +10,7 @@ One PRD file per **major** version. Do not rewrite older majors in place; add
 | **3.0** | Can it be found and used? | [PRD-v3.md](PRD-v3.md) | [product-3.0.0.md](maintainers/product-3.0.0.md) |
 | **4.0 (package shipped)** | Can knowledge correction remain append-only, reversible, provenance-carrying, and human-governed without widening canonical authority? | [PRD-v4.md](PRD-v4.md) | [product-4.0.0.md](maintainers/product-4.0.0.md) — trust/evidence plane on npm; live authority residual |
 | **5.0 (npm shipped)** | Can optional LLM-assisted extraction stay draft-only, privacy-safe, and reversible without becoming canonical authority? | [PRD-v5.md](PRD-v5.md) | [product-5.0.0.md](maintainers/product-5.0.0.md) — draft lane on npm; M8 authority seam deferred |
-| **6.0 (npm hold-first shipped)** | Can a post-capture Agentic Layer (DeepSeek V4 Flash only) form grounded, typed, graph-linked knowledge under deterministic gates without LLM in capture? | [PRD-v6.md](PRD-v6.md) | [product-6.0.0.md](maintainers/product-6.0.0.md) — **hold-first brain on npm**; P3–P6 residual (auto-promote / density / Claims / GraphRAG) |
+| **6.x (npm HITL-free through 6.6.0)** | Can a post-capture Agentic Layer (DeepSeek V4 Flash only) form grounded, typed, graph-linked knowledge under deterministic gates without LLM in capture **and without load-bearing HITL**? | [PRD-v6.md](PRD-v6.md) | [product-6.0.0.md](maintainers/product-6.0.0.md) — **promote-when-verified on npm 6.6.0** (ADR 0018); P0–P6 + topology + timer |
 
 Minors do **not** get a new PRD file. They extend the current major via a
 maintainer DoD (and ADRs as needed). The active minor design is 3.2:
