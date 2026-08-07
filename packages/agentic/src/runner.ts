@@ -20,6 +20,7 @@ import {
   loadDaySpend,
 } from "./spend.js";
 import type { SqlDatabase } from "./sql.js";
+import { runTriageStage } from "./stages.js";
 import { AGENTIC_POLICY_VERSION } from "./types.js";
 
 export type AgenticRunnerReport = {
@@ -286,17 +287,23 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
               report.reason_codes.push(`flash_triage_${triageRes.error}`);
             }
 
-            // Q6′ partial: need_context does not extract (QD3).
+            // QD3/Q6: stage parser v2 + local decision override. need_context → no extract.
             let shouldExtract = false;
-            if (triageRes.ok && flash_triage_text) {
-              try {
-                const parsed = JSON.parse(flash_triage_text) as { decision?: string };
-                shouldExtract = parsed.decision === "keep";
-              } catch {
-                const triageKeep =
-                  !/"decision"\s*:\s*"drop"/i.test(flash_triage_text) &&
-                  !/\bdrop\b/i.test(flash_triage_text.slice(0, 80));
-                shouldExtract = triageKeep;
+            {
+              const triaged = runTriageStage({
+                pack_text: prepared.triage_view_text,
+                pack_digest: prepared.pack_digest,
+                source_event_id: row.source_event_id,
+                mode: "flash",
+                allow_network: true,
+                flash_response_text: flash_triage_text,
+              });
+              shouldExtract = triaged.decision === "keep";
+              if (triaged.decision === "need_context") {
+                report.reason_codes.push("triage_need_context_no_extract");
+              }
+              if (triaged.reason_codes.includes("local_override_decision_signal")) {
+                report.reason_codes.push("local_override_decision_signal");
               }
             }
 
