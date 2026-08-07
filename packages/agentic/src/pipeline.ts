@@ -346,10 +346,7 @@ export function normalizeStatementKey(statement: string): string {
 /** How many recent promotes to scan for cross-session near-dup. */
 export const AGENTIC_NEAR_DUP_RECENT_LIMIT = 200;
 
-function loadRecentPromoteStatementKeys(
-  db: SqlDatabase,
-  trust_zone_id: string,
-): Set<string> {
+function loadRecentPromoteStatementKeys(db: SqlDatabase, trust_zone_id: string): Set<string> {
   const rows = listAgenticProposals(db, {
     trust_zone_id,
     gate_decision: "promote",
