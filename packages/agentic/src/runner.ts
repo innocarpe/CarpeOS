@@ -43,6 +43,11 @@ export type AgenticRunnerInput = {
   /** Product default: promote-when-verified (true). */
   allow_auto_promote?: boolean;
   hold_first?: boolean;
+  /**
+   * Prefer SessionEnd/Stop/PreCompact when claiming feed rows (default true).
+   * Legacy queues full of PostToolUse drain faster for meaning-bearing hooks.
+   */
+  prefer_lifecycle?: boolean;
   limit?: number;
   now?: Date;
   spend?: FlashSpendState;
@@ -86,6 +91,8 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
   const feed = input.store.claimAgenticCaptureFeed({
     limit,
     leaseMs: 120_000,
+    // Prefer SessionEnd/Stop/PreCompact over residual noise rows (legacy queue).
+    prefer_lifecycle: input.prefer_lifecycle !== false,
     ...(input.now !== undefined ? { now: input.now } : {}),
   });
   report.feed_seen = feed.length;

@@ -6,6 +6,7 @@ import {
   ADJUDICATION_POLICY_VERSION,
   type AdjudicationResult,
   adjudicateKnowledgeCandidate,
+  agenticFeedHookPreferRankSql,
   buildSyncPushRequest,
   type CaptureEnvelope,
   deriveIdempotencyKey,
@@ -14,6 +15,7 @@ import {
   fingerprintEnvelope,
   fingerprintObject,
   hashHex,
+  isAgenticFeedHookEligible,
   isIdempotencyKey,
   type KnowledgeDisposition,
   type MeaningfulUnitPolicyConfig,
@@ -997,7 +999,14 @@ export class LocalCaptureStore {
   captureHook(envelope: CaptureEnvelope, options: CaptureRequestOptions = {}): CaptureResult {
     const capture = this.captureHookWrite(envelope, options);
     // Post-capture agentic feed: no LLM, no network, no await. Outside txn for concurrency safety.
-    if (capture.status === "captured" && options.agentic_feed !== false && isAgenticFeedEnabled()) {
+    // Only lifecycle hooks enter agentic feed (SessionEnd/Stop/PreCompact).
+    // PostToolUse flood never queues for Flash (ADR 0018 product path).
+    if (
+      capture.status === "captured" &&
+      options.agentic_feed !== false &&
+      isAgenticFeedEnabled() &&
+      isAgenticFeedHookEligible(envelope.hook_event_name)
+    ) {
       try {
         this.insertAgenticCaptureFeed({
           source_event_id: capture.event.event_id,
@@ -1678,7 +1687,12 @@ export class LocalCaptureStore {
       } catch {
         // table may lack column in older DBs
       }
-      if (!allowedHooks.has(hook)) {
+      // Prefer explicit allowlist when provided; otherwise lifecycle eligibility only.
+      const hookOk =
+        input.hookEventNames !== undefined
+          ? allowedHooks.has(hook) || allowedHooks.has(hook.trim())
+          : isAgenticFeedHookEligible(hook);
+      if (!hookOk) {
         skipped += 1;
         continue;
       }
@@ -4732,7 +4746,16 @@ export class LocalCaptureStore {
    * ADR 0018 D5 mutual exclusion for always-on / concurrent runners.
    */
   claimAgenticCaptureFeed(
-    input: { limit?: number; leaseMs?: number; now?: Date } = {},
+    input: {
+      limit?: number;
+      leaseMs?: number;
+      now?: Date;
+      /**
+       * Prefer lifecycle hooks (SessionEnd → Stop → PreCompact) before other
+       * residual rows. Default true for product dogfood / Flash path.
+       */
+      prefer_lifecycle?: boolean;
+    } = {},
   ): AgenticCaptureFeedRow[] {
     const limit = input.limit ?? 20;
     if (!Number.isInteger(limit) || limit < 1) {
@@ -4746,6 +4769,10 @@ export class LocalCaptureStore {
     const nowIso = now.toISOString();
     const leaseExpiresAt = new Date(now.getTime() + leaseMs).toISOString();
     const leaseId = `lease_${hashHex(`${nowIso}:${Math.random()}`).slice(0, 24)}`;
+    const preferLifecycle = input.prefer_lifecycle !== false;
+    const orderBy = preferLifecycle
+      ? `${agenticFeedHookPreferRankSql("hook_event_name")}, created_at ASC, source_event_id ASC`
+      : `created_at ASC, source_event_id ASC`;
 
     return this.withImmediateTransaction(() => {
       const candidates = this.db
@@ -4758,7 +4785,7 @@ export class LocalCaptureStore {
                 state = 'pending'
                 OR (state = 'leased' AND (lease_expires_at IS NULL OR lease_expires_at <= ?))
               )
-            ORDER BY created_at ASC, source_event_id ASC
+            ORDER BY ${orderBy}
             LIMIT ?
           `,
         )
@@ -4813,6 +4840,54 @@ export class LocalCaptureStore {
       }
       return claimed;
     });
+  }
+
+  /**
+   * Bulk-skip residual feed rows that are not lifecycle-eligible (PostToolUse flood, etc.).
+   * Clears legacy queues so flush can spend Flash on SessionEnd. No LLM.
+   */
+  skipIneligibleAgenticFeed(input: { limit?: number; now?: Date } = {}): {
+    scanned: number;
+    skipped: number;
+  } {
+    const limit = input.limit ?? 5_000;
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("skipIneligibleAgenticFeed limit must be a positive integer");
+    }
+    const nowIso = (input.now ?? this.clock.now()).toISOString();
+    const pending = this.db
+      .prepare(
+        `
+          SELECT source_event_id, hook_event_name
+          FROM agentic_capture_feed
+          WHERE trust_zone_id = ? AND state IN ('pending', 'leased')
+          ORDER BY created_at ASC
+          LIMIT ?
+        `,
+      )
+      .all(this.trustZone.trust_zone_id, limit) as Array<{
+      source_event_id: string;
+      hook_event_name: string;
+    }>;
+    let skipped = 0;
+    const finish = this.db.prepare(
+      `
+        UPDATE agentic_capture_feed
+        SET state = 'skipped', finished_at = ?, skip_reason = ?, lease_id = NULL, lease_expires_at = NULL
+        WHERE source_event_id = ? AND trust_zone_id = ? AND state IN ('pending', 'leased')
+      `,
+    );
+    for (const row of pending) {
+      if (isAgenticFeedHookEligible(row.hook_event_name)) continue;
+      const result = finish.run(
+        nowIso,
+        "hook_not_lifecycle_eligible",
+        row.source_event_id,
+        this.trustZone.trust_zone_id,
+      ) as { changes?: number };
+      if (Number(result.changes ?? 0) > 0) skipped += 1;
+    }
+    return { scanned: pending.length, skipped };
   }
 
   /** Mark feed row terminal (done or skipped). Accepts pending or leased. Idempotent. */

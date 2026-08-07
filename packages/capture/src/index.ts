@@ -69,6 +69,14 @@ export {
   type TranscriptSignals,
 } from "./transcript-signals.js";
 
+export {
+  AGENTIC_FEED_LIFECYCLE_HOOKS,
+  agenticFeedHookPreferRankSql,
+  isAgenticFeedHookEligible,
+  normalizeAgenticFeedHook,
+  type AgenticFeedLifecycleHook,
+} from "./agentic-feed-policy.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 
