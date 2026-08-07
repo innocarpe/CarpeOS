@@ -1417,7 +1417,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined || isHelpToken(subcommand)) {
     throw new CliUsageError(
-      "agentic requires a subcommand (status|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag|reconcile|backfill|promote-held|accept-claim|retract|timer). See: carpeos help agentic",
+      "agentic requires a subcommand (status|feed|flush|run|golden|list-held|list-claims|materialize|precision|graph-metrics|graphrag|reconcile|backfill|promote-held|accept-claim|retract|timer). See: carpeos help agentic",
     );
   }
 
@@ -1441,6 +1441,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
       const runtimeDir = options.home ?? runtimeDirFromEnv(env);
       const agenticEnabled = env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off";
       const db = openAgenticDb(runtimeDir);
+      const store = openStore(options, env);
       try {
         const jobs = countAgenticJobs(db, options.trustZone);
         const proposals = listAgenticProposals(db, {
@@ -1451,6 +1452,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
         for (const p of proposals) {
           byGate[p.gate.decision] += 1;
         }
+        const feed = summarizeAgenticFeed(store, 5);
         writeJson(process.stdout, {
           ok: true,
           command: "agentic.status",
@@ -1458,18 +1460,186 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           policy_version: AGENTIC_POLICY_VERSION,
           model_id: AGENTIC_FLASH_MODEL_ID,
           agentic_enabled: agenticEnabled,
-          network_disabled_by_default: true,
+          /** Product path uses Flash; offline via CARPEOS_AGENTIC_NETWORK=off. */
+          flash_default: true,
           capture_llm: false,
           auto_acceptance_decision: false,
+          feed: {
+            pending: feed.counts.pending,
+            leased: feed.counts.leased,
+            done: feed.counts.done,
+            skipped: feed.counts.skipped,
+            actionable: feed.counts.pending + feed.counts.leased,
+          },
           jobs,
           proposals: {
             listed: proposals.length,
             by_gate: byGate,
           },
           agentic_db: agenticDbPath(runtimeDir),
+          next:
+            feed.counts.pending + feed.counts.leased > 0
+              ? "carpeos agentic flush"
+              : "carpeos agentic feed",
         });
         return 0;
       } finally {
+        store.close();
+        db.close();
+      }
+    }
+    case "feed": {
+      // Inspect capture feed queue (pending/leased = actionable for flush).
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+          limit: { type: "string" },
+          preview: { type: "boolean", default: false },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const limit = Number(parsed.values.limit ?? "20");
+      const rowLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 100) : 20;
+      const store = openStore(options, env);
+      try {
+        const feed = summarizeAgenticFeed(store, rowLimit, {
+          preview: parsed.values.preview === true,
+        });
+        writeJson(process.stdout, {
+          ok: true,
+          command: "agentic.feed",
+          trust_zone_id: store.trustZone.trust_zone_id,
+          counts: feed.counts,
+          actionable: feed.counts.pending + feed.counts.leased,
+          rows: feed.rows,
+          next:
+            feed.counts.pending + feed.counts.leased > 0
+              ? "carpeos agentic flush"
+              : "feed empty — capture sessions first",
+        });
+        return 0;
+      } finally {
+        store.close();
+      }
+    }
+    case "flush":
+    case "drain": {
+      // Immediate feed drain for test/debug (timer does the same path every 30m).
+      const parsed = parseArgs({
+        args: [...rest],
+        options: {
+          home: { type: "string" },
+          "trust-zone": { type: "string" },
+          "project-id": { type: "string" },
+          "allow-network": { type: "boolean", default: true },
+          materialize: { type: "boolean", default: true },
+          "allow-auto-promote": { type: "boolean", default: true },
+          "hold-first": { type: "boolean", default: false },
+          "spend-cap-usd": { type: "string" },
+          limit: { type: "string" },
+        },
+        allowPositionals: false,
+        strict: true,
+      });
+      const options = compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      );
+      const runtimeDir = options.home ?? runtimeDirFromEnv(env);
+      const agenticEnabled = env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off";
+      const networkKill =
+        env.CARPEOS_AGENTIC_NETWORK === "0" || env.CARPEOS_AGENTIC_NETWORK === "off";
+      const allowNetwork = !networkKill && parsed.values["allow-network"] !== false;
+      const providerEnv = applyPrivateProviderEnv(runtimeDir, env);
+      if (allowNetwork && !(env.DEEPSEEK_API_KEY ?? "").trim()) {
+        throw new CliUsageError(
+          "agentic flush requires DEEPSEEK_API_KEY for deepseek-v4-flash. " +
+            "Set env or ~/.carpeos/v5-provider.env. Offline: CARPEOS_AGENTIC_NETWORK=off.",
+        );
+      }
+      const credentialSource = !allowNetwork
+        ? "offline"
+        : providerEnv.source === "process_env"
+          ? "process_env"
+          : providerEnv.loaded_key
+            ? "v5-provider.env"
+            : "none";
+      const spendCap = Number(parsed.values["spend-cap-usd"] ?? "1");
+      const limit = Number(parsed.values.limit ?? "50");
+      const holdFirst =
+        parsed.values["hold-first"] === true ||
+        env.CARPEOS_AGENTIC_HOLD_FIRST === "1" ||
+        env.CARPEOS_AGENTIC_HOLD_FIRST === "true";
+      const db = openAgenticDb(runtimeDir);
+      const store = openStore(options, env);
+      try {
+        const before = summarizeAgenticFeed(store, 10, { preview: false });
+        if (before.counts.pending + before.counts.leased === 0) {
+          writeJson(process.stdout, {
+            ok: true,
+            command: `agentic.${subcommand}`,
+            message: "feed empty — nothing to flush",
+            feed_before: before.counts,
+            feed_after: before.counts,
+            model_id: AGENTIC_FLASH_MODEL_ID,
+            allow_network: allowNetwork,
+            network_used: false,
+            flash_calls: 0,
+            credential_source: credentialSource,
+            next: "carpeos agentic feed",
+          });
+          return 0;
+        }
+        const report = await processAgenticOnce({
+          store,
+          agenticDb: db,
+          allow_network: allowNetwork,
+          agentic_enabled: agenticEnabled,
+          materialize: parsed.values.materialize !== false,
+          allow_auto_promote: holdFirst ? false : parsed.values["allow-auto-promote"] !== false,
+          hold_first: holdFirst,
+          limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50,
+          spend: createFlashSpendState({
+            spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
+          }),
+          on_project: () => {
+            withLocalRetrievalDatabase(store, (retrievalDb) =>
+              rebuildLocalRetrievalIndex(retrievalDb, new Date()),
+            );
+          },
+        });
+        const after = summarizeAgenticFeed(store, 10, { preview: false });
+        writeJson(process.stdout, {
+          ok: report.ok,
+          command: `agentic.${subcommand}`,
+          feed_before: before.counts,
+          feed_after: after.counts,
+          report,
+          model_id: AGENTIC_FLASH_MODEL_ID,
+          allow_network: allowNetwork,
+          network_used: report.network_used,
+          flash_calls: report.flash_calls,
+          credential_source: credentialSource,
+          structure_edge_count: report.structure_edge_count,
+          project_invoked: report.project_invoked,
+          next:
+            after.counts.pending + after.counts.leased > 0
+              ? "carpeos agentic flush   # more remaining"
+              : "carpeos agentic feed && carpeos agentic status",
+        });
+        return report.ok ? 0 : 1;
+      } finally {
+        store.close();
         db.close();
       }
     }
@@ -1577,7 +1747,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           return result.ok ? 0 : 1;
         }
 
-        // Default product path: drain capture feed + lease jobs + optional materialize.
+        // Default product path: feed drain + Flash + materialize (same as flush).
         const store = openStore(options, env);
         try {
           const spendCap = Number(parsed.values["spend-cap-usd"] ?? "1");
@@ -1586,6 +1756,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             parsed.values["hold-first"] === true ||
             env.CARPEOS_AGENTIC_HOLD_FIRST === "1" ||
             env.CARPEOS_AGENTIC_HOLD_FIRST === "true";
+          const before = summarizeAgenticFeed(store, 0);
           const report = await processAgenticOnce({
             store,
             agenticDb: db,
@@ -1598,17 +1769,19 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             spend: createFlashSpendState({
               spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 1,
             }),
-            // E9: rebuild retrieval + graph_v2 projection after materialize (never SoT).
             on_project: () => {
               withLocalRetrievalDatabase(store, (retrievalDb) =>
                 rebuildLocalRetrievalIndex(retrievalDb, new Date()),
               );
             },
           });
+          const after = summarizeAgenticFeed(store, 0);
           writeJson(process.stdout, {
             ok: report.ok,
             command: "agentic.run",
             once: true,
+            feed_before: before.counts,
+            feed_after: after.counts,
             report,
             model_id: AGENTIC_FLASH_MODEL_ID,
             allow_network: allowNetwork,
@@ -2224,6 +2397,69 @@ function agenticDbPath(runtimeDir: string): string {
   return join(runtimeDir, "agentic", "agentic.sqlite");
 }
 
+type AgenticFeedCounts = {
+  pending: number;
+  leased: number;
+  done: number;
+  skipped: number;
+};
+
+type AgenticFeedRowSummary = {
+  source_event_id: string;
+  artifact_id: string;
+  hook_event_name: string;
+  state: string;
+  created_at: string;
+  finished_at: string | null;
+  skip_reason: string | null;
+  signal_chars?: number;
+  signal_preview?: string;
+};
+
+/**
+ * Summarize agentic_capture_feed for operator inspect/flush (no secrets).
+ */
+function summarizeAgenticFeed(
+  store: LocalCaptureStore,
+  rowLimit: number,
+  opts?: { preview?: boolean },
+): {
+  counts: AgenticFeedCounts;
+  rows: AgenticFeedRowSummary[];
+} {
+  const states = ["pending", "leased", "done", "skipped"] as const;
+  const counts: AgenticFeedCounts = { pending: 0, leased: 0, done: 0, skipped: 0 };
+  const rows: AgenticFeedRowSummary[] = [];
+  const preview = opts?.preview === true;
+  // High cap for approximate operator counts (list API has no COUNT(*)).
+  const COUNT_CAP = 5_000;
+  for (const state of states) {
+    const listed = store.listAgenticCaptureFeed({ state, limit: COUNT_CAP });
+    counts[state] = listed.length;
+    if (rowLimit > 0 && (state === "pending" || state === "leased")) {
+      for (const row of listed.slice(0, rowLimit)) {
+        const summary: AgenticFeedRowSummary = {
+          source_event_id: row.source_event_id,
+          artifact_id: row.artifact_id,
+          hook_event_name: row.hook_event_name,
+          state: row.state,
+          created_at: row.created_at,
+          finished_at: row.finished_at,
+          skip_reason: row.skip_reason,
+        };
+        if (preview) {
+          const signal = store.readCaptureSignalText(row.source_event_id);
+          summary.signal_chars = signal.length;
+          // Public-safe short preview only (no full body dump).
+          summary.signal_preview = signal.slice(0, 120).replace(/\s+/g, " ");
+        }
+        rows.push(summary);
+      }
+    }
+  }
+  return { counts, rows };
+}
+
 /**
  * Load private provider credentials into env without printing values.
  * Supports `export KEY=value` lines from ~/.carpeos/v5-provider.env (V5/Agentic SSOT).
@@ -2528,48 +2764,36 @@ export function formatCommandHelp(command: string): string {
 
 USAGE
   carpeos agentic status [--home <path>] [--trust-zone <id>]
-  carpeos agentic run --once [--materialize] [--limit N]   # Flash on by default
+  carpeos agentic feed [--limit N] [--preview]     # inspect capture queue
+  carpeos agentic flush [--limit N]                # process queue NOW (Flash default)
+  carpeos agentic run --once [--materialize] [--limit N]
   carpeos agentic run --once --text <signal> [--hook-event SessionEnd]
   carpeos agentic run --once --golden [--golden-path <manifest.json>]
-  carpeos agentic golden [--path <manifest.json>]
-  carpeos agentic list-held [--limit N]
-  carpeos agentic list-claims [--limit N]
-  carpeos agentic materialize --proposal-id <id> --artifact-id <id> [--allow-promote]
-  carpeos agentic precision [--path <golden-manifest.json>]
-  carpeos agentic graph-metrics [--home <path>] [--rebuild]
-  carpeos agentic graphrag [--path <query-set.json>] [--hit-rate-min 0.9]
-  carpeos agentic reconcile [--limit N]
-  carpeos agentic backfill [--limit N]
-  carpeos agentic promote-held --event-id <evt_…> [--reject]
-  carpeos agentic accept-claim --claim-id <claim_…> --decided-by <human> --human-confirmed [--decision accepted|rejected|needs_review]
-  carpeos agentic retract --event-id <evt_…> --reason <text> --decided-by <human> --human-confirmed
   carpeos agentic timer install|uninstall|status
+  carpeos agentic list-held|list-claims|promote-held|accept-claim|retract …
+  carpeos agentic golden|precision|graphrag|graph-metrics|reconcile|backfill …
+
+OPERATOR LOOP (test / debug)
+  carpeos agentic feed                 # what's waiting?
+  carpeos agentic flush                # process it now (not wait for 30m timer)
+  carpeos agentic feed                 # empty? check result
+  carpeos agentic status               # jobs + gate counts
 
 SUBCOMMANDS
-  status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
-  run          Drain feed → deepseek-v4-flash stages → materialize (product default)
-  golden       Evaluate fixtures/agentic/v1/golden-12 offline
-  list-held    List agentic_v1 hold proposals for human review
-  list-claims  List proposals that materialized draft Claims (P5; accept still human)
-  materialize  Materialize one proposal to draft Observation and/or draft Claim
-  precision    P3 offline auto-promote precision suite (must ≥ 0.90; zero must_not leaks)
-  graph-metrics  P4 meaning graph density (rebuild graph_v2; projection only)
-  graphrag     P6 offline GraphRAG query set (typed promoted units > evidence residue)
-  reconcile    E10 deterministic dedupe/contradict proposals (human hold path only)
-  backfill     Enqueue historical EvidenceArtifact rows into agentic capture feed
-  promote-held Human correction of side-channel holds (not happy path; ADR 0018)
-  accept-claim Optional formal AcceptanceDecision stamp (never required for usable meaning)
-  retract      Human correction: supersede wrongly promoted unit (requires --human-confirmed)
-  timer        Install 30m always-on Flash batch (launchd/systemd; loads ~/.carpeos/v5-provider.env)
+  status       Feed + job + proposal counts (Flash product path)
+  feed         Inspect agentic_capture_feed (pending/leased/done/skipped)
+  flush        Immediate drain of pending feed via deepseek-v4-flash (alias: drain)
+  run          Same drain path as flush; also --text / --golden modes
+  timer        Install 30m always-on Flash batch (launchd/systemd)
+  list-held / promote-held / accept-claim / retract
+               Human correction only (not the happy path)
 
 HARD FENCES
-  - Capture inserts feed only (no LLM/network/await in capture transaction)
-  - Real model id only: deepseek-v4-flash (product default; offline: --allow-network false)
-  - Credentials: DEEPSEEK_API_KEY env or ~/.carpeos/v5-provider.env (never commit)
+  - Capture inserts feed only (no LLM in capture)
+  - Product model: deepseek-v4-flash (credentials: env or ~/.carpeos/v5-provider.env)
+  - Offline: CARPEOS_AGENTIC_NETWORK=off
+  - Kill: CARPEOS_AGENTIC=off
   - No automatic AcceptanceDecision
-  - Kill switch: CARPEOS_AGENTIC=0|off (skips feed + runner)
-  - Network kill: CARPEOS_AGENTIC_NETWORK=off
-  - Sidecar DB: <home>/agentic/agentic.sqlite
 
 See: docs/adr/0017-…, docs/adr/0018-…, docs/architecture/agentic-layer.md
 `;
