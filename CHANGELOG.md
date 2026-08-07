@@ -14,6 +14,20 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.5] - 2026-08-07
+
+### Added
+
+- Quality ultragoal **baseline #2** corpus (≥40 cases, ≥10 per decision/constraint/preference)
+  with recorded-Flash inject cases and DoD gates (Q-S1–S3, S7–S9, S13).
+- Quality report metrics: `per_kind_recall`, `signal_source_counts`.
+- Architecture DoD status + baseline #2 receipt docs.
+
+### Fixed
+
+- Triage load-bearing signal match includes **prefer** (preference-class packs no longer
+  false-drop when they say "we prefer" without the noun "preference").
+
 ## [6.7.4] - 2026-08-07
 
 ### Fixed
