@@ -14,6 +14,19 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.6] - 2026-08-07
+
+### Added
+
+- Q-S5 advisory metrics helper (`scripts/quality-qs5-metrics.mjs`) and dogfood receipt.
+- Within-pack **near-duplicate promote hold** (`near_duplicate_statement`).
+
+### Fixed
+
+- Pack privacy scrub residual: emails, IPv4/IPv6, common DNS hostnames → `[EMAIL]`/`[IP]`/`[HOST]`.
+- Retrieval rebuild failures no longer fail-close a successful materialize drain
+  (`project_hook_failed`).
+
 ## [6.7.5] - 2026-08-07
 
 ### Added
