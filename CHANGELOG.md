@@ -14,6 +14,24 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.6.1] - 2026-08-07
+
+### Fixed
+
+- **Agentic product path uses deepseek-v4-flash by default** (was network-off / fake on timer and default `run`).
+- Flash replies that only fill `reasoning_content` no longer fail as `empty_model_response`.
+- Timer install always passes `--allow-network` and loads credentials from `~/.carpeos/v5-provider.env` (never embeds secrets in the unit).
+
+### Added
+
+- **`carpeos agentic feed`** — inspect capture queue (pending/leased/done/skipped).
+- **`carpeos agentic flush`** (alias `drain`) — process the queue immediately for test/debug; same Flash path as the 30m timer.
+- `agentic status` now reports feed counts and `next` hints.
+
+### Changed
+
+- Offline escape is explicit: `CARPEOS_AGENTIC_NETWORK=off`.
+
 ## [6.6.0] - 2026-08-07
 
 ### Added
