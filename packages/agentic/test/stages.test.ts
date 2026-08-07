@@ -119,6 +119,76 @@ describe("E4 extract", () => {
     expect(r.model_id).toBe("fake");
   });
 
+  it("skips pack title agentic.evidence and quotes decision prose", () => {
+    const r = runExtractStage({
+      pack_text: decisionPack,
+      pack_digest: "sha256:pack1",
+      source_event_id: "evt_1",
+    });
+    const c = r.candidates[0];
+    if (c === undefined) throw new Error("missing candidate");
+    expect(c.statement.toLowerCase()).not.toBe("agentic.evidence");
+    expect(c.statement).toMatch(/preflight/i);
+    expect(c.citations[0]?.quote).toMatch(/preflight/i);
+    expect(c.kind).toBe("decision");
+  });
+
+  it("clamps Flash paraphrase statements that fail citation grounding", () => {
+    const quote = "Decision: we will require make preflight before opening any pull request.";
+    const r = runExtractStage({
+      pack_text: decisionPack,
+      pack_digest: "sha256:p",
+      source_event_id: "e",
+      mode: "flash",
+      allow_network: true,
+      flash_response_text: JSON.stringify({
+        candidates: [
+          {
+            kind: "decision",
+            // Long paraphrase that fails statement_longer_than_cited_span / overlap.
+            statement:
+              "The team has definitively decided that every pull request must run the full make preflight suite before open, no exceptions for hotfixes.",
+            quote: "Decision: we will require make preflight",
+            confidence: 0.92,
+          },
+        ],
+      }),
+    });
+    expect(r.candidates.length).toBeGreaterThan(0);
+    const c = r.candidates[0];
+    if (c === undefined) throw new Error("missing candidate");
+    // Either clamped to quote or local fallback — never ungrounded promote bait.
+    expect(c.statement.length).toBeLessThanOrEqual(quote.length + 5);
+    expect(decisionPack.includes(c.citations[0]?.quote ?? "")).toBe(true);
+    expect(
+      r.reason_codes.includes("statement_clamped_to_quote") ||
+        r.reason_codes.includes("local_extract_fallback"),
+    ).toBe(true);
+  });
+
+  it("falls back locally when Flash cites only ungroundable short spans", () => {
+    const r = runExtractStage({
+      pack_text: decisionPack,
+      pack_digest: "sha256:p",
+      source_event_id: "e",
+      mode: "flash",
+      allow_network: true,
+      flash_response_text: JSON.stringify({
+        candidates: [
+          {
+            kind: "decision",
+            statement: "Completely invented decision with no grounding tokens whatsoever.",
+            quote: "agentic.evidence",
+            confidence: 0.99,
+          },
+        ],
+      }),
+    });
+    expect(r.candidates.length).toBeGreaterThan(0);
+    expect(r.reason_codes).toContain("local_extract_fallback");
+    expect(r.candidates[0]?.statement).toMatch(/preflight/i);
+  });
+
   it("clamps Flash extract: drops open_question, keeps decision, max N", () => {
     const r = runExtractStage({
       pack_text: decisionPack,
