@@ -14,6 +14,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.6.4] - 2026-08-07
+
+### Fixed
+
+- Day Flash call cap raised (16 → **500**) and spend default **\$5/day** so dogfood/timer is not disabled after a few SessionEnds.
+- Per-run Flash budget no longer starved by seeding day call totals into the in-process counter.
+- Agentic pack limits raised for real SessionEnd transcript sizes (`redact_segment_scalars`).
+
 ## [6.6.3] - 2026-08-07
 
 ### Added
