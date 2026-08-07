@@ -14,6 +14,19 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.4] - 2026-08-07
+
+### Fixed
+
+- Flash extract **cite grounding belt**: clamp paraphrased statements to cited quotes
+  (or drop) so `cite_ok` can pass gate promote instead of
+  `statement_longer_than_cited_span` / `statement_not_grounded_in_citations` rejections.
+- Reject pack-meta quotes such as **`agentic.evidence`** in extract parse and local
+  `pickQuote`; prefer decision/constraint/preference lines over pack titles.
+- Local extract fallback when Flash leaves zero cite-ok candidates on decision packs.
+- Vitest `beforeAll` tsc hookTimeout raised to 60s for CLI/MCP suites under monorepo
+  preflight load (avoids flaky 10s hook timeouts).
+
 ## [6.7.3] - 2026-08-07
 
 ### Added
