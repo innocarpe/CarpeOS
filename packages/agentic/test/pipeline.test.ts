@@ -22,7 +22,7 @@ function makeDb(): DatabaseSync {
 }
 
 describe("runAgenticProposalPipeline", () => {
-  it("writes hold proposals for SessionEnd decision text (canonical_effect none)", () => {
+  it("writes promote proposals for SessionEnd decision text (HITL-free default)", () => {
     const db = makeDb();
     const r = runAgenticProposalPipeline(db, {
       trust_zone_id: "tz_synthetic",
@@ -37,11 +37,8 @@ describe("runAgenticProposalPipeline", () => {
     expect(r.canonical_effect).toBe("none");
     expect(r.proposals.length).toBeGreaterThan(0);
     expect(r.proposals.every((p) => p.canonical_effect === "none")).toBe(true);
-    expect(
-      r.proposals.every((p) => p.gate.decision === "hold" || p.gate.decision === "reject"),
-    ).toBe(true);
-    // Hold-first: no auto-promote without flag
-    expect(r.proposals.some((p) => p.gate.decision === "promote")).toBe(false);
+    // ADR 0018: promote-when-verified default for decision
+    expect(r.proposals.some((p) => p.gate.decision === "promote")).toBe(true);
     const listed = listAgenticProposals(db, { trust_zone_id: "tz_synthetic" });
     expect(listed.length).toBe(r.proposals.length);
     db.close();

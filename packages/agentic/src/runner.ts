@@ -10,6 +10,7 @@ import { materializeAgenticProposal } from "./materialize.js";
 import { type AgenticPipelineResult, runAgenticProposalPipeline } from "./pipeline.js";
 import { type AgenticProposalRecord, listAgenticProposals } from "./proposals.js";
 import type { SqlDatabase } from "./sql.js";
+import { addDaySpend, daySpendExceeded, loadDaySpend } from "./spend.js";
 
 export type AgenticRunnerReport = {
   schema: "carpeos.agentic.runner-report/v1";
@@ -39,7 +40,9 @@ export type AgenticRunnerInput = {
   agentic_enabled?: boolean;
   /** Materialize hold/promote Observations via local-store writers. */
   materialize?: boolean;
+  /** Product default: promote-when-verified (true). */
   allow_auto_promote?: boolean;
+  hold_first?: boolean;
   limit?: number;
   now?: Date;
   spend?: FlashSpendState;
@@ -79,13 +82,37 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
   }
 
   const limit = input.limit ?? 20;
-  const feed = input.store.listAgenticCaptureFeed({ limit, state: "pending" });
+  // Mutual exclusion: claim pending (and expired leased) rows before processing (ADR 0018 D5).
+  const feed = input.store.claimAgenticCaptureFeed({
+    limit,
+    leaseMs: 120_000,
+    ...(input.now !== undefined ? { now: input.now } : {}),
+  });
   report.feed_seen = feed.length;
   if (feed.length === 0) {
     report.reason_codes.push("feed_empty");
   }
-  const spend = input.spend ?? createFlashSpendState();
-  const allow_network = input.allow_network === true;
+  // Seed in-process spend from durable day caps so always-on timers share a budget.
+  const dayCaps = {
+    spend_cap_usd: input.spend?.spend_cap_usd ?? 1.0,
+    max_calls: input.spend?.max_calls ?? 16,
+  };
+  const dayRow = loadDaySpend(input.agenticDb);
+  if (daySpendExceeded(input.agenticDb, dayCaps, input.now)) {
+    report.reason_codes.push("day_spend_cap_exceeded");
+  }
+  const spend = input.spend ?? createFlashSpendState(dayCaps);
+  // Align in-memory counters with durable day totals when caller did not pass a custom spend.
+  if (input.spend === undefined) {
+    spend.spend_usd = dayRow.spend_usd;
+    spend.calls = dayRow.calls;
+  }
+  const spendAtStart = { spend_usd: spend.spend_usd, calls: spend.calls };
+  let allow_network = input.allow_network === true;
+  if (allow_network && daySpendExceeded(input.agenticDb, dayCaps, input.now)) {
+    allow_network = false;
+    report.reason_codes.push("network_disabled_day_spend");
+  }
   const observationIds: string[] = [];
   const trust_zone_id = input.store.trustZone.trust_zone_id;
 
@@ -125,13 +152,15 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
       signal_text: signal,
       mode: "fake",
       allow_network: false,
-      allow_auto_promote: input.allow_auto_promote === true,
+      allow_auto_promote: input.allow_auto_promote !== false,
+      ...(input.hold_first === true ? { hold_first: true } : {}),
       agentic_enabled: true,
       ...structureContext,
       ...nowOpt,
     });
 
     // Live Flash second pass when admitted and network allowed.
+    // Extract is gated on triage keep (ADR 0018 D5) to avoid spend on drops.
     if (allow_network && pipeline.admit_decision === "admit") {
       const triageRes = await callAgenticFlash({
         stage: "triage",
@@ -147,17 +176,33 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
         report.network_used = true;
         report.flash_calls += 1;
       }
-      const extractRes = await callAgenticFlash({
-        stage: "extract",
-        pack_text: signal,
-        allow_network: true,
-        spend,
-        ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
-      });
-      if (extractRes.ok) {
-        flash_extract_text = extractRes.text;
-        report.network_used = true;
-        report.flash_calls += 1;
+      const triageKeep =
+        flash_triage_text !== null &&
+        !/"decision"\s*:\s*"drop"/i.test(flash_triage_text) &&
+        !/\bdrop\b/i.test(flash_triage_text.slice(0, 80));
+      // Prefer structured parse; fallback keep if triage failed open to extract for admit path
+      let shouldExtract = triageRes.ok;
+      if (triageRes.ok && flash_triage_text) {
+        try {
+          const parsed = JSON.parse(flash_triage_text) as { decision?: string };
+          shouldExtract = parsed.decision === "keep" || parsed.decision === "need_context";
+        } catch {
+          shouldExtract = triageKeep;
+        }
+      }
+      if (shouldExtract) {
+        const extractRes = await callAgenticFlash({
+          stage: "extract",
+          pack_text: signal,
+          allow_network: true,
+          spend,
+          ...(input.fetch_impl !== undefined ? { fetch_impl: input.fetch_impl } : {}),
+        });
+        if (extractRes.ok) {
+          flash_extract_text = extractRes.text;
+          report.network_used = true;
+          report.flash_calls += 1;
+        }
       }
       if (flash_triage_text !== null || flash_extract_text !== null) {
         pipeline = runAgenticProposalPipeline(input.agenticDb, {
@@ -167,7 +212,8 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           signal_text: signal,
           mode: "flash",
           allow_network: true,
-          allow_auto_promote: input.allow_auto_promote === true,
+          allow_auto_promote: input.allow_auto_promote !== false,
+          ...(input.hold_first === true ? { hold_first: true } : {}),
           agentic_enabled: true,
           flash_triage_text,
           flash_extract_text,
@@ -216,7 +262,8 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           agenticDb: input.agenticDb,
           proposal,
           artifact_id: row.artifact_id,
-          allow_promote_materialize: input.allow_auto_promote === true,
+          allow_promote_materialize:
+            input.hold_first === true ? false : input.allow_auto_promote !== false,
           subject_ref: input.store.projectId,
         });
         if (mat.ok) {
@@ -241,6 +288,18 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
       state: "done",
     });
     report.feed_done += 1;
+  }
+
+  // Persist day spend deltas so multi-process timers share ADR 0018 D5 caps.
+  const deltaSpend = Math.max(0, spend.spend_usd - spendAtStart.spend_usd);
+  const deltaCalls = Math.max(0, spend.calls - spendAtStart.calls);
+  if (deltaSpend > 0 || deltaCalls > 0) {
+    addDaySpend(
+      input.agenticDb,
+      { spend_usd: deltaSpend, calls: deltaCalls },
+      input.now ?? new Date(),
+    );
+    report.reason_codes.push("day_spend_persisted");
   }
 
   // E9 projection hook (rebuildable; never SoT).

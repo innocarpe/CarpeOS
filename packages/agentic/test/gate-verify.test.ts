@@ -8,7 +8,7 @@ const pack = "We decided to require make preflight before every PR.";
 function candidate(overrides: Partial<AgenticExtractCandidate> = {}): AgenticExtractCandidate {
   return {
     kind: "decision",
-    statement: "Require make preflight before every PR.",
+    statement: "require make preflight before every PR",
     confidence: 0.99,
     citations: [
       {
@@ -24,7 +24,7 @@ function candidate(overrides: Partial<AgenticExtractCandidate> = {}): AgenticExt
 }
 
 describe("verifyExtractCandidate", () => {
-  it("accepts quotes present in pack text", () => {
+  it("accepts quotes present in pack text when statement grounded", () => {
     const v = verifyExtractCandidate(candidate(), pack);
     expect(v.cite_ok).toBe(true);
     expect(v.secret_ok).toBe(true);
@@ -42,17 +42,37 @@ describe("verifyExtractCandidate", () => {
     );
     expect(v.secret_ok).toBe(false);
   });
+
+  it("rejects fabricated statement with real quote substring (ADR 0018 D3.1)", () => {
+    const v = verifyExtractCandidate(
+      candidate({
+        statement: "We decided to disable the sync credential check immediately",
+        citations: [
+          {
+            evidence_event_id: "evt_synthetic_1",
+            segment_id: "seg_0",
+            start: 0,
+            end: 12,
+            quote: "We decided",
+          },
+        ],
+      }),
+      pack,
+    );
+    expect(v.cite_ok).toBe(false);
+    expect(v.reason_codes.some((c) => c.includes("ground") || c.includes("longer"))).toBe(true);
+  });
 });
 
-describe("evaluateAgenticGate", () => {
-  it("hold-first by default even with high model confidence", () => {
+describe("evaluateAgenticGate promote-when-verified", () => {
+  it("promotes allowlisted verified decision by default (HITL-free)", () => {
     const g = evaluateAgenticGate({
       candidate: candidate(),
       cite_ok: true,
       secret_ok: true,
     });
-    expect(g.decision).toBe("hold");
-    expect(g.reason_codes).toContain("hold_first_default");
+    expect(g.decision).toBe("promote");
+    expect(g.reason_codes).toContain("promote_when_verified");
     expect(g.policy_version).toBe("agentic_v1");
   });
 
@@ -65,13 +85,33 @@ describe("evaluateAgenticGate", () => {
     expect(g.decision).toBe("reject");
   });
 
-  it("auto-promote only when explicitly enabled and allowlisted", () => {
+  it("holds procedure (v1 hold-biased)", () => {
+    const g = evaluateAgenticGate({
+      candidate: candidate({ kind: "procedure" }),
+      cite_ok: true,
+      secret_ok: true,
+    });
+    expect(g.decision).toBe("hold");
+    expect(g.reason_codes).toContain("procedure_hold_biased_v1");
+  });
+
+  it("holds fact_candidate (not v1 usable allowlist)", () => {
+    const g = evaluateAgenticGate({
+      candidate: candidate({ kind: "fact_candidate" }),
+      cite_ok: true,
+      secret_ok: true,
+    });
+    expect(g.decision).toBe("hold");
+  });
+
+  it("hold_first debug override forces hold", () => {
     const g = evaluateAgenticGate({
       candidate: candidate(),
       cite_ok: true,
       secret_ok: true,
-      allow_auto_promote: true,
+      hold_first: true,
     });
-    expect(g.decision).toBe("promote");
+    expect(g.decision).toBe("hold");
+    expect(g.reason_codes).toContain("hold_first_debug_override");
   });
 });

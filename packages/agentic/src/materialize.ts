@@ -23,8 +23,8 @@ export type MaterializeAgenticInput = {
   /** Evidence artifact id in the same trust zone as the source event. */
   artifact_id: string;
   /**
-   * When true and gate.decision === "promote", write promote disposition + active Observation.
-   * Default false → hold draft only (P2). Never affects Claim acceptance (always draft).
+   * When false, force draft even if gate.promote (debug hold-first).
+   * ADR 0018 product default: true / omit — gate promote → active usable unit.
    */
   allow_promote_materialize?: boolean;
   /** Override subject for about edges; defaults to store.projectId. */
@@ -162,7 +162,7 @@ export function materializeAgenticProposal(
     }
   }
 
-  const wantPromote = gateDecision === "promote" && input.allow_promote_materialize === true;
+  const wantPromote = gateDecision === "promote" && input.allow_promote_materialize !== false;
   const disposition: "hold" | "promote" = wantPromote ? "promote" : "hold";
   const lifecycleStatus = wantPromote ? "active" : "draft";
   const targets = materializeTargetsForKind(proposal.candidate.kind);
@@ -209,6 +209,7 @@ export function materializeAgenticProposal(
         ...proposal.gate.reason_codes,
         `kind:${proposal.candidate.kind}`,
         "agentic_v1",
+        "formation:agentic_v1",
         wantPromote ? "materialize_promote" : "materialize_hold_first",
         `structure_edges:${edges.length}`,
         targets.draft_claim ? "p5_draft_claim_target" : "p5_observation_only",

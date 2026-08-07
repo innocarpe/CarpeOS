@@ -1,9 +1,20 @@
+/**
+ * Deterministic citation + secret + statement-grounding checks (E5).
+ * ADR 0018 D3.1: quote ⊆ pack is not enough — statement must be grounded in cited spans.
+ * No LLM.
+ */
+
 import type { AgenticCitation, AgenticExtractCandidate } from "./types.js";
 
 const SECRETISH = /\b(api[_-]?key|secret|password|bearer\s+[a-z0-9._-]+|sk-[a-z0-9]{10,})\b/i;
 
+/** Max statement length relative to longest cited quote (promote-when-verified). */
+export const STATEMENT_QUOTE_LEN_FACTOR = 3;
+/** Min token Jaccard overlap between statement and union of cited quotes. */
+export const STATEMENT_QUOTE_OVERLAP_MIN = 0.35;
+
 /**
- * Deterministic citation + secret checks (E5). No LLM.
+ * Deterministic citation + secret + grounding checks (E5).
  */
 export function verifyExtractCandidate(
   candidate: AgenticExtractCandidate,
@@ -35,17 +46,87 @@ export function verifyExtractCandidate(
     }
   }
 
+  if (cite_ok && candidate.citations.length > 0) {
+    const grounded = statementGroundedInCitations(candidate.statement, candidate.citations);
+    if (!grounded.ok) {
+      cite_ok = false;
+      reason_codes.push(...grounded.reason_codes);
+    }
+  }
+
   return { cite_ok, secret_ok, reason_codes };
+}
+
+export function statementGroundedInCitations(
+  statement: string,
+  citations: readonly AgenticCitation[],
+): { ok: boolean; reason_codes: string[] } {
+  const stmt = normalizeText(statement);
+  if (stmt.length < 8) {
+    return { ok: false, reason_codes: ["statement_too_short_for_grounding"] };
+  }
+
+  const quotes = citations.map((c) => c.quote.trim()).filter((q) => q.length > 0);
+  if (quotes.length === 0) {
+    return { ok: false, reason_codes: ["no_quote_for_grounding"] };
+  }
+
+  const maxQuoteLen = Math.max(...quotes.map((q) => normalizeText(q).length));
+  if (stmt.length > maxQuoteLen * STATEMENT_QUOTE_LEN_FACTOR) {
+    return { ok: false, reason_codes: ["statement_longer_than_cited_span"] };
+  }
+
+  // Exact / containment after normalize
+  for (const q of quotes) {
+    const nq = normalizeText(q);
+    if (nq.length === 0) continue;
+    if (stmt === nq || nq.includes(stmt) || stmt.includes(nq)) {
+      return { ok: true, reason_codes: ["statement_grounded_containment"] };
+    }
+  }
+
+  const stmtTokens = tokenize(stmt);
+  const quoteTokens = new Set(quotes.flatMap((q) => tokenize(normalizeText(q))));
+  if (stmtTokens.length === 0 || quoteTokens.size === 0) {
+    return { ok: false, reason_codes: ["statement_ungrounded_empty_tokens"] };
+  }
+  let inter = 0;
+  for (const t of stmtTokens) {
+    if (quoteTokens.has(t)) inter += 1;
+  }
+  const union = new Set([...stmtTokens, ...quoteTokens]).size;
+  const jaccard = union === 0 ? 0 : inter / union;
+  // Also require a decent fraction of statement tokens to appear in quotes
+  const coverage = inter / stmtTokens.length;
+  if (jaccard >= STATEMENT_QUOTE_OVERLAP_MIN || coverage >= 0.6) {
+    return { ok: true, reason_codes: ["statement_grounded_overlap"] };
+  }
+
+  return { ok: false, reason_codes: ["statement_not_grounded_in_citations"] };
 }
 
 function citationInPack(c: AgenticCitation, packText: string): boolean {
   const q = c.quote.trim();
   if (q.length === 0) return false;
   if (packText.includes(q)) return true;
-  // Fallback: offset window if pack is raw contiguous text
   if (c.start >= 0 && c.end > c.start && c.end <= packText.length) {
     const slice = packText.slice(c.start, c.end);
     return slice === q || packText.includes(q);
   }
   return false;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[“”"'`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 2);
 }

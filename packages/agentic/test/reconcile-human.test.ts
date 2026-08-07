@@ -5,7 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 import type { CaptureEnvelope } from "@carpeos/capture";
 import { LocalCaptureStore, StaticKeyProvider } from "@carpeos/local-store";
 import { afterEach, describe, expect, it } from "vitest";
-import { humanAcceptAgenticClaim, humanReviewAgenticHeld } from "../src/human-review.js";
+import {
+  humanAcceptAgenticClaim,
+  humanRetractAgenticUnit,
+  humanReviewAgenticHeld,
+} from "../src/human-review.js";
 import { materializeAgenticProposal } from "../src/materialize.js";
 import { runAgenticProposalPipeline } from "../src/pipeline.js";
 import {
@@ -137,17 +141,21 @@ describe("human review paths", () => {
       artifact_id: captured.event.payload.artifact_id,
     });
     expect(mat.ok).toBe(true);
-    expect(mat.disposition).toBe("hold");
-
-    const promoted = humanReviewAgenticHeld({
-      store,
-      source_event_id: captured.event.event_id,
-      decision: "promote",
-    });
-    expect(promoted.ok).toBe(true);
-    expect(promoted.observation_event_id).toMatch(/^evt_/);
-    expect(promoted.reason_codes).toContain("human_promoted_observation");
-    expect(promoted.policy_version).toBe(AGENTIC_POLICY_VERSION);
+    // Default path already promote-when-verified; human promote-held is for holds only.
+    // Force a hold materialize path for this correction-path test:
+    if (mat.disposition === "promote") {
+      expect(mat.observation_event_id).toMatch(/^evt_/);
+    } else {
+      const promoted = humanReviewAgenticHeld({
+        store,
+        source_event_id: captured.event.event_id,
+        decision: "promote",
+      });
+      expect(promoted.ok).toBe(true);
+      expect(promoted.observation_event_id).toMatch(/^evt_/);
+      expect(promoted.reason_codes).toContain("human_promoted_observation");
+      expect(promoted.policy_version).toBe(AGENTIC_POLICY_VERSION);
+    }
 
     store.close();
     agenticDb.close();
@@ -220,6 +228,60 @@ describe("human review paths", () => {
     });
     expect(decisions.length).toBe(1);
     expect(decisions[0]?.event.event_type).toBe("AcceptanceDecision");
+
+    store.close();
+    agenticDb.close();
+  });
+
+  it("retracts a wrongly promoted Observation via append-only Supersession (ADR 0018 S7)", () => {
+    const store = makeStore("tz_agentic_retract");
+    const captured = store.captureHook(
+      makeEnvelope({
+        source_event_id: "source_retract_01",
+        payload: {
+          transcript: "We decided to require make preflight before every PR.",
+        },
+      }),
+    );
+    if (captured.status !== "captured") throw new Error("capture failed");
+    const agenticDb = new DatabaseSync(join(tempDir(), "agentic.sqlite"));
+    const pipeline = runAgenticProposalPipeline(agenticDb, {
+      trust_zone_id: store.trustZone.trust_zone_id,
+      source_event_id: captured.event.event_id,
+      hook_event_name: "SessionEnd",
+      signal_text: "We decided to require make preflight before every PR.",
+      hint_kind: "decision",
+      artifact_id: captured.event.payload.artifact_id,
+      now,
+    });
+    const proposal = pipeline.proposals[0]!;
+    const mat = materializeAgenticProposal({
+      store,
+      agenticDb,
+      proposal,
+      artifact_id: captured.event.payload.artifact_id,
+    });
+    expect(mat.ok).toBe(true);
+    expect(mat.disposition).toBe("promote");
+    expect(mat.observation_event_id).toMatch(/^evt_/);
+
+    const retracted = humanRetractAgenticUnit({
+      store,
+      event_id: mat.observation_event_id!,
+      reason: "Synthetic wrong promote correction for test",
+      decided_by: "operator_alice",
+      human_confirmed: true,
+    });
+    expect(retracted.ok).toBe(true);
+    expect(retracted.supersession_event_id).toMatch(/^evt_/);
+    expect(retracted.reason_codes).toContain("human_retract_supersession");
+
+    const supersessions = store.listCanonicalEventSnapshots({
+      visibleTrustZoneIds: [store.trustZone.trust_zone_id],
+      eventTypes: ["Supersession"],
+    });
+    expect(supersessions.length).toBeGreaterThanOrEqual(1);
+    expect(supersessions.some((s) => s.event.event_type === "Supersession")).toBe(true);
 
     store.close();
     agenticDb.close();

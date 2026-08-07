@@ -53,7 +53,7 @@ function envelope(overrides: Partial<CaptureEnvelope> = {}): CaptureEnvelope {
 }
 
 describe("product loop: capture feed → runner → materialize", () => {
-  it("enqueues feed on capture without LLM and runner materializes hold Observation", async () => {
+  it("enqueues feed on capture without LLM and runner materializes promote Observation", async () => {
     const store = makeStore();
     const captured = store.captureHook(envelope(), { extract: false });
     expect(captured.status).toBe("captured");
@@ -76,9 +76,9 @@ describe("product loop: capture feed → runner → materialize", () => {
     expect(report.materializations).toBeGreaterThanOrEqual(1);
 
     const history = store.listDispositionHistory(captured.event.event_id);
-    expect(history.some((d) => d.policy_version === "agentic_v1" && d.disposition === "hold")).toBe(
-      true,
-    );
+    expect(
+      history.some((d) => d.policy_version === "agentic_v1" && d.disposition === "promote"),
+    ).toBe(true);
     expect(store.listAgenticCaptureFeed({ state: "pending" })).toHaveLength(0);
 
     // Replay runner is idle

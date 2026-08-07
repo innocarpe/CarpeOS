@@ -54,7 +54,7 @@ function makeEnvelope(overrides: Partial<CaptureEnvelope> = {}): CaptureEnvelope
 }
 
 describe("materializeAgenticProposal", () => {
-  it("writes agentic_v1 hold disposition + draft Observation", () => {
+  it("writes agentic_v1 promote disposition + active Observation for decision", () => {
     const store = makeStore();
     const captured = store.captureHook(makeEnvelope());
     expect(captured.status).toBe("captured");
@@ -80,8 +80,8 @@ describe("materializeAgenticProposal", () => {
       artifact_id: captured.event.payload.artifact_id,
     });
     expect(mat.ok).toBe(true);
-    expect(mat.disposition).toBe("hold");
-    // P5: decision kinds dual-write draft Claim + Observation.
+    // ADR 0018: decision promote-when-verified → active Observation + draft Claim
+    expect(mat.disposition).toBe("promote");
     expect(mat.canonical_effect).toBe("observation_and_draft_claim");
     expect(mat.observation_event_id).toMatch(/^evt_/);
     expect(mat.claim_event_id).toMatch(/^evt_/);
@@ -91,7 +91,7 @@ describe("materializeAgenticProposal", () => {
     const history = store.listDispositionHistory(captured.event.event_id);
     const agenticDisp = history.filter((d) => d.policy_version === AGENTIC_POLICY_VERSION);
     expect(agenticDisp).toHaveLength(1);
-    expect(agenticDisp[0]?.disposition).toBe("hold");
+    expect(agenticDisp[0]?.disposition).toBe("promote");
 
     // Idempotent replay
     const again = materializeAgenticProposal({
@@ -127,10 +127,12 @@ describe("materializeAgenticProposal", () => {
       proposal,
       artifact_id: captured.event.payload.artifact_id,
     });
-    // No AcceptanceDecision table write path in materialize — count events by type via dispositions only
-    expect(
-      store.listDispositionHistory(captured.event.event_id).some((d) => d.disposition === "hold"),
-    ).toBe(true);
+    // Constraint auto-promotes under ADR 0018; still never writes AcceptanceDecision.
+    const snaps = store.listCanonicalEventSnapshots({
+      visibleTrustZoneIds: [store.trustZone.trust_zone_id],
+    });
+    expect(snaps.some((s) => s.event.event_type === "AcceptanceDecision")).toBe(false);
+    expect(snaps.some((s) => s.event.event_type === "Observation")).toBe(true);
     store.close();
     agenticDb.close();
   });

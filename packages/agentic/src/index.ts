@@ -23,6 +23,7 @@ export * from "./precision.js";
 export * from "./proposals.js";
 export * from "./reconcile.js";
 export * from "./runner.js";
+export * from "./spend.js";
 export type { SqlDatabase, SqlStatement } from "./sql.js";
 export * from "./stages.js";
 export * from "./structure.js";
