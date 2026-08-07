@@ -2,32 +2,314 @@
   "schema": "carpeos.agentic.quality-ultragoal/v1",
   "policy_version": "agentic_v1.1",
   "model_id": "deepseek-v4-flash",
-  "description": "Quality ultragoal corpus (Q2′): exact expect promote|no_promote|hold. Synthetic public-safe only. Baseline #1 characterization.",
-  "baseline": "quality-baseline-1",
+  "description": "Quality ultragoal corpus: exact expect promote|no_promote|hold. Synthetic public-safe only. Baseline #2 (post Q4–Q6 cite belt).",
+  "baseline": "quality-baseline-2",
   "cases": [
     {
       "id": "q-dec-01",
       "class": "decision_session",
       "expect_gate": "promote",
+      "expect_kind": "decision",
       "must_not_promote": false,
       "signal_source": "inline",
       "pack_text": "After review we decided to require make preflight before opening any pull request. Capture remains network-off."
     },
     {
+      "id": "q-dec-02",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before opening any pull request."
+    },
+    {
+      "id": "q-dec-03",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We decided that pull requests must not open without a green make preflight run."
+    },
+    {
+      "id": "q-dec-04",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Binding decision: require make preflight before any PR is opened on mainline work."
+    },
+    {
+      "id": "q-dec-05",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Team decision recorded: we will require make preflight before opening any pull request going forward."
+    },
+    {
+      "id": "q-dec-06",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We will require make preflight before opening any pull request. No exceptions for hotfixes without an explicit override note."
+    },
+    {
+      "id": "q-dec-07",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision log: require make preflight before opening any pull request; document the command in CONTRIBUTING."
+    },
+    {
+      "id": "q-dec-08",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We decided to require make preflight before PRs. Notes live at /tmp/synthetic/workspace/repo and https://example.com/docs."
+    },
+    {
+      "id": "q-dec-09",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Chatter about weather and lunch plans continues for a while without binding choices. Later we decided to require make preflight before opening any pull request. More chatter follows."
+    },
+    {
+      "id": "q-dec-10",
+      "class": "decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before opening any pull request.\nPostToolUse: ran git status successfully with exit 0."
+    },
+    {
       "id": "q-con-01",
       "class": "constraint_session",
       "expect_gate": "promote",
+      "expect_kind": "constraint",
       "must_not_promote": false,
       "signal_source": "inline",
       "pack_text": "Constraint: capture hooks must never call the network or an LLM during SessionEnd. This is non-negotiable."
     },
     {
+      "id": "q-con-02",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: SessionEnd capture must never call the network."
+    },
+    {
+      "id": "q-con-03",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: operators must never store API keys in git-tracked env files."
+    },
+    {
+      "id": "q-con-04",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Hard constraint: capture hooks must never call the network during SessionEnd."
+    },
+    {
+      "id": "q-con-05",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint recorded: agentic flush must never invent AcceptanceDecision events automatically."
+    },
+    {
+      "id": "q-con-06",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: public GitHub PR bodies must never contain Hangul unless GH_ALLOW_NON_ENGLISH is set."
+    },
+    {
+      "id": "q-con-07",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: private runtime paths and credentials must never appear in public CHANGELOG entries."
+    },
+    {
+      "id": "q-con-08",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: capture remains network-off; hooks must never call an LLM during SessionEnd."
+    },
+    {
+      "id": "q-con-09",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: default memory search must never surface held drafts unless include_held is explicit."
+    },
+    {
+      "id": "q-con-10",
+      "class": "constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Constraint: quality report default mode must never print raw statements without --verbose."
+    },
+    {
       "id": "q-pref-01",
       "class": "preference_session",
       "expect_gate": "promote",
+      "expect_kind": "preference",
       "must_not_promote": false,
       "signal_source": "inline",
       "pack_text": "Preference recorded: default search remains promoted active knowledge only; held drafts stay out of MCP defaults."
+    },
+    {
+      "id": "q-pref-02",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference: we prefer make preflight over ad-hoc lint before any PR open."
+    },
+    {
+      "id": "q-pref-03",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We prefer default search to show only promoted knowledge units."
+    },
+    {
+      "id": "q-pref-04",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference: prefer SessionEnd over Stop when draining the agentic capture feed."
+    },
+    {
+      "id": "q-pref-05",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference recorded: prefer deepseek-v4-flash only; do not shop multi-model for agentic stages."
+    },
+    {
+      "id": "q-pref-06",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We prefer English Conventional Commit subjects on every public PR title."
+    },
+    {
+      "id": "q-pref-07",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference: prefer atomic commits and semantic PRs over one-PR-per-commit defaults."
+    },
+    {
+      "id": "q-pref-08",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference: we prefer make preflight green before gh pr create on every harness."
+    },
+    {
+      "id": "q-pref-09",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Preference recorded: prefer local-override decision signals over need_context when packs are clear."
+    },
+    {
+      "id": "q-pref-10",
+      "class": "preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "We prefer default agentic reports redacted; operators opt into --verbose only when debugging."
+    },
+    {
+      "id": "q-ko-01",
+      "class": "korean_decision_session",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "결정: PR을 열기 전에 반드시 make preflight를 요구한다. 캡처는 네트워크를 호출하지 않는다."
+    },
+    {
+      "id": "q-ko-02",
+      "class": "korean_constraint_session",
+      "expect_gate": "promote",
+      "expect_kind": "constraint",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "제약: SessionEnd 동안 캡처 훅은 반드시 네트워크를 호출하지 않는다."
+    },
+    {
+      "id": "q-ko-03",
+      "class": "korean_preference_session",
+      "expect_gate": "promote",
+      "expect_kind": "preference",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "선호: 기본 검색은 promote된 지식만 보여 주고 held draft는 제외한다."
+    },
+    {
+      "id": "q-mixed-01",
+      "class": "mixed_ko_en_decision",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before any PR. 또한 캡처 훅은 LLM을 호출하지 않는다."
     },
     {
       "id": "q-meta-01",
@@ -54,44 +336,70 @@
       "pack_text": "PostToolUse: ran git status --porcelain successfully with exit 0. 12 files clean."
     },
     {
-      "id": "q-long-01",
-      "class": "long_session_with_one_decision",
-      "expect_gate": "promote",
-      "must_not_promote": false,
+      "id": "q-agent-type-01",
+      "class": "agent_type_metadata",
+      "expect_gate": "no_promote",
+      "must_not_promote": true,
       "signal_source": "inline",
-      "pack_text": "Chatter about weather and lunch plans continues for a while without binding choices. Later we decided to require make preflight before opening any pull request. More chatter follows."
+      "pack_text": "The agent type is grok. The session ended for reason other. No decision was stated."
     },
     {
-      "id": "q-path-01",
-      "class": "decision_with_absolute_path",
-      "expect_gate": "promote",
-      "must_not_promote": false,
+      "id": "q-end-reason-01",
+      "class": "end_reason_metadata",
+      "expect_gate": "no_promote",
+      "must_not_promote": true,
       "signal_source": "inline",
-      "pack_text": "We decided to require make preflight before PRs. Notes live at /tmp/synthetic/workspace/repo and https://example.com/docs."
+      "pack_text": "hook_event_name=SessionEnd reason=clear end_turn=true. Nothing else of substance."
     },
     {
-      "id": "q-ko-01",
-      "class": "korean_decision_session",
+      "id": "q-path-source-01",
+      "class": "transcript_path_shape",
       "expect_gate": "promote",
+      "expect_kind": "decision",
       "must_not_promote": false,
-      "signal_source": "inline",
-      "pack_text": "결정: PR을 열기 전에 반드시 make preflight를 요구한다. 캡처는 네트워크를 호출하지 않는다."
+      "signal_source": "transcript_path",
+      "pack_text": "Decision: we will require make preflight before opening any pull request (recovered from transcript_path)."
     },
     {
-      "id": "q-mixed-01",
-      "class": "mixed_ko_en_decision",
-      "expect_gate": "promote",
-      "must_not_promote": false,
-      "signal_source": "inline",
-      "pack_text": "Decision: we will require make preflight before any PR. 또한 캡처 훅은 LLM을 호출하지 않는다."
+      "id": "q-none-source-01",
+      "class": "empty_source_shape",
+      "expect_gate": "no_promote",
+      "must_not_promote": true,
+      "signal_source": "none",
+      "pack_text": ""
     },
     {
-      "id": "q-mixed-noise-01",
-      "class": "decision_with_tool_noise_lines",
+      "id": "q-flash-rec-01",
+      "class": "recorded_flash_decision",
       "expect_gate": "promote",
+      "expect_kind": "decision",
       "must_not_promote": false,
       "signal_source": "inline",
-      "pack_text": "Decision: we will require make preflight before opening any pull request.\nPostToolUse: ran git status successfully with exit 0."
+      "pack_text": "Decision: we will require make preflight before opening any pull request.",
+      "flash_triage_json": "{\"decision\":\"keep\",\"reason_codes\":[\"decision_class_signal\"]}",
+      "flash_extract_json": "{\"candidates\":[{\"kind\":\"decision\",\"statement\":\"We will require make preflight before opening any pull request.\",\"quote\":\"Decision: we will require make preflight before opening any pull request.\",\"confidence\":0.9}]}"
+    },
+    {
+      "id": "q-flash-rec-02",
+      "class": "recorded_flash_paraphrase_clamp",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before opening any pull request.",
+      "flash_triage_json": "{\"decision\":\"keep\",\"reason_codes\":[\"decision_class_signal\"]}",
+      "flash_extract_json": "{\"candidates\":[{\"kind\":\"decision\",\"statement\":\"The team has definitively decided that every pull request must run the full make preflight suite before open, no exceptions for hotfixes.\",\"quote\":\"Decision: we will require make preflight\",\"confidence\":0.92}]}"
+    },
+    {
+      "id": "q-flash-rec-03",
+      "class": "recorded_flash_tool_noise_override",
+      "expect_gate": "promote",
+      "expect_kind": "decision",
+      "must_not_promote": false,
+      "signal_source": "inline",
+      "pack_text": "Decision: we will require make preflight before opening any pull request.",
+      "flash_triage_json": "{\"decision\":\"drop\",\"reason_codes\":[\"tool_noise\"]}",
+      "flash_extract_json": "{\"candidates\":[{\"kind\":\"decision\",\"statement\":\"Decision: we will require make preflight before opening any pull request.\",\"quote\":\"Decision: we will require make preflight before opening any pull request.\",\"confidence\":0.88}]}"
     }
   ]
 }

@@ -63,7 +63,7 @@ export type AgenticExtractResult = {
 };
 
 const DECISION_RE =
-  /\b(decision|we (will|decided|shall)|require|must never|constraint|preference|default)\b|(결정|선호|반드시|제약|기본값)/i;
+  /\b(decision|we (will|decided|shall)|require|must never|constraint|preference|prefer|default)\b|(결정|선호|반드시|제약|기본값)/i;
 /** P5: factual signals may keep for extract diagnostics (not auto-promote). */
 const FACT_RE =
   /\b(fact|fact_candidate|because|therefore|precision|suite requires|is true|measured)\b/i;
