@@ -133,6 +133,7 @@ function reconstructPlanV2Preimage(plan: PlanV2OraclePlan): OracleJson {
 const EMPTY_PLAN_V2_CANONICAL_BYTES =
   '{"classified_count":0,"counts":{"already_applied_count":0,"eligible_noop_count":0,"eligible_write_count":0,"invalidate_count":0,"reason_code_counts":[],"replace_count":0,"unsafe_unchanged_count":0},"entries":[],"from_policy":"adj_old","global_taint_component_ids":[],"global_taint_entry_ids":[],"global_taint_reason_codes":[],"high_water":{"canonical_local_sequence_max":0,"disposition_row_count":0,"outbox_id_max":0,"review_row_count":0,"supersession_event_count":0},"limit":10,"plan_admissible":true,"schema":"carpeos.policy-reconciliation-plan/v2","to_policy":"adj_new","total_candidate_count":0,"truncated":false,"trust_zone_id":"tz_synthetic"}';
 
+// tsc can exceed vitest's default 10s hookTimeout under monorepo preflight load.
 beforeAll(() => {
   execFileSync(
     process.execPath,
@@ -145,7 +146,7 @@ beforeAll(() => {
       stdio: "pipe",
     },
   );
-});
+}, 60_000);
 
 afterEach(() => {
   for (const dir of createdDirs.splice(0)) {

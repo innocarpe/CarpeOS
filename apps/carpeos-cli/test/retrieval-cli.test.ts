@@ -18,6 +18,7 @@ const trustZone: TrustZone = { trust_zone_id: "tz_cli_retrieval", isolation: "lo
 const privateSentinel = "SYNTHETIC_PRIVATE_RAW_HOOK_JSON";
 const subprocessTimeoutMs = 20_000;
 
+// tsc can exceed vitest's default 10s hookTimeout under monorepo preflight load.
 beforeAll(() => {
   execFileSync(
     process.execPath,
@@ -28,7 +29,7 @@ beforeAll(() => {
     ],
     { stdio: "pipe" },
   );
-});
+}, 60_000);
 
 afterEach(() => {
   for (const dir of createdDirs.splice(0)) {

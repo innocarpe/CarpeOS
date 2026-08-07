@@ -13,6 +13,7 @@ const cliPath = join(packageRoot, "dist", "index.js");
 const createdDirs: string[] = [];
 const trustZoneId = "tz_mcp_stdio";
 
+// tsc can exceed vitest's default 10s hookTimeout under monorepo preflight load.
 beforeAll(() => {
   execFileSync(
     process.execPath,
@@ -23,7 +24,7 @@ beforeAll(() => {
     ],
     { stdio: "pipe" },
   );
-});
+}, 60_000);
 
 afterEach(() => {
   for (const dir of createdDirs.splice(0)) {
