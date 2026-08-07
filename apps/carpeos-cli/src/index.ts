@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
@@ -53,12 +53,12 @@ import {
   defaultEmbeddingProvider,
   ensureEmbeddingJob,
   evaluateGraphRagQuerySet,
+  type GraphRagQuerySet,
   leaseEmbeddingJobs,
   makeEmbeddingRecord,
   rebuildLocalRetrievalIndex,
   searchLocalRetrievalIndex,
   storeLocalVector,
-  type GraphRagQuerySet,
 } from "@carpeos/retrieval";
 import type { RetrievalChunk, RetrievalQuery } from "@carpeos/schema";
 import {
@@ -1481,7 +1481,11 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           "trust-zone": { type: "string" },
           "project-id": { type: "string" },
           once: { type: "boolean", default: true },
-          "allow-network": { type: "boolean", default: false },
+          /**
+           * Product default true: Agentic Layer uses deepseek-v4-flash.
+           * Offline escape: --allow-network false or CARPEOS_AGENTIC_NETWORK=off.
+           */
+          "allow-network": { type: "boolean", default: true },
           materialize: { type: "boolean", default: true },
           "allow-auto-promote": { type: "boolean", default: true },
           "hold-first": { type: "boolean", default: false },
@@ -1503,12 +1507,25 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
       );
       const runtimeDir = options.home ?? runtimeDirFromEnv(env);
       const agenticEnabled = env.CARPEOS_AGENTIC !== "0" && env.CARPEOS_AGENTIC !== "off";
-      const allowNetwork = parsed.values["allow-network"] === true;
+      // Product path: Flash on. Offline golden/CI: --allow-network false or NETWORK=off.
+      const networkKill =
+        env.CARPEOS_AGENTIC_NETWORK === "0" || env.CARPEOS_AGENTIC_NETWORK === "off";
+      const allowNetwork = !networkKill && parsed.values["allow-network"] !== false;
+      const providerEnv = applyPrivateProviderEnv(runtimeDir, env);
       if (allowNetwork && !(env.DEEPSEEK_API_KEY ?? "").trim()) {
         throw new CliUsageError(
-          "agentic run --allow-network requires DEEPSEEK_API_KEY in the environment (never commit keys).",
+          "agentic run requires DEEPSEEK_API_KEY for deepseek-v4-flash (product path). " +
+            "Set the env var or put it in ~/.carpeos/v5-provider.env (mode 0600; never commit). " +
+            "Offline only: CARPEOS_AGENTIC_NETWORK=off.",
         );
       }
+      const credentialSource = !allowNetwork
+        ? "offline"
+        : providerEnv.source === "process_env"
+          ? "process_env"
+          : providerEnv.loaded_key
+            ? "v5-provider.env"
+            : "none";
       const db = openAgenticDb(runtimeDir);
       try {
         if (parsed.values.golden === true || parsed.values["golden-path"] !== undefined) {
@@ -1596,6 +1613,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             model_id: AGENTIC_FLASH_MODEL_ID,
             allow_network: allowNetwork,
             network_used: report.network_used,
+            flash_calls: report.flash_calls,
+            credential_source: credentialSource,
             structure_edge_count: report.structure_edge_count,
             project_invoked: report.project_invoked,
           });
@@ -2205,6 +2224,53 @@ function agenticDbPath(runtimeDir: string): string {
   return join(runtimeDir, "agentic", "agentic.sqlite");
 }
 
+/**
+ * Load private provider credentials into env without printing values.
+ * Supports `export KEY=value` lines from ~/.carpeos/v5-provider.env (V5/Agentic SSOT).
+ * Process env always wins when already set.
+ */
+function applyPrivateProviderEnv(
+  runtimeDir: string,
+  env: NodeJS.ProcessEnv,
+): { loaded_key: boolean; source: string | null } {
+  if ((env.DEEPSEEK_API_KEY ?? "").trim().length > 0) {
+    return { loaded_key: true, source: "process_env" };
+  }
+  const candidates = [
+    join(runtimeDir, "v5-provider.env"),
+    join(runtimeDir, "agentic-provider.env"),
+  ];
+  for (const file of candidates) {
+    try {
+      if (!existsSync(file)) continue;
+      const text = readFileSync(file, "utf8");
+      for (const rawLine of text.split("\n")) {
+        const line = rawLine.trim();
+        if (line.length === 0 || line.startsWith("#")) continue;
+        const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+        if (m === null) continue;
+        const key = m[1]!;
+        let val = m[2] ?? "";
+        if (
+          (val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))
+        ) {
+          val = val.slice(1, -1);
+        }
+        if ((env[key] ?? "").length === 0) {
+          env[key] = val;
+          process.env[key] = val;
+        }
+      }
+      const loaded = (env.DEEPSEEK_API_KEY ?? "").trim().length > 0;
+      return { loaded_key: loaded, source: file };
+    } catch {
+      // ignore unreadable private files
+    }
+  }
+  return { loaded_key: false, source: null };
+}
+
 function openAgenticDb(runtimeDir: string): DatabaseSync {
   const path = agenticDbPath(runtimeDir);
   mkdirSync(join(runtimeDir, "agentic"), { recursive: true, mode: 0o700 });
@@ -2458,11 +2524,11 @@ v1 readiness: https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/v1
 export function formatCommandHelp(command: string): string {
   switch (command) {
     case "agentic":
-      return `carpeos agentic — Product 6 post-capture Agentic Layer (ADR 0017)
+      return `carpeos agentic — Product 6 post-capture Agentic Layer (ADR 0017/0018)
 
 USAGE
   carpeos agentic status [--home <path>] [--trust-zone <id>]
-  carpeos agentic run --once [--materialize] [--allow-network] [--limit N]
+  carpeos agentic run --once [--materialize] [--limit N]   # Flash on by default
   carpeos agentic run --once --text <signal> [--hook-event SessionEnd]
   carpeos agentic run --once --golden [--golden-path <manifest.json>]
   carpeos agentic golden [--path <manifest.json>]
@@ -2481,7 +2547,7 @@ USAGE
 
 SUBCOMMANDS
   status       Job + proposal counts; plane fences (Flash-only, no capture LLM)
-  run          Drain capture feed → stages → optional materialize (default product path)
+  run          Drain feed → deepseek-v4-flash stages → materialize (product default)
   golden       Evaluate fixtures/agentic/v1/golden-12 offline
   list-held    List agentic_v1 hold proposals for human review
   list-claims  List proposals that materialized draft Claims (P5; accept still human)
@@ -2494,16 +2560,18 @@ SUBCOMMANDS
   promote-held Human correction of side-channel holds (not happy path; ADR 0018)
   accept-claim Optional formal AcceptanceDecision stamp (never required for usable meaning)
   retract      Human correction: supersede wrongly promoted unit (requires --human-confirmed)
-  timer        Install/uninstall 30m always-on batch runner (launchd/systemd user)
+  timer        Install 30m always-on Flash batch (launchd/systemd; loads ~/.carpeos/v5-provider.env)
 
 HARD FENCES
   - Capture inserts feed only (no LLM/network/await in capture transaction)
-  - Real model id only: deepseek-v4-flash (live requires --allow-network + DEEPSEEK_API_KEY)
+  - Real model id only: deepseek-v4-flash (product default; offline: --allow-network false)
+  - Credentials: DEEPSEEK_API_KEY env or ~/.carpeos/v5-provider.env (never commit)
   - No automatic AcceptanceDecision
   - Kill switch: CARPEOS_AGENTIC=0|off (skips feed + runner)
+  - Network kill: CARPEOS_AGENTIC_NETWORK=off
   - Sidecar DB: <home>/agentic/agentic.sqlite
 
-See: docs/adr/0017-agentic-layer-write-time-knowledge.md, docs/maintainers/v6-milestones.md
+See: docs/adr/0017-…, docs/adr/0018-…, docs/architecture/agentic-layer.md
 `;
     case "v5":
       return `carpeos v5 — opt-in draft-only lane (DeepSeek Direct primary)
