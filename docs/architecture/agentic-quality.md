@@ -38,7 +38,7 @@ prose (metadata ratio 0 among top promoted-class hits).
 | Q-S2 | Zero promotes from `must_not_promote` | **green** |
 | Q-S3 | Per-kind recall ≥80%, ≥10 fixtures/kind (decision/constraint/preference) | **green** — report `per_kind_recall` |
 | Q-S4 | Versioned counters; default flush/run redact | **green** |
-| Q-S5 | Advisory dogfood N≥30 / ≥7d; meta among promoted ≤0 | **advisory** — sample path green; accrual ongoing |
+| Q-S5 | Advisory dogfood N≥30 / ≥7d; meta among promoted ≤0 | **advisory pass** — N≥30 + meta 0 (see qs5 receipt + `scripts/quality-qs5-metrics.mjs`) |
 | Q-S6 | No capture LLM; Flash-only; no auto AcceptanceDecision | **green** |
 | Q-S7 | Triage keep ≤2 Flash calls; drop ≤1 | **green** — `packages/agentic/test/flash-budget.test.ts` + runner design |
 | Q-S8 | Korean + mixed + NFC/NFD grounding | **green** — KO fixtures + CJK unit tests |
@@ -50,7 +50,17 @@ prose (metadata ratio 0 among top promoted-class hits).
 | Q-S14 | Mixed decision+tool not whole-signal admit drop | **green** — line-scoped admit |
 
 **Definition of done (automated):** Q-S1–Q-S4, Q-S6–Q-S14 green in unit/corpus suites.  
-**Q-S5** remains advisory maintainer smoke (not a release blocker).
+**Q-S5** is advisory maintainer smoke (not a release blocker); numeric floor N≥30 + meta 0
+is recorded in [../maintainers/quality-ultragoal-qs5-receipt.md](../maintainers/quality-ultragoal-qs5-receipt.md).
+
+## Residual closeout (post-DoD)
+
+| Item | Status |
+| --- | --- |
+| Privacy scrub: emails / IPs / DNS hostnames | **shipped** (`scrubAgenticPackText`) |
+| Near-dup promote hold (within pack) | **shipped** (`near_duplicate_statement`) |
+| Retrieval rebuild must not fail-close materialize | **shipped** (`project_hook_failed` soft path) |
+| Q-S5 metric helper | **shipped** (`scripts/quality-qs5-metrics.mjs`) |
 
 ## Fences (unchanged)
 
