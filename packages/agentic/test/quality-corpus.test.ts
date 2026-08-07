@@ -71,8 +71,7 @@ describe("quality corpus DoD (baseline #2)", () => {
   it("Q-S9 style: promoted statements exclude metadata boilerplate", () => {
     const db = new DatabaseSync(":memory:");
     const report = evaluateQualityManifest(db, loadQualityManifest(manifestPath), { now });
-    const meta =
-      /hook event is SessionEnd|session id is|The agent type is|agentic\.evidence/i;
+    const meta = /hook event is SessionEnd|session id is|The agent type is|agentic\.evidence/i;
     for (const r of report.results.filter((x) => x.observed === "promote")) {
       for (const p of r.pipeline.proposals.filter((x) => x.gate.decision === "promote")) {
         expect(meta.test(p.candidate.statement)).toBe(false);

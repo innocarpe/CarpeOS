@@ -13,7 +13,13 @@ describe("Q-S7 Flash per-row budget", () => {
       calls += 1;
       return new Response(
         JSON.stringify({
-          choices: [{ message: { content: JSON.stringify({ decision: "drop", reason_codes: ["tool_noise"] }) } }],
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ decision: "drop", reason_codes: ["tool_noise"] }),
+              },
+            },
+          ],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
@@ -40,7 +46,18 @@ describe("Q-S7 Flash per-row budget", () => {
       calls += 1;
       const body =
         calls === 1
-          ? { choices: [{ message: { content: JSON.stringify({ decision: "keep", reason_codes: ["decision_class_signal"] }) } }] }
+          ? {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      decision: "keep",
+                      reason_codes: ["decision_class_signal"],
+                    }),
+                  },
+                },
+              ],
+            }
           : {
               choices: [
                 {
@@ -49,8 +66,10 @@ describe("Q-S7 Flash per-row budget", () => {
                       candidates: [
                         {
                           kind: "decision",
-                          statement: "Decision: we will require make preflight before opening any pull request.",
-                          quote: "Decision: we will require make preflight before opening any pull request.",
+                          statement:
+                            "Decision: we will require make preflight before opening any pull request.",
+                          quote:
+                            "Decision: we will require make preflight before opening any pull request.",
                           confidence: 0.9,
                         },
                       ],
