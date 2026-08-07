@@ -33,7 +33,9 @@ export type AgenticPipelineInput = {
   sibling_unit_event_ids?: readonly string[];
   mode?: AgenticStageMode;
   allow_network?: boolean;
+  /** Product default true (ADR 0018). Set false or hold_first for debug staging. */
   allow_auto_promote?: boolean;
+  hold_first?: boolean;
   now?: Date;
   /** Optional agentic-off kill switch. */
   agentic_enabled?: boolean;
@@ -208,7 +210,9 @@ export function runAgenticProposalPipeline(
       candidate,
       cite_ok: verified.cite_ok,
       secret_ok: verified.secret_ok,
-      allow_auto_promote: input.allow_auto_promote === true,
+      // ADR 0018: promote-when-verified is default; hold_first only when explicitly false
+      allow_auto_promote: input.allow_auto_promote !== false,
+      ...(input.hold_first === true ? { hold_first: true } : {}),
     });
     const gateWithStructure = {
       ...gate,

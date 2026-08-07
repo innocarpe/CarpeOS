@@ -32,10 +32,10 @@ export type AgenticMaterializeTargets = {
 };
 
 /**
- * Materialize targets by kind.
- * fact_candidate: Claim only (ADR D7).
- * decision: Observation + optional draft Claim.
- * other kinds: Observation only.
+ * Materialize targets by kind (ADR 0018 D4).
+ * - decision: Observation-primary + optional draft Claim
+ * - fact_candidate: draft Claim only (not v1 usable allowlist / not auto-promoted)
+ * - constraint/preference/procedure: Observation only
  */
 export function materializeTargetsForKind(kind: AgenticKnowledgeKind): AgenticMaterializeTargets {
   if (kind === "fact_candidate") {

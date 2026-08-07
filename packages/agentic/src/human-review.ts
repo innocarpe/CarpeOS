@@ -1,7 +1,8 @@
 /**
- * Human review paths for Product 6 complete topology.
- * - Promote/reject held agentic_v1 dispositions (Observation lifecycle).
+ * Human review / correction paths for Product 6 (ADR 0018 D6).
+ * - Promote/reject held agentic_v1 dispositions (side-channel holds only).
  * - Accept/reject draft Claims via human-only AcceptanceDecision writer.
+ * - Retract wrongly promoted units via append-only Supersession (D4b).
  * Never auto-invoked by processAgenticOnce.
  */
 
@@ -129,6 +130,74 @@ export function humanAcceptAgenticClaim(input: AgenticAcceptClaimInput): Agentic
     reason_codes: [
       `human_claim_${input.decision}`,
       "acceptance_decision_human_only",
+      result.status === "replay" ? "replay" : "recorded",
+    ],
+    error: null,
+  };
+}
+
+export type AgenticRetractUnitInput = {
+  store: LocalCaptureStore;
+  /** Observation or Claim event_id to remove from default search. */
+  event_id: string;
+  reason: string;
+  decided_by: string;
+  human_confirmed: true;
+  replacement_event_id?: string;
+};
+
+export type AgenticRetractUnitResult = {
+  schema: "carpeos.agentic.retract-unit-result/v1";
+  ok: boolean;
+  event_id: string;
+  supersession_event_id: string | null;
+  reason_codes: string[];
+  error: string | null;
+};
+
+/**
+ * Human correction: retract a wrongly promoted unit (ADR 0018 D4b / S7).
+ * Append-only Supersession — never rewrites history; never auto-invoked.
+ */
+export function humanRetractAgenticUnit(input: AgenticRetractUnitInput): AgenticRetractUnitResult {
+  if (input.human_confirmed !== true) {
+    return {
+      schema: "carpeos.agentic.retract-unit-result/v1",
+      ok: false,
+      event_id: input.event_id,
+      supersession_event_id: null,
+      reason_codes: ["human_confirmed_required"],
+      error: "human_confirmed must be true",
+    };
+  }
+  const result = input.store.recordHumanSupersession({
+    supersedesEventId: input.event_id,
+    reason: input.reason,
+    decidedBy: input.decided_by,
+    humanConfirmed: true,
+    ...(input.replacement_event_id !== undefined
+      ? { replacementEventId: input.replacement_event_id }
+      : {}),
+  });
+  if (result.status === "failed") {
+    return {
+      schema: "carpeos.agentic.retract-unit-result/v1",
+      ok: false,
+      event_id: input.event_id,
+      supersession_event_id: null,
+      reason_codes: ["human_retract_failed"],
+      error: result.error,
+    };
+  }
+  return {
+    schema: "carpeos.agentic.retract-unit-result/v1",
+    ok: true,
+    event_id: input.event_id,
+    supersession_event_id: result.event_id,
+    reason_codes: [
+      "human_retract_supersession",
+      "agentic_v1",
+      "correction_only",
       result.status === "replay" ? "replay" : "recorded",
     ],
     error: null,
