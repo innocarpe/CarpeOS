@@ -7,7 +7,7 @@ knowledge, and retrieve it for humans and agents.
 
 ```sh
 # npm — current public release
-npm install -g @innocarpe/carpeos@6.7.6
+npm install -g @innocarpe/carpeos@6.7.7
 
 # one-liner (curl)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-The current public release is **`6.7.6`** (grounded extract cite belt + agentic quality substrate + HITL-free Agentic Layer with
+The current public release is **`6.7.7`** (grounded extract cite belt + agentic quality substrate + HITL-free Agentic Layer with
 **deepseek-v4-flash product path**, plus `agentic feed` / `flush`). Activate with
 the exact version pin and `carpeos setup doctor`. Always-on Flash batch:
 `carpeos agentic timer install`. Versions follow

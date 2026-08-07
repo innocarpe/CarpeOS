@@ -14,6 +14,14 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 - (none yet — fold entries here before the next release)
 
+## [6.7.7] - 2026-08-08
+
+### Added
+
+- Cross-session **near-dup promote hold** for recent zone promotes (`near_duplicate_statement_recent`).
+- **Denser host adapters** for agentic signal extract (nested Cursor/Codex/Grok fields, content arrays,
+  extra transcript roots under `~/.cursor` / `~/.gajae` / `~/.agents`).
+
 ## [6.7.6] - 2026-08-07
 
 ### Added
