@@ -1,7 +1,8 @@
 # Agentic quality plane (ultragoal)
 
-Status: **DoD automated criteria closed at package `@innocarpe/carpeos@6.7.4+`**  
-Date: 2026-08-07  
+Status: **quality ultragoal closed through package `@innocarpe/carpeos@6.7.7`**
+(automated DoD + residual + optional polish).  
+Date: 2026-08-08  
 SSOT plan: [../plans/agentic-quality-ultragoal.md](../plans/agentic-quality-ultragoal.md)
 
 ## North star

@@ -1,12 +1,17 @@
 # Product 6.0.0 — Definition of Done (maintainers)
 
-Status: **Product 6 major thesis complete through `@innocarpe/carpeos@6.6.0`.**
+Status: **Product 6 major thesis complete through `@innocarpe/carpeos@6.6.0`;
+quality plane closed through `@innocarpe/carpeos@6.7.7`.**
 
 - **6.0.0** — hold-first Agentic Layer (P0–P2 product loop)
 - **6.1–6.4** — P3 precision, P4 links, P5 draft Claims, P6 GraphRAG
 - **6.5.0** — E10 reconcile + human correction surface + feed backfill
 - **6.6.0** — **HITL-free promote-when-verified** (ADR 0018): E5 grounding,
   licensing corpus, retract, day spend, feed lease, 30m timer
+- **6.7.0–6.7.7** — **agentic quality ultragoal closed** (prepared pack +
+  redaction + line-scoped admit + transcript recovery + CJK + provenance filter +
+  triage/extract v2 + cite belt + corpus DoD + Q-S5 metrics + near-dup + denser
+  host adapters; policy **`agentic_v1.1`**)
 
 Base package: multi-host setup + V5 draft lane + Product 6 agentic compound loop.
 
@@ -40,6 +45,7 @@ Post-capture Agentic Layer forms **grounded, typed, graph-linked knowledge** und
 | **P6** GraphRAG ranking | typed promoted units improve retrieval | 6.4.0 |
 | **E10 + human + backfill** | reconcile; human accept/promote; history feed | 6.5.0 |
 | **HITL-free flip** | promote-when-verified + retract + timer + day spend | **6.6.0** |
+| **Quality ultragoal** | usable promote density + offline corpus DoD + residual polish | **6.7.7** |
 
 ## Code DoD (6.6.0 complete product claim)
 
@@ -55,6 +61,18 @@ Post-capture Agentic Layer forms **grounded, typed, graph-linked knowledge** und
 - [x] `CARPEOS_AGENTIC=off` / hold-first escape
 - [x] CHANGELOG `[6.6.0]` honest
 - [x] Local activation of exact `@innocarpe/carpeos@6.6.0`
+
+## Quality plane DoD (6.7.7)
+
+- [x] Prepared pack + effective Flash views; default report redaction
+- [x] Line-scoped admit; live no-fake; Flash timeout/requeue
+- [x] Transcript recovery (agentic mode); CJK/NFC grounding
+- [x] Provenance quality filter; triage/extract v2 + cite clamp
+- [x] Quality corpus baseline #2 exact-expect green (Q-S1–S3, S7–S9, S13)
+- [x] Q-S5 advisory metrics helper + N≥30 / meta 0 receipt
+- [x] Near-dup hold (within-pack + recent zone); denser host adapters
+- [x] Architecture notes: [agentic-quality.md](../architecture/agentic-quality.md)
+- [x] Local activation of exact `@innocarpe/carpeos@6.7.7`
 
 ## Hard fences
 
@@ -84,6 +102,7 @@ CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 - Live Flash remains network opt-in (timer defaults network-off)
 - Hosted graph/vector not claimed
 - Live recorded-Flash licensing corpus (CI stays offline fake)
+- Q-S5 wall-clock “real sessions for 7 days” remains operator habit (numeric floor shipped)
 
 ## Related
 
@@ -91,5 +110,6 @@ CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 - [ADR 0018](../adr/0018-agentic-hitl-free-compound-loop.md)
 - [PRD-v6](../PRD-v6.md)
 - [architecture/agentic-layer.md](../architecture/agentic-layer.md)
+- [architecture/agentic-quality.md](../architecture/agentic-quality.md)
 - [v6-milestones.md](v6-milestones.md)
 - [product-5.0.0.md](product-5.0.0.md)

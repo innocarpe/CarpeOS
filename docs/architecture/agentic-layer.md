@@ -1,7 +1,7 @@
 # Agentic Layer architecture (Product 6)
 
-Status: **shipped** through `@innocarpe/carpeos@6.6.0` (ADR 0017 machinery +
-**ADR 0018 HITL-free promote-when-verified** defaults).
+Status: **shipped** through `@innocarpe/carpeos@6.7.7` (ADR 0017 machinery +
+**ADR 0018 HITL-free promote-when-verified** defaults + **quality plane** closed).
 
 | Slice | npm | Notes |
 | --- | --- | --- |
@@ -9,6 +9,7 @@ Status: **shipped** through `@innocarpe/carpeos@6.6.0` (ADR 0017 machinery +
 | P3–P6 | 6.1–6.4 | Precision, links, draft Claims, GraphRAG ranking |
 | E10 + human correction + backfill | 6.5.0 | Reconcile, promote-held, accept-claim, feed backfill |
 | **HITL-free compound loop** | **6.6.0** | Promote-when-verified, retract, day spend, feed lease, 30m timer |
+| **Quality plane (ultragoal)** | **6.7.0–6.7.7** | Prepared pack views, redaction, line-scoped admit, transcript recovery, CJK grounding, provenance quality filter, triage/extract v2 + cite belt, corpus DoD, near-dup, denser host adapters; policy **`agentic_v1.1`** |
 
 ## Why this layer exists
 
@@ -41,14 +42,15 @@ flowchart TB
     J[Durable jobs + feed lease]
     S[E1 admit → E2 pack → E3/E4 Flash optional]
     V[E5 deterministic verify + statement grounding]
-    G[E7 agentic_v1 gate promote-when-verified]
+    G[E7 agentic_v1.1 gate promote-when-verified]
+    Q[Quality belt scrub / cite / near-dup]
     M[E8 materialize active Observation / draft Claim]
   end
 
   subgraph store [Canonical store]
     O[Observation active]
     CL[Claim draft optional]
-    D[Disposition agentic_v1]
+    D[Disposition agentic_v1.1]
     SUP[Supersession human retract]
   end
 
@@ -60,7 +62,7 @@ flowchart TB
 
   H --> C --> E
   E --> A
-  E --> T --> J --> S --> V --> G --> M
+  E --> T --> J --> S --> V --> G --> Q --> M
   M --> O
   M --> CL
   M --> D
@@ -75,9 +77,11 @@ Hosts (hooks, fail-open, no LLM)
   → Local capture → EvidenceArtifact + agentic_capture_feed
   → [optional] adj_v3 prefilter
   → Agentic runner (timer every 30m or carpeos agentic run)
-       E1 admit → E2 pack → E3/E4 (fake|Flash) → E5 verify (statement grounded)
-       → E7 gate promote-when-verified → E8 active Observation (+ optional draft Claim)
-       → E9 projection rebuild hook
+       E1 admit (line-scoped) → E2 prepared pack + scrubbed views
+       → E3/E4 (fake|Flash, triage/extract v2) → E5 verify (statement grounded)
+       → quality filter + near-dup → E7 gate promote-when-verified (agentic_v1.1)
+       → E8 active Observation (+ optional draft Claim)
+       → E9 projection rebuild hook (soft-fail)
   → MCP / CLI default search (promoted/active)
   → next agent session
 
@@ -127,11 +131,14 @@ flowchart TD
 | --- | --- |
 | Capture feed insert | Fail-open; no await LLM |
 | `carpeos agentic run --once --materialize` | Bounded drain |
+| `carpeos agentic flush` | Operator drain (same path as timer; redacted JSON by default) |
 | **30m user timer** | `carpeos agentic timer install` (launchd / systemd user) |
 | Feed lease | Mutual exclusion for concurrent runners |
 | Day spend | Persistent UTC caps in agentic DB |
 | Extract gate | Flash extract only after triage keep |
 | Network | **Off by default**; `--allow-network` + key for live Flash |
+| Quality corpus | Offline exact-expect fixtures (`fixtures/agentic/v1/quality-ultragoal/`) |
+| Q-S5 metrics | `node scripts/quality-qs5-metrics.mjs --days 7` (advisory) |
 
 Kill: `CARPEOS_AGENTIC=off`.
 
@@ -153,15 +160,15 @@ Kill: `CARPEOS_AGENTIC=off`.
 | Stage | Role |
 | --- | --- |
 | E0 | Capture + feed enqueue (no LLM) |
-| E1 | Rule admit |
-| E2 | Redact / EvidencePack |
-| E3 | LLM triage (optional network) |
-| E4 | LLM extract (gated on triage keep) |
-| E5 | Deterministic verify + statement grounding |
+| E1 | Rule admit (line-scoped tool/secret noise) |
+| E2 | Redact / prepared EvidencePack + effective Flash views |
+| E3 | LLM triage v2 (optional network; local decision override belt) |
+| E4 | LLM extract v2 (gated on triage keep; cite clamp / local fallback) |
+| E5 | Deterministic verify + statement grounding (CJK/NFC) |
 | E6 | Lineage / structure markers |
-| E7 | Gate `agentic_v1` |
+| E7 | Gate `agentic_v1.1` (+ quality filter, near-dup hold) |
 | E8 | Materialize Observation / draft Claim |
-| E9 | Project / GraphRAG rebuild hook |
+| E9 | Project / GraphRAG rebuild hook (soft-fail on rebuild error) |
 | E10 | Reconcile proposals (human apply path) |
 
 ## Ontology and graph
@@ -169,7 +176,8 @@ Kill: `CARPEOS_AGENTIC=off`.
 Kinds and edges: ADR 0017 D7–D8; product visibility: ADR 0018 D4.
 
 - **Decision dual-write:** Observation-primary (usable) + optional draft Claim.
-- **Formation audit:** disposition reason codes include `formation:agentic_v1`.
+- **Formation audit:** disposition reason codes include `formation:agentic_v1.1`
+  (quality-era stamp; legacy `agentic_v1` rows remain selectable).
 - Graph remains rebuildable projection (`graph_v2`).
 
 ## Human correction surface (not happy path)
@@ -203,12 +211,14 @@ Kinds and edges: ADR 0017 D7–D8; product visibility: ADR 0018 D4.
 | Graph/retrieval | `packages/retrieval` |
 | CLI | `apps/carpeos-cli` `agentic *` |
 | Timer | `scripts/install-agentic-timer.sh` |
-| Golden / licensing fixtures | `fixtures/agentic/v1/` |
+| Golden / licensing / quality fixtures | `fixtures/agentic/v1/` (+ `quality-ultragoal/`) |
+| Quality metrics | `scripts/quality-qs5-metrics.mjs` |
 
 ## Related
 
 - [ADR 0017](../adr/0017-agentic-layer-write-time-knowledge.md) — write-time machinery
 - [ADR 0018](../adr/0018-agentic-hitl-free-compound-loop.md) — HITL-free product contract
+- [agentic-quality.md](agentic-quality.md) — quality ultragoal DoD + residual polish
 - [overview.md](overview.md)
 - [PRD-v6](../PRD-v6.md)
 - [product-6.0.0.md](../maintainers/product-6.0.0.md)

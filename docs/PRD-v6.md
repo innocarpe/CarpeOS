@@ -1,9 +1,12 @@
 # PRD v6 — CarpeOS 6.x (Agentic Layer)
 
-Status: **Product 6 Agentic Layer shipped through `@innocarpe/carpeos@6.6.0`** —
-P0–P6 machinery (6.0–6.4), complete topology residuals (6.5), and **HITL-free
-promote-when-verified defaults** (6.6 / ADR 0018). Hard fences unchanged: no
-capture LLM; no auto `AcceptanceDecision`; Flash-only for live stages.
+Status: **Product 6 Agentic Layer shipped through `@innocarpe/carpeos@6.7.7`** —
+P0–P6 machinery (6.0–6.4), complete topology residuals (6.5), **HITL-free
+promote-when-verified defaults** (6.6 / ADR 0018), and the **agentic quality
+plane closed** (6.7.x ultragoal: prepared packs, redaction, line-scoped admit,
+transcript recovery, cite grounding, quality corpus DoD, near-dup, denser host
+adapters; policy **`agentic_v1.1`**). Hard fences unchanged: no capture LLM; no
+auto `AcceptanceDecision`; Flash-only for live stages.
 
 Series: [PRD-v1](PRD-v1.md) · [PRD-v2](PRD-v2.md) · [PRD-v3](PRD-v3.md) ·
 [PRD-v4](PRD-v4.md) · [PRD-v5](PRD-v5.md) · **PRD-v6**
@@ -33,7 +36,7 @@ for compound value.
 | | 5.0 | **6.x** |
 | --- | --- | --- |
 | Question | Can LLM drafts stay non-canonical? | **Can a brain form meaning at write time?** |
-| Core engine | draft extract sandbox (`@carpeos/v5`) | **agentic jobs + Flash multi-stage + agentic_v1 gate** |
+| Core engine | draft extract sandbox (`@carpeos/v5`) | **agentic jobs + Flash multi-stage + agentic_v1.1 gate + quality plane** |
 | Success signal | offline contracts + draft CLI | **cited active Observations + denser meaning graph + retrieval usefulness** |
 | Failure if skipped | privacy leak / false authority from drafts | **eternal sensory store; GraphRAG on noise** |
 
@@ -67,6 +70,9 @@ for compound value.
 8. Always-on brain: **30m timer** + feed lease + persistent day spend.
 9. Human tools = **correction only** (retract, promote-held, accept-claim).
 10. Metrics: cite integrity, precision, retrieval usefulness — not Evidence counts.
+11. **Quality plane:** usable promote density (decision/constraint/preference),
+    metadata-zero among promoted, offline exact-expect corpus, denser host signal
+    recovery without capture LLM.
 
 ---
 
@@ -92,7 +98,7 @@ for compound value.
 - R2: E1 rule admit drops tool-noise classes at adj baseline or better.
 - R3: E2–E4 use V5 redact/pack + Flash extract with **mandatory citations**.
 - R4: E5 deterministic verify **including statement grounding** before promote.
-- R5: E7 `agentic_v1` promote-when-verified for allowlist kinds.
+- R5: E7 `agentic_v1.1` promote-when-verified for allowlist kinds (quality-era stamp).
 - R6: E8 appends active Observation and optional **draft** Claim via store writers.
 - R7: Graph/retrieval rebuild from canonical meaning.
 - R8: Human retract / promote-held / accept-claim remain available as **correction**.
@@ -117,8 +123,9 @@ See [architecture/agentic-layer.md](architecture/agentic-layer.md),
 ```text
 hooks → Evidence + agentic_capture_feed (no LLM)
      → agentic jobs (Flash multi-stage when network on)
+     → prepared pack + quality belt (admit line-scope, scrub, cite, near-dup)
      → E5 statement-grounded verify
-     → agentic_v1 promote-when-verified
+     → agentic_v1.1 promote-when-verified
      → active Observation / draft Claim + provenance
      → retrieval + graph projections
      → human retract only when wrong
@@ -148,6 +155,10 @@ hooks → Evidence + agentic_capture_feed (no LLM)
 | 6.1–6.4 | P3 precision, P4 links, P5 draft Claims, P6 GraphRAG |
 | 6.5.0 | E10 reconcile + human accept/promote + feed backfill |
 | **6.6.0** | **HITL-free promote-when-verified + retract + day spend + 30m timer** |
+| **6.7.0–6.7.7** | **Quality ultragoal closed** — substrate + corpus DoD + cite belt + Q-S5 metrics + near-dup + denser hosts (`agentic_v1.1`) |
+
+Quality DoD detail: [architecture/agentic-quality.md](architecture/agentic-quality.md),
+[plans/agentic-quality-ultragoal.md](plans/agentic-quality-ultragoal.md).
 
 ---
 
@@ -156,3 +167,4 @@ hooks → Evidence + agentic_capture_feed (no LLM)
 - [product-6.0.0.md](maintainers/product-6.0.0.md)
 - [v6-milestones.md](maintainers/v6-milestones.md)
 - [architecture/agentic-layer.md](architecture/agentic-layer.md)
+- [architecture/agentic-quality.md](architecture/agentic-quality.md)

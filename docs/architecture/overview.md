@@ -1,11 +1,13 @@
 # CarpeOS Architecture Overview
 
-Status: current-main architecture after **`@innocarpe/carpeos@6.6.0`** —
-**HITL-free Agentic Layer** (ADR 0017 machinery + ADR 0018 promote-when-verified).
-Local canonical store + adjudication + retrieval remain core; agentic is the
-post-capture brain that compounds usable meaning **without required human
-review**. Product 4 trust/evidence and Product 5 draft cortex remain as shipped.
-Hosted deployment is still not claimed.
+Status: current-main architecture after **`@innocarpe/carpeos@6.7.7`** —
+**HITL-free Agentic Layer** (ADR 0017 machinery + ADR 0018 promote-when-verified)
+plus the **agentic quality plane** (6.7.x: prepared packs / redaction / cite
+grounding / quality corpus DoD / near-dup / denser host adapters — policy
+`agentic_v1.1`). Local canonical store + adjudication + retrieval remain core;
+agentic is the post-capture brain that compounds usable meaning **without
+required human review**. Product 4 trust/evidence and Product 5 draft cortex
+remain as shipped. Hosted deployment is still not claimed.
 
 CarpeOS keeps private knowledge in a local canonical store and derives
 rebuildable, non-authoritative read models from it. The canonical boundary is not
@@ -26,7 +28,7 @@ a graph, vector index, MCP response, export, or provider payload.
 | Product 4 trust/evidence plane (P4_0, evaluator, raw producer, publisher schemas, observed sandbox) | **Shipped** on npm `@innocarpe/carpeos@4.0.0` | Fail-closed without independent live authority; synthetic fixtures are not live authority |
 | Product 4 live trust-plane workflows | In tree; **workflow_dispatch-only** until ownership activation | Not every-PR; not self-granted authority |
 | Product 5 draft lane (`carpeos v5`) | **Shipped on npm** through `@innocarpe/carpeos@5.x` | `canonical_effect: "none"`; not capture hot path; M8 authority seam deferred |
-| Product 6 Agentic Layer (`@carpeos/agentic`) | **HITL-free shipped** on npm `@innocarpe/carpeos@6.6.0` | Post-capture feed + Flash-only multi-stage + **promote-when-verified** usable Observations; retract + day spend + 30m timer; no capture LLM; no auto AcceptanceDecision |
+| Product 6 Agentic Layer (`@carpeos/agentic`) | **HITL-free shipped** from `@innocarpe/carpeos@6.6.0`; **quality plane closed through 6.7.7** | Post-capture feed + Flash-only multi-stage + **promote-when-verified** (`agentic_v1.1`); quality belt (scrubbed pack views, line-scoped admit, cite clamp, near-dup, denser hosts); retract + day spend + 30m timer; no capture LLM; no auto AcceptanceDecision |
 
 Source evidence: [local store](../../packages/local-store/src/store.ts),
 [retrieval](../../packages/retrieval/src/query.ts),
@@ -47,7 +49,7 @@ flowchart LR
   subgraph brains [Write-time meaning]
     Ev --> Adj[adj_v3 prefilter]
     Ev --> Feed[agentic_capture_feed]
-    Feed --> Ag[Agentic Layer<br/>promote-when-verified]
+    Feed --> Ag[Agentic Layer<br/>promote-when-verified<br/>quality plane v1.1]
     Adj --> Disp[Dispositions]
     Ag --> Obs[Active Observation]
     Ag --> Draft[Draft Claim optional]

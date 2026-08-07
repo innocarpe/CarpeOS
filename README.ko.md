@@ -93,7 +93,7 @@ Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture �
 | 평면 | 역할 | 기본 |
 | --- | --- | --- |
 | **`adj_v3`** | 저비용 규칙 프리필터 / 노이즈 거부 | 비교 기준선으로 유지 |
-| **Agentic Layer** (`agentic_v1`) | 인용·타입 brain (네트워크 시 Flash-only) | **6.6.0부터 Product 6 happy path** |
+| **Agentic Layer** (`agentic_v1.1`) | 인용·타입 brain (네트워크 시 Flash-only) + **quality plane** | **6.6.0부터 Product 6 happy path**; quality ultragoal은 **6.7.7**까지 닫힘 |
 
 | Disposition | 의미 단위 | 기본 검색 |
 | --- | --- | --- |
@@ -387,6 +387,9 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 | Product 3.0 DoD (retrieval-first 그래프) | [docs/maintainers/product-3.0.0.md](docs/maintainers/product-3.0.0.md) |
 | Product 3.1 DoD (OKF v0.2 export) | [docs/maintainers/product-3.1.0.md](docs/maintainers/product-3.1.0.md) |
 | Product 3.2 DoD (B0 reconciliation preview) | [docs/maintainers/product-3.2.0.md](docs/maintainers/product-3.2.0.md) |
+| Product 6 Agentic 아키텍처 | [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md) |
+| Agentic quality plane | [docs/architecture/agentic-quality.md](docs/architecture/agentic-quality.md) |
+| Product 6 DoD | [docs/maintainers/product-6.0.0.md](docs/maintainers/product-6.0.0.md) |
 | 버전·릴리스 | [docs/maintainers/versioning-and-releases.md](docs/maintainers/versioning-and-releases.md) |
 | Sync / multi-Mac | [docs/guides/cross-mac-bootstrap-recovery.md](docs/guides/cross-mac-bootstrap-recovery.md) |
 | Memory capacity plan | [docs/plans/k3-memory-capacity-master-plan.md](docs/plans/k3-memory-capacity-master-plan.md) |
@@ -397,18 +400,23 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 
 현재 npm 패키지는 **`@innocarpe/carpeos@6.7.7`** (`v6.7.7`)입니다. adjudication + retrieval
 운영 루프, Product 4 trust plane, opt-in Product 5 draft lane, **Product 6 HITL-free
-Agentic Layer**(promote-when-verified, retract, day spend, **30분 timer** — ADR 0018;
-capture는 dumb; human tools는 보정 전용)가 포함됩니다.
-전체 major/minor thesis·DoD:
+Agentic Layer**(promote-when-verified + 30분 timer — ADR 0018)와 **agentic quality
+plane**(6.7.x: prepared pack, 기본 리포트 적색화, line-scoped admit, cite grounding,
+quality corpus DoD, near-dup, denser host adapters)까지 포함합니다. 캡처는 dumb하고,
+사람 도구는 교정 전용입니다.
+
+전체 major/minor thesis·DoD 인덱스:
 
 - [docs/PRD.md](docs/PRD.md)
 - [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md)
+- [docs/architecture/agentic-quality.md](docs/architecture/agentic-quality.md)
 - [docs/maintainers/](docs/maintainers/) (`product-N.0.0.md`, 예:
   [6.0.0](docs/maintainers/product-6.0.0.md), [5.0.0](docs/maintainers/product-5.0.0.md))
 
-잔여(초록 발명 금지): live Product 4 release authority 대역 외, B1 apply deferred,
-hosted graph/edge 미주장, V5는 capture hot path에 없음, procedure auto-promote는
-여전히 hold-biased, live Flash는 네트워크 opt-in.
+정직한 residual (초록 발명 금지): live Product 4 권한은 out of band; B1 apply 지연;
+호스티드 graph/edge 미주장; V5는 capture hot path 아님; procedure auto-promote는
+hold-biased; live Flash는 network opt-in; Q-S5 dogfood는 advisory
+(`scripts/quality-qs5-metrics.mjs`).
 
 ---
 
@@ -422,7 +430,8 @@ release authority를 뜻하지 **않습니다**.
 
 ```text
 hooks → 암호화 증거 → agentic_capture_feed (capture에 LLM 없음)
-  → agentic run / 30분 timer (promote-when-verified)
+  → agentic flush / run / 30분 timer (promote-when-verified, agentic_v1.1)
+  → quality belt (line-scoped admit, scrub pack, cite clamp, near-dup)
   → 기본 검색의 active Observation
   → retrieval-first 그래프/하이브리드 회상 → MCP / CLI
   (+ adj_v3 기준선, 로컬 OKF export, 선택 private sync, Obsidian)
@@ -430,6 +439,7 @@ hooks → 암호화 증거 → agentic_capture_feed (capture에 LLM 없음)
 # Kill: CARPEOS_AGENTIC=off
 # 스테이징: CARPEOS_AGENTIC_HOLD_FIRST=1
 # Live Flash: carpeos agentic run --once --allow-network --materialize
+# Q-S5 advisory: node scripts/quality-qs5-metrics.mjs --days 7
 ```
 
 | 영역 | 상태 |
@@ -446,7 +456,7 @@ hooks → 암호화 증거 → agentic_capture_feed (capture에 LLM 없음)
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
 | OKF v0.2 export projection | **3.1에 출시** — 로컬 export만 |
 | Product 3.x–5.x | **출시** — `docs/maintainers/` DoD |
-| Product 6 Agentic Layer (`carpeos agentic`) | **6.6.0 HITL-free 출시** — promote-when-verified, retract, day spend, 30분 timer; [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md) |
+| Product 6 Agentic Layer (`carpeos agentic`) | **6.6.0 HITL-free 출시**; **quality plane은 6.7.7까지 닫힘** (`agentic_v1.1`, corpus DoD, cite belt, near-dup, denser hosts); [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md), [agentic-quality](docs/architecture/agentic-quality.md) |
 | `carpeos setup` / one-stop install | 출시 (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
