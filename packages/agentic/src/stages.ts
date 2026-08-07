@@ -62,7 +62,7 @@ export type AgenticExtractResult = {
 };
 
 const DECISION_RE =
-  /\b(decision|we (will|decided|shall)|require|must never|constraint|preference|default)\b/i;
+  /\b(decision|we (will|decided|shall)|require|must never|constraint|preference|default)\b|(결정|선호|반드시|제약|기본값)/i;
 /** P5: factual / open-question signals also keep for extract (not noise). */
 const FACT_RE =
   /\b(fact|fact_candidate|because|therefore|precision|suite requires|is true|measured)\b/i;
@@ -374,11 +374,20 @@ function normalizeKind(v: string | undefined): AgenticKnowledgeKind | null {
 }
 
 function inferKind(text: string): AgenticKnowledgeKind {
-  if (/\bconstraint\b/i.test(text) || /\bmust never\b/i.test(text)) return "constraint";
-  if (/\bpreference\b/i.test(text) || /\bprefer\b/i.test(text)) return "preference";
-  if (/\bprocedure\b/i.test(text) || /\bhow to\b/i.test(text)) return "procedure";
-  if (/\bdecision\b/i.test(text) || /\bwe (will|decided)\b/i.test(text)) return "decision";
-  if (/\?/.test(text)) return "open_question";
+  if (/\bconstraint\b/i.test(text) || /\bmust never\b/i.test(text) || /제약/.test(text))
+    return "constraint";
+  if (/\bpreference\b/i.test(text) || /\bprefer\b/i.test(text) || /선호/.test(text))
+    return "preference";
+  if (/\bprocedure\b/i.test(text) || /\bhow to\b/i.test(text) || /절차/.test(text))
+    return "procedure";
+  if (
+    /\bdecision\b/i.test(text) ||
+    /\bwe (will|decided)\b/i.test(text) ||
+    /결정/.test(text) ||
+    /반드시/.test(text)
+  )
+    return "decision";
+  if (/\?/.test(text) || /？/.test(text)) return "open_question";
   return "fact_candidate";
 }
 

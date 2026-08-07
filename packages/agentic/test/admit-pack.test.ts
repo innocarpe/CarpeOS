@@ -55,6 +55,25 @@ describe("E1 ruleAdmitEvidence", () => {
     ).toBe("drop");
   });
 
+  it("Q2.5′ keeps mixed decision+tool/secret lines (line-scoped)", () => {
+    const mixed = ruleAdmitEvidence({
+      source_event_id: "e",
+      trust_zone_id: "tz",
+      hook_event_name: "SessionEnd",
+      signal_text: [
+        "Decision: we will require make preflight before opening any pull request.",
+        "PostToolUse: ran git status successfully with exit 0.",
+        "Operator mentioned an api_key rotation in chat (not the secret value).",
+      ].join("\n"),
+    });
+    expect(mixed.decision).toBe("admit");
+    expect(mixed.residual_signal_text).toContain("preflight");
+    expect(mixed.residual_signal_text).not.toMatch(/git status/);
+    expect(mixed.reason_codes).toEqual(
+      expect.arrayContaining(["line_scoped_tool_noise_stripped", "line_scoped_secretish_stripped"]),
+    );
+  });
+
   it("drops injection and secret-like signals", () => {
     expect(
       ruleAdmitEvidence({

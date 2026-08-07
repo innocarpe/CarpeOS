@@ -7,6 +7,8 @@ import {
   type AdjudicationResult,
   adjudicateKnowledgeCandidate,
   agenticFeedHookPreferRankSql,
+  agenticProseFromTranscriptJsonl,
+  agenticProseFromTranscriptPath,
   buildSyncPushRequest,
   type CaptureEnvelope,
   deriveIdempotencyKey,
@@ -4916,6 +4918,32 @@ export class LocalCaptureStore {
     return Number(result.changes ?? 0) > 0;
   }
 
+  /**
+   * Q7′ / QD9: release a leased feed row back to pending for retry (transient Flash fail).
+   * Does not mark done/skipped — row remains claimable.
+   */
+  requeueAgenticCaptureFeed(input: {
+    source_event_id: string;
+    skip_reason?: string | null;
+  }): boolean {
+    const result = this.db
+      .prepare(
+        `
+          UPDATE agentic_capture_feed
+          SET state = 'pending', finished_at = NULL, skip_reason = ?,
+              lease_id = NULL, lease_expires_at = NULL
+          WHERE source_event_id = ? AND trust_zone_id = ?
+            AND state = 'leased'
+        `,
+      )
+      .run(
+        input.skip_reason ?? "flash_transient_retry",
+        input.source_event_id,
+        this.trustZone.trust_zone_id,
+      ) as { changes?: number };
+    return Number(result.changes ?? 0) > 0;
+  }
+
   private mapAgenticCaptureFeedRow(r: {
     source_event_id: string;
     artifact_id: string;
@@ -5553,19 +5581,49 @@ export function isAgenticFeedEnabled(env: NodeJS.ProcessEnv = process.env): bool
   return v !== "0" && v !== "off" && v !== "false" && v !== "disabled";
 }
 
-/** Pull human-readable signal text from a capture envelope payload (local only). */
+/**
+ * Pull human-readable signal text from a capture envelope payload (local only).
+ * Quality ultragoal Q3′ / QD5 agentic mode:
+ * - Prefer prose fields (transcript/summary/message/text/content/body).
+ * - Resolve transcript_path / transcriptPath via agentic extraction (no durability
+ *   lexicon, no future-intent filter) when inline prose is missing.
+ * - NEVER JSON.stringify the full envelope as the agentic body (H0).
+ * - No prose → empty string (admit → empty_signal before Flash).
+ */
 export function extractSignalTextFromCapturePayload(payload: unknown): string {
   if (payload === null || payload === undefined) return "";
   if (typeof payload === "string") return payload.trim();
   if (typeof payload !== "object" || Array.isArray(payload)) return "";
   const obj = payload as Record<string, unknown>;
-  for (const key of ["transcript", "text", "message", "content", "body", "summary"]) {
+  for (const key of [
+    "transcript",
+    "transcript_text",
+    "text",
+    "message",
+    "content",
+    "body",
+    "summary",
+  ]) {
     const v = obj[key];
-    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+    if (typeof v === "string" && v.trim().length > 0) {
+      // Structured JSONL transcript as a single string: extract agentic prose.
+      const trimmed = v.trim();
+      if (
+        trimmed.includes("\n") &&
+        trimmed.includes("{") &&
+        /"type"\s*:|"role"\s*:/.test(trimmed)
+      ) {
+        const fromJsonl = agenticProseFromTranscriptJsonl(trimmed);
+        if (fromJsonl.length > 0) return fromJsonl;
+      }
+      return trimmed;
+    }
   }
-  try {
-    return JSON.stringify(obj);
-  } catch {
-    return "";
+  const path = obj.transcript_path ?? obj.transcriptPath;
+  if (typeof path === "string" && path.trim().length > 0) {
+    const fromPath = agenticProseFromTranscriptPath(path.trim());
+    if (fromPath.length > 0) return fromPath;
   }
+  // No prose resolved — empty (do not stringify envelope metadata as body).
+  return "";
 }

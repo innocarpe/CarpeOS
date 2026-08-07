@@ -116,17 +116,42 @@ function citationInPack(c: AgenticCitation, packText: string): boolean {
   return false;
 }
 
+/**
+ * Q4′: NFC both sides so NFD Korean/composed Latin do not fail grounding.
+ */
 function normalizeText(value: string): string {
   return value
+    .normalize("NFC")
     .toLowerCase()
     .replace(/[“”"'`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
+/**
+ * Q4′ / H0c: CJK-safe tokenize. Latin uses alnum tokens (≥3); Hangul/CJK
+ * uses overlapping bigrams so Korean decisions ground without ASCII tokens.
+ */
 function tokenize(value: string): string[] {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length > 2);
+  const nfc = value.normalize("NFC").toLowerCase();
+  const tokens: string[] = [];
+  for (const latin of nfc.split(/[^a-z0-9]+/)) {
+    if (latin.length > 2) tokens.push(latin);
+  }
+  // Hangul syllables + CJK unified ideographs
+  const cjkRuns = nfc.match(
+    /[\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7AF\u4E00-\u9FFF]+/g,
+  );
+  if (cjkRuns !== null) {
+    for (const run of cjkRuns) {
+      if (run.length === 1) {
+        tokens.push(run);
+        continue;
+      }
+      for (let i = 0; i < run.length - 1; i += 1) {
+        tokens.push(run.slice(i, i + 2));
+      }
+    }
+  }
+  return tokens;
 }
