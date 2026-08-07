@@ -1,56 +1,60 @@
 # Product 6.0.0 — Definition of Done (maintainers)
 
-Status: **Hold-first major shipped as `@innocarpe/carpeos@6.0.0`; P3–P6 follow-ons through
-`6.4.0`; complete topology residuals (E10/human review/backfill) target `6.5.0`.**  
-Base package: multi-host setup + V5 draft lane + Product 6 agentic product loop on npm.
+Status: **Product 6 major thesis complete through `@innocarpe/carpeos@6.6.0`.**
+
+- **6.0.0** — hold-first Agentic Layer (P0–P2 product loop)
+- **6.1–6.4** — P3 precision, P4 links, P5 draft Claims, P6 GraphRAG
+- **6.5.0** — E10 reconcile + human correction surface + feed backfill
+- **6.6.0** — **HITL-free promote-when-verified** (ADR 0018): E5 grounding,
+  licensing corpus, retract, day spend, feed lease, 30m timer
+
+Base package: multi-host setup + V5 draft lane + Product 6 agentic compound loop.
 
 **Model freeze:** DeepSeek Direct **`deepseek-v4-flash` only** for all real LLM stages.
 
 ## Thesis
 
 Post-capture Agentic Layer forms **grounded, typed, graph-linked knowledge** under
-`agentic_v1` gates — so CarpeOS is a knowledge store, not a session log silo.
+`agentic_v1` gates — so CarpeOS is a knowledge store, not a session log silo —
+**without required human-in-the-loop** on the happy path (ADR 0018).
 
 ## Relationship to 5.x
 
-| 5.x | 6.0 |
+| 5.x | 6.x |
 | --- | --- |
 | V5 draft-only cortex | Consumed as primitives; not promotion authority |
 | adj_v3 rule promote/hold/reject | Prefilter + baseline; not sole brain |
 | Multi-host capture | Unchanged sensory plane |
-| Claims ≈ 0, weak Observations | Explicit goal: draft Claims + cited Observations |
+| Claims ≈ 0, weak Observations | Explicit goal: cited Observations + optional draft Claims |
 
-## Phases (P0–P6)
+## Phases (P0–P6 + residuals)
 
 | Phase | Exit | Evidence |
 | --- | --- | --- |
-| **P0** Prep | ADR + PRD + milestones + architecture + package scaffold + golden-12 skeleton | this tree / docs PRs |
-| **P1** Proposals | Jobs + E1–E5; sidecar proposals only | `@carpeos/agentic` tests; no LLM Observation yet |
-| **P2** Hold materialize | draft Observation + agentic_v1 hold + human promote | CLI/MCP review path |
-| **P3** Narrow auto-promote | precision suite ≥ 0.90; allowlist kinds | eval receipt |
-| **P4** Links | provenance edges densify meaning graph | graph rebuild metrics |
-| **P5** Draft Claims | fact_candidate/decision draft Claims; accept still human | Claim count > 0 draft-only |
-| **P6** GraphRAG ranking | typed promoted units improve retrieval judgments | offline query set |
-| **E10 + human + backfill** | reconcile proposals; human accept/promote; history feed | CLI + tests → npm 6.5 |
+| **P0** Prep | ADR + PRD + milestones + architecture + package scaffold + golden-12 | docs / scaffold |
+| **P1** Proposals | Jobs + E1–E5; sidecar proposals only | `@carpeos/agentic` tests |
+| **P2** Hold materialize | draft Observation + agentic_v1 hold + human promote | CLI materialize (staging era) |
+| **P3** Narrow auto-promote | precision suite ≥ 0.90; allowlist kinds | 6.1.0 |
+| **P4** Links | provenance edges densify meaning graph | 6.2.0 |
+| **P5** Draft Claims | fact_candidate/decision draft Claims; accept still human | 6.3.0 |
+| **P6** GraphRAG ranking | typed promoted units improve retrieval | 6.4.0 |
+| **E10 + human + backfill** | reconcile; human accept/promote; history feed | 6.5.0 |
+| **HITL-free flip** | promote-when-verified + retract + timer + day spend | **6.6.0** |
 
-## Code DoD (minimum for npm `6.0.0` major claim)
+## Code DoD (6.6.0 complete product claim)
 
-A honest 6.0.0 cut requires **at least P2 complete** plus:
-
-- [x] ADR 0017 coded planes for E1–E5 + E7–E8 + feed/runner (E6 lineage markers; E9 hook)
-- [x] P3–P6 shipped (precision, links, draft Claims, GraphRAG) through 6.4.0
-- [x] E10 reconcile + human accept/promote + feed backfill (6.5.0 path)
-- [x] `@carpeos/agentic` durable jobs + Flash-only live path (`callAgenticFlash` / `--allow-network`)
-- [x] Capture path still has **zero** LLM calls (feed insert only; fail-open)
-- [x] Cite integrity on persist paths (E5 before proposal/materialize)
-- [x] Golden-12 green in package tests
-- [x] `agentic-off` / `agentic_feed: false` / `CARPEOS_AGENTIC=off` kill switches
-- [x] CHANGELOG `[6.0.0]` honest about residuals (auto-promote may still be P3+)
-- [x] Major release surface checker green for 6.0.0 (at package bump time)
-- [ ] Local activation of exact `@innocarpe/carpeos@6.0.0` (post-publish maintainer smoke)
-
-**This 6.0.0 cut is labeled hold-first brain** (not full thesis). Preferred follow-on:
-**6.1.x** when P3 narrow auto-promote + precision suite is green.
+- [x] ADR 0017 planes E0–E10 on npm
+- [x] ADR 0018 promote-when-verified defaults
+- [x] E5 statement grounding + adversarial fixtures
+- [x] Offline licensing-promote corpus (no hint_kind-only positives)
+- [x] Human retract via append-only Supersession
+- [x] Persistent day spend + triage-gated extract + feed lease
+- [x] 30m always-on timer install/uninstall
+- [x] Capture path still has **zero** LLM calls
+- [x] No automatic AcceptanceDecision from runner
+- [x] `CARPEOS_AGENTIC=off` / hold-first escape
+- [x] CHANGELOG `[6.6.0]` honest
+- [x] Local activation of exact `@innocarpe/carpeos@6.6.0`
 
 ## Hard fences
 
@@ -58,35 +62,34 @@ A honest 6.0.0 cut requires **at least P2 complete** plus:
 - No multi-model escalation (Flash-only)
 - No automatic AcceptanceDecision
 - No silent OpenRouter/other fallback
-- No inventing Product 4/5 acceptance for unrelated planes
-- schema-v1 core event types; adj_v3 golden suite not casually broken
+- schema-v1 core event types
 
-## Ultragoal / loop engineering prep
-
-Front-loaded for one-shot implementation:
-
-| Artifact | Path |
-| --- | --- |
-| ADR | `docs/adr/0017-agentic-layer-write-time-knowledge.md` |
-| PRD | `docs/PRD-v6.md` |
-| Milestones | `docs/maintainers/v6-milestones.md` |
-| Architecture | `docs/architecture/agentic-layer.md` |
-| Package scaffold | `packages/agentic/` |
-| Golden skeleton | `fixtures/agentic/v1/golden-12/` |
-| Handoff | `docs/plans/product6-ultragoal-handoff.md` |
-
-## Validation commands (when implementing)
+## Operator surface (6.6)
 
 ```sh
-pnpm check
-pnpm --filter @carpeos/agentic test
-# offline only unless operator enables network:
-# DEEPSEEK_API_KEY from ~/.carpeos private env — never commit
+carpeos agentic status
+carpeos agentic run --once --materialize
+carpeos agentic timer install|uninstall|status
+carpeos agentic retract --event-id evt_… --reason "…" --decided-by human --human-confirmed
+# Live Flash (optional):
+DEEPSEEK_API_KEY=… carpeos agentic run --once --allow-network --spend-cap-usd 1
+# Kill / staging:
+CARPEOS_AGENTIC=off …
+CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 ```
+
+## Residuals (honest)
+
+- Procedure auto-promote still hold-biased (config later)
+- Live Flash remains network opt-in (timer defaults network-off)
+- Hosted graph/vector not claimed
+- Live recorded-Flash licensing corpus (CI stays offline fake)
 
 ## Related
 
 - [ADR 0017](../adr/0017-agentic-layer-write-time-knowledge.md)
+- [ADR 0018](../adr/0018-agentic-hitl-free-compound-loop.md)
 - [PRD-v6](../PRD-v6.md)
+- [architecture/agentic-layer.md](../architecture/agentic-layer.md)
+- [v6-milestones.md](v6-milestones.md)
 - [product-5.0.0.md](product-5.0.0.md)
-- [ADR 0016](../adr/0016-v5-draft-only-deepseek-primary.md)

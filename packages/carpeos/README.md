@@ -15,8 +15,10 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-The current public release is `6.0.0`, published on npm. Activate with the exact
-version pin and `carpeos setup doctor`. Versions follow
+The current public release is **`6.6.0`** (HITL-free Agentic Layer /
+promote-when-verified). Activate with the exact version pin and
+`carpeos setup doctor`. Optional always-on brain:
+`carpeos agentic timer install`. Versions follow
 [SemVer](https://semver.org/). See the repo
 [CHANGELOG](https://github.com/innocarpe/carpeos/blob/main/CHANGELOG.md) and
 [versioning policy](https://github.com/innocarpe/carpeos/blob/main/docs/maintainers/versioning-and-releases.md).
@@ -47,15 +49,14 @@ and Grok Build when those tools are available.
 ```sh
 carpeos --help                  # full CLI surface
 carpeos version                 # package name + version (JSON)
-carpeos help memory             # one command
+carpeos help agentic            # post-capture HITL-free brain
+carpeos help memory             # retrieval
 carpeos init --home "$HOME/.carpeos" --trust-zone tz_local_default
+carpeos agentic run --once --materialize
 carpeos memory context-pack \
   --task "Summarize my current work" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
-carpeos adjudicate reconcile-policy \
-  --from-policy adj_v1 --to-policy adj_v3 \
-  --trust-zone tz_synthetic --limit 100
 ```
 
 The B0 `reconcile-policy` command is a metadata-only preview. Its supported

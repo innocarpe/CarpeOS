@@ -12,9 +12,10 @@
 **Capture context. Compound knowledge.**
 
 CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 세션을 출처와 함께
-캡처하고, **무엇이 기억할 가치가 있는지 판정**하며 (`promote` | `hold` | `reject`),
-수락된 결정을 검색 가능하게 유지하고, MCP·CLI·Obsidian으로 사람과 에이전트가
-나중에 다시 꺼내 쓰게 합니다. 전부 로컬 우선입니다.
+캡처하고, 쓰기 시점에 **내구성 있는 의미**를 형성하며 (저비용 `adj_v3` + 캡처 후
+**Agentic Layer**), 승격된 결정을 기본 검색에 두고, MCP·CLI·Obsidian으로 사람과
+에이전트가 나중에 다시 꺼내 쓰게 합니다. 전부 로컬 우선이며, **happy path에
+사람 리뷰가 필수이지 않습니다**.
 
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
@@ -50,7 +51,8 @@ CarpeOS는 그 맥락을 내가 통제하는 한곳에 모아 두되, “우리�
 | 자주 겪는 일 | 이쪽 접근 |
 | --- | --- |
 | 채팅 기록이 날아가거나 믿기 어렵다 | 출처가 남는 append-only 이벤트 |
-| 세션 노이즈가 “메모리”를 오염시킨다 | 캡처 후 판정; 기본 검색은 **promote만** |
+| 세션 노이즈가 “메모리”를 오염시킨다 | 캡처 후 판정 + agentic gate; 기본 검색은 **promote만** |
+| 다음 에이전트가 지난 세션 결정을 잊는다 | HITL-free Agentic Layer가 검증된 의미를 기본 검색에 올림 |
 | “메모리”가 사실상 임베딩 뭉치 | claim / 수락 / supersession을 다른 레코드로 둠 |
 | 도구마다 기억이 따로 논다 | 공통 capture + MCP 검색 (특정 벤더 종속 아님) |
 | 생성된 노트가 곧 원본이 된다 | 노트·인덱스는 다시 만들 수 있는 projection |
@@ -84,23 +86,28 @@ Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture �
 넘깁니다. raw payload는 암호화 저장소에, 이벤트 로그에는 메타데이터·참조를
 둡니다. 호스트 훅은 **fail-open·빠른 경로**를 유지합니다.
 
-### 기억하기 전에 판정
+### 기억하기 전에 의미 형성 (두 평면)
 
-캡처 뒤 precision-first `adj_v3` 규칙 판정기가 세션 노이즈를 줄이며 disposition을
-정합니다.
+캡처 뒤 쓰기 시점 경로가 둘 있습니다.
+
+| 평면 | 역할 | 기본 |
+| --- | --- | --- |
+| **`adj_v3`** | 저비용 규칙 프리필터 / 노이즈 거부 | 비교 기준선으로 유지 |
+| **Agentic Layer** (`agentic_v1`) | 인용·타입 brain (네트워크 시 Flash-only) | **6.6.0부터 Product 6 happy path** |
 
 | Disposition | 의미 단위 | 기본 검색 |
 | --- | --- | --- |
 | **promote** | active Observation | 포함 |
-| **hold** | draft Observation (리뷰 큐) | 제외 (`--include-held` / `include_held` 시에만) |
+| **hold** | draft Observation (사이드 채널) | 제외 (`--include-held` / `include_held` 시에만) |
 | **reject** | disposition만 (증거는 남을 수 있음) | 제외 |
 
-held 리뷰는 policy-aware, terminal, append-only입니다.
-`carpeos adjudicate list-held|promote-held|reject-held`에는 해당 policy version이
-필요합니다. 재판정은 기존 이력을 덮어쓰지 않고 추가합니다. 판정과 held 리뷰는
-Claim이나 `AcceptanceDecision`을 자동 생성하지 않습니다.
+**Agentic (ADR 0018):** allowlist 종류(`decision` / `constraint` / `preference`)는
+E5가 statement를 cited span에 근거했을 때 **기본 promote** — 사람 클릭 불필요.
+`procedure`·`fact_candidate`는 hold-biased. 사람은 **retract**·선택적
+**accept-claim**·hold 정리 — **보정 전용**.
 
-판정 기반은 **`adj_v3`**(3.2에 도입, 현재 패키지 기본)입니다. synthetic evidence-only evaluator와 preview-only B0 reconciliation은 그대로 사용할 수 있습니다.
+어느 경로도 `AcceptanceDecision`을 자동 생성하지 않습니다. `adj_v3`와 B0 preview는
+그대로 사용할 수 있습니다.
 
 ```sh
 carpeos adjudicate reconcile-policy \
@@ -121,25 +128,32 @@ Evidence는 claim이 아닙니다. claim이 있다고 해서 바로 “맞다”
 
 ```mermaid
 flowchart LR
-  E[EvidenceArtifact] --> J[Adjudicate adj_v3]
-  J -->|promote| O[Observation active]
-  J -->|hold| H[Observation draft]
-  J -->|reject| R[Evidence only]
-  O --> C[Claim]
-  C --> A[AcceptanceDecision]
-  C --> S[Supersession]
+  E[EvidenceArtifact] --> Feed[agentic_capture_feed]
+  E --> J[adj_v3 optional]
+  Feed --> Ag[Agentic E1–E8]
+  Ag -->|promote-when-verified| O[Observation active]
+  Ag -->|hold side channel| H[Observation draft]
+  Ag -->|reject| R[Evidence only]
+  J -->|promote| O
+  J -->|hold| H
+  O --> C[Claim draft optional]
+  C --> A[AcceptanceDecision<br/>human only]
+  O --> S[Supersession<br/>human retract]
   A --> F[Accepted fact<br/>query 시점에 계산]
   S --> F
 ```
 
 ### 사람용 / 에이전트용 인터페이스
 
-- **CLI** — `capture-hook`, `extract`, **`adjudicate`** (B0 `reconcile-policy`
-  preview 포함), `retrieval rebuild`, `memory search|get|context-pack`
-  (기본 promoted only; `--include-held` 선택), `sync status|push|pull|once|cycle`
+- **CLI** — `capture-hook`, `extract`, **`adjudicate`**, **`agentic`** (run /
+  timer / retract / golden / graphrag…), `retrieval rebuild`,
+  `memory search|get|context-pack` (기본 promoted only; `--include-held` 선택),
+  `sync status|push|pull|once|cycle`
 - **MCP (stdio)** — 로컬 도구 8개 (`memory_search`, `memory_get`,
   `memory_context_pack`, `memory_trace`, `memory_timeline`, `memory_related`,
   `memory_capture`, `memory_propose_claim`)
+- **Always-on agentic** — 선택 30분 타이머: `carpeos agentic timer install`
+  (기본 네트워크 off)
 - **Obsidian projection** — 로컬 스토어에서 Markdown 생성 (원본 아님, projection)
 - **OKF v0.2 export projection** — `carpeos okf export|rebuild`가 신뢰 영역 범위를
   명시한 portable bundle을 만듭니다. 기본값은 promoted/active이며 canonical storage나
@@ -186,30 +200,39 @@ flowchart TB
 ## 전체 흐름
 
 ```mermaid
-flowchart LR
-  A[Agent hooks] --> B[Local capture]
-  B --> J[Adjudicate]
-  J --> C[Event store + dispositions]
-  C --> D[Promoted meaning first]
+flowchart TB
+  A[Agent hooks<br/>fail-open] --> B[Local capture<br/>no LLM]
+  B --> F1[agentic_capture_feed]
+  B --> F2[adj_v3 optional]
+  F1 --> T[30m timer 또는<br/>agentic run]
+  T --> G[E5 ground + gate<br/>promote-when-verified]
+  G --> C[Event store]
+  F2 --> C
+  C --> D[Promoted / active meaning]
   C --> E[Projections]
-  E --> F[MCP / CLI / Obsidian]
-  D --> F
+  D --> M[MCP / CLI / Obsidian]
+  E --> M
+  H[Human retract / accept<br/>보정 전용] -.-> C
 ```
 
 알아 둘 규칙:
 
 1. 이벤트 로그와 disposition은 append-only입니다 (policy version별).
 2. 기본 검색은 **promoted/active** 의미 단위입니다. 모든 세션이 메모리가 아닙니다.
-3. “accepted”는 query 시점에 계산합니다. claim 레코드를 덮어쓰지 않습니다.
-4. 민감한 plaintext는 이벤트 body 밖에 둡니다.
-4. Trust zone은 진짜 격리 경계입니다. 장식용 태그가 아닙니다.
-5. 노트·벡터·context pack은 지우고 다시 만들어도 됩니다. canonical store가
+3. Agentic **promote-when-verified**는 load-bearing HITL 없이 루프를 닫습니다
+   (ADR 0018). 형식적 `AcceptanceDecision`은 여전히 사람 전용·선택입니다.
+4. “accepted”는 query 시점에 계산합니다. claim 레코드를 덮어쓰지 않습니다.
+5. 민감한 plaintext는 이벤트 body 밖에 둡니다.
+6. Trust zone은 진짜 격리 경계입니다. 장식용 태그가 아닙니다.
+7. 노트·벡터·context pack은 지우고 다시 만들어도 됩니다. canonical store가
    아닙니다.
 
 더 자세한 내용:
 [Architecture overview](docs/architecture/overview.md),
+[Agentic Layer](docs/architecture/agentic-layer.md),
 [Memory capacity](docs/architecture/memory-capacity.md),
-[ADR 0009](docs/adr/0009-memory-capacity-model.md),
+[ADR 0017](docs/adr/0017-agentic-layer-write-time-knowledge.md),
+[ADR 0018](docs/adr/0018-agentic-hitl-free-compound-loop.md),
 [ADRs](docs/adr/),
 [spec/v1](spec/v1/).
 
@@ -292,29 +315,34 @@ node scripts/install-local.mjs doctor
 `node apps/carpeos-cli/dist/index.js …`
 ([local capture](docs/guides/local-capture.md)).
 
-### 제품 경로: 설치 → 세션 → 판정 → 검색
+### 제품 경로: 설치 → 세션 → compound → 검색
 
 ```sh
 # 1) 런타임 + MCP
 carpeos setup run --apply
 # 2) 캡처 훅 (사용자 훅을 지우지 않음)
 carpeos setup hooks install --apply
-# 3) doctor (훅, 스토어, 판정 health, 기본 검색=promoted only)
+# 3) Always-on Agentic brain (30분; 기본 네트워크 off)
+carpeos agentic timer install
+# 4) doctor (훅, 스토어, 판정 health, 기본 검색=promoted only)
 carpeos setup doctor
-# 4) 호스트 세션(또는 capture-hook) 후 rebuild + promote 의미 검색
+# 5) 호스트 세션 후 사람 리뷰 없이 의미가 쌓임:
+#    capture → feed → agentic run (timer 또는:)
+carpeos agentic run --once --materialize
 carpeos retrieval rebuild --trust-zone tz_local_default
 carpeos memory search \
   --query "durable decision" \
   --trust-zone tz_local_default \
   --visible-trust-zone tz_local_default
-# 선택: held/draft 포함
-# carpeos memory search --include-held --query "…" …
 
-# hold 리뷰 큐
-carpeos adjudicate --stats
-carpeos adjudicate list-held --limit 50
-# carpeos adjudicate promote-held --event-id evt_…
-# carpeos adjudicate reject-held --event-id evt_…
+# 보정 전용 (happy path 아님)
+# carpeos agentic retract --event-id evt_… --reason "…" --decided-by human --human-confirmed
+# carpeos agentic promote-held --event-id evt_…
+# carpeos adjudicate list-held --limit 50
+
+# Kill / 스테이징
+# CARPEOS_AGENTIC=off …
+# CARPEOS_AGENTIC_HOLD_FIRST=1 carpeos agentic run --once --materialize
 ```
 
 `carpeos setup doctor` 는 훅 설치, 최근 `EvidenceArtifact`, Observation/Claim 개수,
@@ -368,17 +396,19 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 ## 제품 라인 (majors)
 
 현재 npm 패키지는 **`@innocarpe/carpeos@6.6.0`** (`v6.6.0`)입니다. adjudication + retrieval
-운영 루프, Product 4 trust plane, opt-in Product 5 draft lane, **Product 6 hold-first
-Agentic Layer**가 포함됩니다.
+운영 루프, Product 4 trust plane, opt-in Product 5 draft lane, **Product 6 HITL-free
+Agentic Layer**(promote-when-verified, retract, day spend, **30분 timer** — ADR 0018;
+capture는 dumb; human tools는 보정 전용)가 포함됩니다.
 전체 major/minor thesis·DoD:
 
 - [docs/PRD.md](docs/PRD.md)
+- [docs/architecture/agentic-layer.md](docs/architecture/agentic-layer.md)
 - [docs/maintainers/](docs/maintainers/) (`product-N.0.0.md`, 예:
   [6.0.0](docs/maintainers/product-6.0.0.md), [5.0.0](docs/maintainers/product-5.0.0.md))
 
 잔여(초록 발명 금지): live Product 4 release authority 대역 외, B1 apply deferred,
-hosted graph/edge 미주장, V5는 capture hot path에 없음, Agentic P5–P6(draft Claims,
-GraphRAG ranking)은 6.2.0 미주장(P3 precision + P4 graph density는 6.1/6.2에 출시).
+hosted graph/edge 미주장, V5는 capture hot path에 없음, procedure auto-promote는
+여전히 hold-biased, live Flash는 네트워크 opt-in.
 
 ---
 
@@ -391,28 +421,32 @@ release authority를 뜻하지 **않습니다**.
 기본 로컬 루프 (CI 게이트):
 
 ```text
-hooks → 암호화 증거 → adjudicate (promote|hold|reject)
-  → 승격된 의미 → retrieval-first 그래프/하이브리드 회상 → MCP / CLI
-  (+ 로컬 OKF v0.2 export, 선택 private sync, Obsidian projection)
+hooks → 암호화 증거 → agentic_capture_feed (capture에 LLM 없음)
+  → agentic run / 30분 timer (promote-when-verified)
+  → 기본 검색의 active Observation
+  → retrieval-first 그래프/하이브리드 회상 → MCP / CLI
+  (+ adj_v3 기준선, 로컬 OKF export, 선택 private sync, Obsidian)
+
+# Kill: CARPEOS_AGENTIC=off
+# 스테이징: CARPEOS_AGENTIC_HOLD_FIRST=1
+# Live Flash: carpeos agentic run --once --allow-network --materialize
 ```
 
 | 영역 | 상태 |
 | --- | --- |
-| Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md) 포함) |
+| Specs, ontology, ADRs | 있음 ([ADR 0012](docs/adr/0012-knowledge-adjudication.md), [0017](docs/adr/0017-agentic-layer-write-time-knowledge.md), [0018](docs/adr/0018-agentic-hitl-free-compound-loop.md)) |
 | Local capture + outbox | 출시 |
-| Knowledge adjudication (`adj_v3`) | **3.2에 출시** — precision/session de-noising, disposition, policy-aware held 리뷰, policy history; automatic Claim과 `AcceptanceDecision` 없음 |
+| Knowledge adjudication (`adj_v3`) | **3.2에 출시** — automatic Claim / `AcceptanceDecision` 없음 |
 | 기본 retrieval | **promoted/active only**; held는 opt-in |
 | Doctor 판정 health | 출시 |
 | Sync Worker/client + bounded `sync cycle` | 코드 + 로컬 테스트. production edge 주장 없음 |
 | MCP stdio (도구 8개) | 로컬만 |
 | Expert-slot context pack | CLI + MCP (로컬) |
-| Retrieval-first 그래프/하이브리드 회상 | **출시** — indexed graph traversal, 교차 저장소 partition, worktree facet |
+| Retrieval-first 그래프/하이브리드 회상 | **출시** — 6.4 GraphRAG typed boost |
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
-| OKF v0.2 export projection | **3.1에 출시** — 로컬 export만, import 경로 없음 |
-| Product 3.x (adj_v3, OKF export, graph/hybrid recall, B0 preview) | **출시** — [product-3.2.0](docs/maintainers/product-3.2.0.md) |
-| Product 4 trust/evidence plane | **패키지에 출시** — [product-4.0.0](docs/maintainers/product-4.0.0.md); live authority residual |
-| Product 5 draft lane (`carpeos v5`) | **opt-in 출시** — [product-5.0.0](docs/maintainers/product-5.0.0.md); capture hot path 아님 |
-| Product 6 Agentic Layer (`carpeos agentic`) | **hold-first + P3/P4** in 6.0–6.2 — [product-6.0.0](docs/maintainers/product-6.0.0.md); capture 이후 전용; P5–P6 residual |
+| OKF v0.2 export projection | **3.1에 출시** — 로컬 export만 |
+| Product 3.x–5.x | **출시** — `docs/maintainers/` DoD |
+| Product 6 Agentic Layer (`carpeos agentic`) | **6.6.0 HITL-free 출시** — promote-when-verified, retract, day spend, 30분 timer; [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md) |
 | `carpeos setup` / one-stop install | 출시 (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |
