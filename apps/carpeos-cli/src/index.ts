@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
@@ -169,6 +169,8 @@ export async function runCli(
         return await runMemory(rest, env);
       case "okf":
         return runOkf(rest, env);
+      case "knowledge":
+        return runKnowledge(rest, env);
       case "v5":
         return await runV5(rest, env);
       case "agentic":
@@ -310,6 +312,125 @@ function runRetrieval(argv: readonly string[], env: NodeJS.ProcessEnv): number {
     store.close();
   }
 }
+/**
+ * DF7: portable statement-level knowledge bundle for company Mac / offline.
+ * Does not transfer ciphertext; import creates new local Observations.
+ */
+function runKnowledge(argv: readonly string[], env: NodeJS.ProcessEnv): number {
+  const [subcommand, ...rest] = argv;
+  if (subcommand !== "export" && subcommand !== "import") {
+    throw new CliUsageError("knowledge requires export or import (see: carpeos help knowledge)");
+  }
+
+  if (subcommand === "export") {
+    const parsed = parseArgs({
+      args: rest,
+      allowPositionals: false,
+      strict: true,
+      options: {
+        out: { type: "string" },
+        home: { type: "string" },
+        "project-id": { type: "string" },
+        "trust-zone": { type: "string" },
+        limit: { type: "string", default: "10000" },
+      },
+    });
+    const out = requireString(parsed.values.out, "--out");
+    const store = openStore(
+      compactCommonOptions(
+        parsed.values.home,
+        parsed.values["project-id"],
+        parsed.values["trust-zone"],
+      ),
+      env,
+    );
+    try {
+      const bundle = store.exportKnowledgeBundle({
+        limit: parseInteger(parsed.values.limit ?? "10000", "--limit", 1),
+      });
+      const outPath = resolve(out);
+      mkdirSync(outPath, { recursive: true });
+      const filePath = join(outPath, "knowledge-bundle-v1.json");
+      writeFileSync(filePath, `${JSON.stringify(bundle, null, 2)}\n`, { mode: 0o600 });
+      writeJson(process.stdout, {
+        ok: true,
+        command: "knowledge export",
+        path: filePath,
+        unit_count: bundle.unit_count,
+        source_trust_zone_id: bundle.source_trust_zone_id,
+      });
+      return 0;
+    } finally {
+      store.close();
+    }
+  }
+
+  // import
+  const parsed = parseArgs({
+    args: rest,
+    allowPositionals: false,
+    strict: true,
+    options: {
+      from: { type: "string" },
+      home: { type: "string" },
+      "project-id": { type: "string" },
+      "trust-zone": { type: "string" },
+      apply: { type: "boolean", default: false },
+      "as-draft": { type: "boolean", default: false },
+    },
+  });
+  const from = requireString(parsed.values.from, "--from");
+  const fromPath = resolve(from);
+  const bundleFile =
+    existsSync(fromPath) && statSync(fromPath).isDirectory()
+      ? join(fromPath, "knowledge-bundle-v1.json")
+      : fromPath;
+  if (!existsSync(bundleFile)) {
+    throw new CliUsageError(`knowledge import: bundle not found: ${bundleFile}`);
+  }
+  let bundle: unknown;
+  try {
+    bundle = JSON.parse(readFileSync(bundleFile, "utf8"));
+  } catch {
+    throw new CliUsageError("knowledge import: invalid JSON bundle");
+  }
+  const store = openStore(
+    compactCommonOptions(
+      parsed.values.home,
+      parsed.values["project-id"],
+      parsed.values["trust-zone"],
+    ),
+    env,
+  );
+  try {
+    const dryRun = parsed.values.apply !== true;
+    const result = store.importKnowledgeBundle({
+      bundle: bundle as {
+        schema?: string;
+        units?: Array<{
+          event_type?: string;
+          statement?: string;
+          lifecycle_status?: string;
+          confidence?: number;
+          claim_type?: string;
+          source_event_id?: string;
+        }>;
+      },
+      dry_run: dryRun,
+      as_active: parsed.values["as-draft"] !== true,
+    });
+    writeJson(process.stdout, {
+      ok: true,
+      command: "knowledge import",
+      from: bundleFile,
+      ...result,
+    });
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
 function runOkf(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand !== "export" && subcommand !== "rebuild") {
@@ -2814,6 +2935,7 @@ COMMANDS
   retrieval            Rebuild local retrieval index or run embed jobs
   memory               Search / get / context-pack over local memory
   okf                  Export OKF v0.2 (export|rebuild; explicit zones; held off; no canonical mutation)
+  knowledge            Portable active-unit bundle (export|import) for company Mac / offline move
   v5                   Opt-in draft-only lane (status|readiness|eval-all200|draft); DeepSeek primary; not capture
   agentic              Product 6 post-capture brain (status|run|golden); Flash-only; not capture
   help                 Show this help or help for a command
@@ -3145,6 +3267,31 @@ OPTIONS
 EXAMPLES
   carpeos retrieval rebuild --trust-zone tz_local_default
   carpeos retrieval embed --trust-zone tz_local_default --provider local-lexical-hash
+`;
+    case "knowledge":
+      return `carpeos knowledge — portable active-unit bundle (company Mac / offline)
+
+USAGE
+  carpeos knowledge export --out <dir> [options]
+  carpeos knowledge import --from <dir|file> [options]
+
+SUBCOMMANDS
+  export               Write knowledge-bundle-v1.json (active units; no ciphertext)
+  import               Dry-run or --apply import as local Observations
+
+OPTIONS
+  --out <dir>          export destination directory
+  --from <path>        import: directory (expects knowledge-bundle-v1.json) or file
+  --limit <n>          export scan cap (default 10000)
+  --apply              import: write events (default dry-run)
+  --as-draft           import: lifecycle draft instead of active
+  --home <path>
+  --project-id <id>
+  --trust-zone <id>
+
+NOTES
+  Export filters out adj "Captured … evidence" restatements.
+  Import creates new event ids; does not require source device keys or CF.
 `;
     case "okf":
       return `carpeos okf — write an OKF v0.2 projection without canonical mutation
