@@ -984,7 +984,7 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
         const result = store.skipNonAdmittedOutboxPending({
           dry_run: dryRun,
           limit: parseInteger(limitValue, "--limit", 1),
-          policy: parsed.values.policy,
+          ...(parsed.values.policy !== undefined ? { policy: parsed.values.policy } : {}),
         });
         writeJson(process.stdout, {
           ok: true,
