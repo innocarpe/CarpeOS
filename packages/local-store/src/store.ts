@@ -17,7 +17,10 @@ import {
   fingerprintEnvelope,
   fingerprintObject,
   hashHex,
+  evaluateDeterministicFront,
+  evaluateSyncAdmission,
   isAgenticFeedHookEligible,
+  resolveSyncAdmissionPolicy,
   isIdempotencyKey,
   type KnowledgeDisposition,
   type MeaningfulUnitPolicyConfig,
@@ -1010,14 +1013,35 @@ export class LocalCaptureStore {
       isAgenticFeedHookEligible(envelope.hook_event_name)
     ) {
       try {
-        this.insertAgenticCaptureFeed({
-          source_event_id: capture.event.event_id,
-          artifact_id: capture.event.payload.artifact_id,
-          trust_zone_id: this.trustZone.trust_zone_id,
+        const signal = extractSignalTextFromCapturePayload(envelope.payload);
+        const front = evaluateDeterministicFront({
           hook_event_name: envelope.hook_event_name,
-          protected_value_id: capture.protected_value_id,
-          created_at: this.clock.now().toISOString(),
+          signal_text: signal,
+          require_lifecycle_hook: true,
         });
+        const now = this.clock.now().toISOString();
+        if (front.decision === "drop") {
+          this.insertAgenticCaptureFeed({
+            source_event_id: capture.event.event_id,
+            artifact_id: capture.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: envelope.hook_event_name,
+            protected_value_id: capture.protected_value_id,
+            created_at: now,
+            state: "skipped",
+            skip_reason: front.reason_codes.slice(0, 6).join(","),
+            finished_at: now,
+          });
+        } else {
+          this.insertAgenticCaptureFeed({
+            source_event_id: capture.event.event_id,
+            artifact_id: capture.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: envelope.hook_event_name,
+            protected_value_id: capture.protected_value_id,
+            created_at: now,
+          });
+        }
       } catch {
         // ignore — capture remains authoritative
       }
@@ -1706,15 +1730,39 @@ export class LocalCaptureStore {
         continue;
       }
       try {
-        this.insertAgenticCaptureFeed({
-          source_event_id: snap.event_id,
-          artifact_id: snap.event.payload.artifact_id,
-          trust_zone_id: this.trustZone.trust_zone_id,
+        const signal = this.readCaptureSignalText(snap.event_id);
+        const front = evaluateDeterministicFront({
           hook_event_name: hook,
-          protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
-          created_at: this.clock.now().toISOString(),
+          signal_text: signal,
+          require_lifecycle_hook: true,
         });
-        enqueued += 1;
+        const now = this.clock.now().toISOString();
+        if (front.decision === "drop") {
+          this.insertAgenticCaptureFeed({
+            source_event_id: snap.event_id,
+            artifact_id: snap.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: hook,
+            protected_value_id:
+              snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+            created_at: now,
+            state: "skipped",
+            skip_reason: front.reason_codes.slice(0, 6).join(","),
+            finished_at: now,
+          });
+          skipped += 1;
+        } else {
+          this.insertAgenticCaptureFeed({
+            source_event_id: snap.event_id,
+            artifact_id: snap.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: hook,
+            protected_value_id:
+              snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+            created_at: now,
+          });
+          enqueued += 1;
+        }
       } catch {
         skipped += 1;
       }
@@ -3625,6 +3673,115 @@ export class LocalCaptureStore {
     return [...zones].sort((left, right) => left.localeCompare(right));
   }
 
+  /**
+   * Remove pending outbox rows that fail sync admission (DF5).
+   * Does **not** delete canonical_events — only the delivery queue entry.
+   */
+  skipNonAdmittedOutboxPending(
+    input: { dry_run?: boolean; limit?: number; policy?: string | null } = {},
+  ): {
+    schema: "carpeos.outbox.skip-non-admitted/v1";
+    policy: string;
+    dry_run: boolean;
+    scanned: number;
+    skipped: number;
+    kept: number;
+    by_reason: Record<string, number>;
+  } {
+    const policy = resolveSyncAdmissionPolicy(input.policy);
+    const limit =
+      input.limit !== undefined && Number.isInteger(input.limit) && input.limit > 0
+        ? input.limit
+        : 100_000;
+    const dryRun = input.dry_run === true;
+    const rows = this.db
+      .prepare(
+        `
+          SELECT o.outbox_id AS outbox_id, e.event_id AS event_id, e.event_type AS event_type,
+                 e.event_json AS event_json
+          FROM outbox o
+          JOIN canonical_events e ON e.event_id = o.event_id
+          WHERE o.state = 'pending'
+          ORDER BY o.outbox_id
+          LIMIT ?
+        `,
+      )
+      .all(limit) as Array<{
+      outbox_id: number | bigint;
+      event_id: string;
+      event_type: string;
+      event_json: string;
+    }>;
+
+    const by_reason: Record<string, number> = {};
+    let skipped = 0;
+    let kept = 0;
+    const toDelete: number[] = [];
+
+    for (const row of rows) {
+      let disposition: string | null = null;
+      let lifecycle_status: string | null = null;
+      try {
+        const parsed = JSON.parse(row.event_json) as {
+          lifecycle_status?: string;
+        };
+        lifecycle_status = parsed.lifecycle_status ?? null;
+      } catch {
+        // ignore
+      }
+      try {
+        const d = this.db
+          .prepare(
+            `
+              SELECT disposition FROM knowledge_dispositions
+              WHERE source_event_id = ?
+              ORDER BY created_at DESC LIMIT 1
+            `,
+          )
+          .get(row.event_id) as { disposition: string } | undefined;
+        disposition = d?.disposition ?? null;
+      } catch {
+        disposition = null;
+      }
+
+      const adm = evaluateSyncAdmission(
+        {
+          event_type: row.event_type,
+          disposition,
+          lifecycle_status,
+        },
+        policy,
+      );
+      if (adm.decision === "skip") {
+        skipped += 1;
+        const reason = adm.reason_codes[0] ?? "skip";
+        by_reason[reason] = (by_reason[reason] ?? 0) + 1;
+        toDelete.push(Number(row.outbox_id));
+      } else {
+        kept += 1;
+      }
+    }
+
+    if (!dryRun && toDelete.length > 0) {
+      const del = this.db.prepare(`DELETE FROM outbox WHERE outbox_id = ? AND state = 'pending'`);
+      this.withImmediateTransaction(() => {
+        for (const id of toDelete) {
+          del.run(id);
+        }
+      });
+    }
+
+    return {
+      schema: "carpeos.outbox.skip-non-admitted/v1",
+      policy,
+      dry_run: dryRun,
+      scanned: rows.length,
+      skipped,
+      kept,
+      by_reason,
+    };
+  }
+
   leaseOutbox(limit: number, leaseMs: number, now = this.clock.now()): LeaseResult {
     if (!Number.isInteger(limit) || limit < 1) {
       throw new Error("lease limit must be a positive integer");
@@ -5005,6 +5162,10 @@ export class LocalCaptureStore {
     hook_event_name: string;
     protected_value_id: string;
     created_at: string;
+    /** Default pending. Front-end drop uses skipped + skip_reason (DF2). */
+    state?: "pending" | "skipped";
+    skip_reason?: string;
+    finished_at?: string;
   }): void {
     // Defensive for concurrent first-open races: ensure table exists (lease-capable schema).
     this.db.exec(`
@@ -5022,6 +5183,9 @@ export class LocalCaptureStore {
         lease_expires_at TEXT
       );
     `);
+    const state = input.state ?? "pending";
+    const finishedAt = state === "skipped" ? (input.finished_at ?? input.created_at) : null;
+    const skipReason = state === "skipped" ? (input.skip_reason ?? "front_drop") : null;
     this.db
       .prepare(
         `
@@ -5029,7 +5193,7 @@ export class LocalCaptureStore {
             source_event_id, artifact_id, trust_zone_id, hook_event_name,
             protected_value_id, state, created_at, finished_at, skip_reason,
             lease_id, lease_expires_at
-          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, NULL, NULL, NULL)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
         `,
       )
       .run(
@@ -5038,7 +5202,10 @@ export class LocalCaptureStore {
         input.trust_zone_id,
         input.hook_event_name,
         input.protected_value_id,
+        state,
         input.created_at,
+        finishedAt,
+        skipReason,
       );
   }
 
