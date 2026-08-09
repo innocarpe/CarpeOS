@@ -935,7 +935,7 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
     throw new CliUsageError(
-      "outbox requires status, lease, ack, or retry (see: carpeos help outbox)",
+      "outbox requires status, lease, ack, retry, or skip-non-admitted (see: carpeos help outbox)",
     );
   }
 
@@ -947,14 +947,19 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       home: { type: "string" },
       "project-id": { type: "string" },
       "trust-zone": { type: "string" },
-      limit: { type: "string", default: "10" },
+      limit: { type: "string" },
       "lease-ms": { type: "string", default: "30000" },
       "outbox-id": { type: "string" },
       "lease-id": { type: "string" },
       "delay-ms": { type: "string", default: "1000" },
       error: { type: "string", default: "retry requested by operator" },
+      apply: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
+      policy: { type: "string" },
     },
   });
+  const limitDefault = subcommand === "skip-non-admitted" ? "100000" : "10";
+  const limitValue = parsed.values.limit ?? limitDefault;
   const store = openStore(
     compactCommonOptions(
       parsed.values.home,
@@ -973,9 +978,24 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
           errors: store.listOutboxErrors(),
         });
         return 0;
+      case "skip-non-admitted": {
+        // Default dry-run unless --apply (fail-closed operator hygiene).
+        const dryRun = parsed.values.apply !== true;
+        const result = store.skipNonAdmittedOutboxPending({
+          dry_run: dryRun,
+          limit: parseInteger(limitValue, "--limit", 1),
+          policy: parsed.values.policy,
+        });
+        writeJson(process.stdout, {
+          ok: true,
+          command: "outbox skip-non-admitted",
+          ...result,
+        });
+        return 0;
+      }
       case "lease": {
         const lease = store.leaseOutbox(
-          parseInteger(parsed.values.limit, "--limit", 1),
+          parseInteger(limitValue, "--limit", 1),
           parseInteger(parsed.values["lease-ms"], "--lease-ms", 1),
         );
         writeJson(process.stdout, {
@@ -3005,29 +3025,36 @@ EXAMPLES
       return `carpeos outbox — durable local delivery queue
 
 USAGE
-  carpeos outbox <status|lease|ack|retry> [options]
+  carpeos outbox <status|lease|ack|retry|skip-non-admitted> [options]
 
 SUBCOMMANDS
   status               Counts: pending / leased / delivered
   lease                Lease pending items
   ack                  Acknowledge a leased item
   retry                Re-queue a leased item after failure
+  skip-non-admitted    Drop pending rows that fail sync admission (default dry-run;
+                       use --apply to delete queue rows; never deletes canonical events)
 
 OPTIONS
   --home <path>
   --project-id <id>
   --trust-zone <id>
-  --limit <n>          lease (default 10)
+  --limit <n>          lease (default 10); skip-non-admitted scan cap
   --lease-ms <n>       lease duration (default 30000)
   --outbox-id <n>      ack / retry
   --lease-id <id>      ack / retry
   --delay-ms <n>       retry delay (default 1000)
   --error <text>       retry error message
+  --policy <id>        skip-non-admitted: remote_thin_promoted_v1 | full_log | off
+  --dry-run            skip-non-admitted: force dry-run (default without --apply)
+  --apply              skip-non-admitted: actually DELETE non-admitted pending rows
 
 EXAMPLES
   carpeos outbox status
   carpeos outbox lease --limit 5 --lease-ms 30000
   carpeos outbox ack --outbox-id 1 --lease-id lease_…
+  carpeos outbox skip-non-admitted --limit 100000
+  carpeos outbox skip-non-admitted --apply --limit 100000
 `;
     case "sync":
       return `carpeos sync — push/pull against a remote sync edge

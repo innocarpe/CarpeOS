@@ -89,6 +89,15 @@ export {
   type DeterministicFrontResult,
 } from "./deterministic-front.js";
 
+export {
+  SYNC_ADMISSION_POLICY_VERSION,
+  evaluateSyncAdmission,
+  resolveSyncAdmissionPolicy,
+  type SyncAdmissionInput,
+  type SyncAdmissionPolicyId,
+  type SyncAdmissionResult,
+} from "./sync-admission.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 

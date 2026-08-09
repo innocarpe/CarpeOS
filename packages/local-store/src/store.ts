@@ -18,7 +18,9 @@ import {
   fingerprintObject,
   hashHex,
   evaluateDeterministicFront,
+  evaluateSyncAdmission,
   isAgenticFeedHookEligible,
+  resolveSyncAdmissionPolicy,
   isIdempotencyKey,
   type KnowledgeDisposition,
   type MeaningfulUnitPolicyConfig,
@@ -3669,6 +3671,117 @@ export class LocalCaptureStore {
       }
     }
     return [...zones].sort((left, right) => left.localeCompare(right));
+  }
+
+  /**
+   * Remove pending outbox rows that fail sync admission (DF5).
+   * Does **not** delete canonical_events — only the delivery queue entry.
+   */
+  skipNonAdmittedOutboxPending(input: {
+    dry_run?: boolean;
+    limit?: number;
+    policy?: string | null;
+  } = {}): {
+    schema: "carpeos.outbox.skip-non-admitted/v1";
+    policy: string;
+    dry_run: boolean;
+    scanned: number;
+    skipped: number;
+    kept: number;
+    by_reason: Record<string, number>;
+  } {
+    const policy = resolveSyncAdmissionPolicy(input.policy);
+    const limit =
+      input.limit !== undefined && Number.isInteger(input.limit) && input.limit > 0
+        ? input.limit
+        : 100_000;
+    const dryRun = input.dry_run === true;
+    const rows = this.db
+      .prepare(
+        `
+          SELECT o.outbox_id AS outbox_id, e.event_id AS event_id, e.event_type AS event_type,
+                 e.event_json AS event_json
+          FROM outbox o
+          JOIN canonical_events e ON e.event_id = o.event_id
+          WHERE o.state = 'pending'
+          ORDER BY o.outbox_id
+          LIMIT ?
+        `,
+      )
+      .all(limit) as Array<{
+      outbox_id: number | bigint;
+      event_id: string;
+      event_type: string;
+      event_json: string;
+    }>;
+
+    const by_reason: Record<string, number> = {};
+    let skipped = 0;
+    let kept = 0;
+    const toDelete: number[] = [];
+
+    for (const row of rows) {
+      let disposition: string | null = null;
+      let lifecycle_status: string | null = null;
+      try {
+        const parsed = JSON.parse(row.event_json) as {
+          lifecycle_status?: string;
+        };
+        lifecycle_status = parsed.lifecycle_status ?? null;
+      } catch {
+        // ignore
+      }
+      try {
+        const d = this.db
+          .prepare(
+            `
+              SELECT disposition FROM knowledge_dispositions
+              WHERE source_event_id = ?
+              ORDER BY created_at DESC LIMIT 1
+            `,
+          )
+          .get(row.event_id) as { disposition: string } | undefined;
+        disposition = d?.disposition ?? null;
+      } catch {
+        disposition = null;
+      }
+
+      const adm = evaluateSyncAdmission(
+        {
+          event_type: row.event_type,
+          disposition,
+          lifecycle_status,
+        },
+        policy,
+      );
+      if (adm.decision === "skip") {
+        skipped += 1;
+        const reason = adm.reason_codes[0] ?? "skip";
+        by_reason[reason] = (by_reason[reason] ?? 0) + 1;
+        toDelete.push(Number(row.outbox_id));
+      } else {
+        kept += 1;
+      }
+    }
+
+    if (!dryRun && toDelete.length > 0) {
+      const del = this.db.prepare(`DELETE FROM outbox WHERE outbox_id = ? AND state = 'pending'`);
+      this.withImmediateTransaction(() => {
+        for (const id of toDelete) {
+          del.run(id);
+        }
+      });
+    }
+
+    return {
+      schema: "carpeos.outbox.skip-non-admitted/v1",
+      policy,
+      dry_run: dryRun,
+      scanned: rows.length,
+      skipped,
+      kept,
+      by_reason,
+    };
   }
 
   leaseOutbox(limit: number, leaseMs: number, now = this.clock.now()): LeaseResult {
