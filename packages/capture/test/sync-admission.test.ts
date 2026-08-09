@@ -8,29 +8,41 @@ describe("evaluateSyncAdmission thin policy", () => {
     expect(r.reason_codes).toContain("thin_skip_raw_evidence");
   });
 
-  it("admits promoted Observation/Claim", () => {
+  it("admits active Observation/Claim even without disposition on same id", () => {
     expect(
       evaluateSyncAdmission({
         event_type: "Observation",
-        disposition: "promote",
         lifecycle_status: "active",
       }).decision,
     ).toBe("admit");
     expect(
       evaluateSyncAdmission({
         event_type: "Claim",
+        lifecycle_status: "active",
+      }).reason_codes,
+    ).toContain("thin_admit_active_unit");
+  });
+
+  it("admits promote disposition when lifecycle missing", () => {
+    expect(
+      evaluateSyncAdmission({
+        event_type: "Observation",
         disposition: "promote",
       }).decision,
     ).toBe("admit");
   });
 
-  it("skips held/reject units", () => {
-    expect(evaluateSyncAdmission({ event_type: "Observation", disposition: "hold" }).decision).toBe(
-      "skip",
-    );
-    expect(evaluateSyncAdmission({ event_type: "Claim", disposition: "reject" }).decision).toBe(
-      "skip",
-    );
+  it("skips draft units", () => {
+    expect(
+      evaluateSyncAdmission({ event_type: "Observation", lifecycle_status: "draft" }).decision,
+    ).toBe("skip");
+    expect(
+      evaluateSyncAdmission({
+        event_type: "Claim",
+        disposition: "hold",
+        lifecycle_status: "draft",
+      }).decision,
+    ).toBe("skip");
   });
 
   it("full_log admits evidence", () => {

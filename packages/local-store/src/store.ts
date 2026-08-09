@@ -3719,36 +3719,12 @@ export class LocalCaptureStore {
     const toDelete: number[] = [];
 
     for (const row of rows) {
-      let disposition: string | null = null;
-      let lifecycle_status: string | null = null;
-      try {
-        const parsed = JSON.parse(row.event_json) as {
-          lifecycle_status?: string;
-        };
-        lifecycle_status = parsed.lifecycle_status ?? null;
-      } catch {
-        // ignore
-      }
-      try {
-        const d = this.db
-          .prepare(
-            `
-              SELECT disposition FROM knowledge_dispositions
-              WHERE source_event_id = ?
-              ORDER BY created_at DESC LIMIT 1
-            `,
-          )
-          .get(row.event_id) as { disposition: string } | undefined;
-        disposition = d?.disposition ?? null;
-      } catch {
-        disposition = null;
-      }
-
+      const meta = this.resolveSyncAdmissionMeta(row.event_id, row.event_type, row.event_json);
       const adm = evaluateSyncAdmission(
         {
           event_type: row.event_type,
-          disposition,
-          lifecycle_status,
+          disposition: meta.disposition,
+          lifecycle_status: meta.lifecycle_status,
         },
         policy,
       );
@@ -3780,6 +3756,233 @@ export class LocalCaptureStore {
       kept,
       by_reason,
     };
+  }
+
+  /**
+   * Re-enqueue active/promoted Observation|Claim into outbox when missing (after
+   * thin skip wiped the queue). Does not re-queue EvidenceArtifact under thin.
+   */
+  requeueAdmittedOutboxUnits(
+    input: { dry_run?: boolean; limit?: number; policy?: string | null } = {},
+  ): {
+    schema: "carpeos.outbox.requeue-admitted/v1";
+    policy: string;
+    dry_run: boolean;
+    scanned: number;
+    requeued: number;
+    already_queued: number;
+    skipped: number;
+  } {
+    const policy = resolveSyncAdmissionPolicy(input.policy);
+    const limit =
+      input.limit !== undefined && Number.isInteger(input.limit) && input.limit > 0
+        ? input.limit
+        : 50_000;
+    const dryRun = input.dry_run === true;
+    const rows = this.db
+      .prepare(
+        `
+          SELECT e.event_id AS event_id, e.event_type AS event_type, e.event_json AS event_json,
+                 e.local_sequence AS local_sequence, e.protected_value_id AS protected_value_id,
+                 e.request_fingerprint AS request_fingerprint
+          FROM canonical_events e
+          WHERE e.event_type IN ('Observation', 'Claim')
+          ORDER BY e.local_sequence DESC
+          LIMIT ?
+        `,
+      )
+      .all(limit) as Array<{
+      event_id: string;
+      event_type: string;
+      event_json: string;
+      local_sequence: number | bigint;
+      protected_value_id: string;
+      request_fingerprint: string;
+    }>;
+
+    let scanned = 0;
+    let requeued = 0;
+    let already_queued = 0;
+    let skipped = 0;
+    const nowText = this.clock.now().toISOString();
+
+    for (const row of rows) {
+      scanned += 1;
+      const meta = this.resolveSyncAdmissionMeta(row.event_id, row.event_type, row.event_json);
+      const adm = evaluateSyncAdmission(
+        {
+          event_type: row.event_type,
+          disposition: meta.disposition,
+          lifecycle_status: meta.lifecycle_status,
+        },
+        policy,
+      );
+      if (adm.decision !== "admit") {
+        skipped += 1;
+        continue;
+      }
+      const existing = this.db
+        .prepare(`SELECT outbox_id, state FROM outbox WHERE event_id = ? LIMIT 1`)
+        .get(row.event_id) as { outbox_id: number; state: string } | undefined;
+      if (existing !== undefined) {
+        already_queued += 1;
+        continue;
+      }
+      if (dryRun) {
+        requeued += 1;
+        continue;
+      }
+      try {
+        const event = JSON.parse(row.event_json) as CanonicalEvent;
+        const idempotencyKey =
+          typeof event.idempotency_key === "string" && event.idempotency_key.length > 0
+            ? event.idempotency_key
+            : `idem_requeue_${row.event_id.slice(0, 24)}`;
+        const requestFingerprint =
+          typeof row.request_fingerprint === "string" && row.request_fingerprint.length > 0
+            ? row.request_fingerprint
+            : hashHex(row.event_json);
+        const syncRequest: SyncPushRequest = {
+          schema_version: "v1",
+          request_id: `req_${hashHex(
+            stableJson({ event_id: row.event_id, client_id: this.clientId, requeue: true }),
+          ).slice(0, 32)}`,
+          client_id: this.clientId,
+          trust_zone_id: this.trustZone.trust_zone_id,
+          idempotency_key: idempotencyKey,
+          request_fingerprint: requestFingerprint,
+          events: [event],
+          erasures: [],
+        };
+        const pushRequestJson = stableJson(syncRequest);
+        this.db
+          .prepare(
+            `
+              INSERT INTO outbox (
+                event_id, state, attempts, available_at, push_request_json, created_at, updated_at
+              ) VALUES (?, 'pending', 0, ?, ?, ?, ?)
+            `,
+          )
+          .run(row.event_id, nowText, pushRequestJson, nowText, nowText);
+        requeued += 1;
+      } catch {
+        skipped += 1;
+      }
+    }
+
+    return {
+      schema: "carpeos.outbox.requeue-admitted/v1",
+      policy,
+      dry_run: dryRun,
+      scanned,
+      requeued,
+      already_queued,
+      skipped,
+    };
+  }
+
+  /**
+   * Resolve lifecycle + disposition for thin admission.
+   * Disposition rows key by evidence source_event_id / artifact_id, not unit event_id.
+   */
+  private resolveSyncAdmissionMeta(
+    eventId: string,
+    eventType: string,
+    eventJson: string,
+  ): { disposition: string | null; lifecycle_status: string | null } {
+    let lifecycle_status: string | null = null;
+    let artifactIds: string[] = [];
+    let derivedEventIds: string[] = [];
+    try {
+      const parsed = JSON.parse(eventJson) as {
+        lifecycle_status?: string;
+        payload?: {
+          evidence_artifact_refs?: unknown;
+        };
+        provenance?: Array<{ ref_id?: string; ref_type?: string; relationship?: string }>;
+      };
+      lifecycle_status = parsed.lifecycle_status ?? null;
+      const refs = parsed.payload?.evidence_artifact_refs;
+      if (Array.isArray(refs)) {
+        artifactIds = refs.filter((r): r is string => typeof r === "string" && r.length > 0);
+      }
+      if (Array.isArray(parsed.provenance)) {
+        for (const p of parsed.provenance) {
+          if (p?.ref_type === "event" && typeof p.ref_id === "string") {
+            derivedEventIds.push(p.ref_id);
+          }
+          if (p?.ref_type === "artifact" && typeof p.ref_id === "string") {
+            artifactIds.push(p.ref_id);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    let disposition: string | null = null;
+    try {
+      const direct = this.db
+        .prepare(
+          `
+            SELECT disposition FROM knowledge_dispositions
+            WHERE source_event_id = ?
+            ORDER BY created_at DESC LIMIT 1
+          `,
+        )
+        .get(eventId) as { disposition: string } | undefined;
+      disposition = direct?.disposition ?? null;
+    } catch {
+      disposition = null;
+    }
+
+    if (disposition === null && derivedEventIds.length > 0) {
+      for (const src of derivedEventIds.slice(0, 8)) {
+        try {
+          const d = this.db
+            .prepare(
+              `
+                SELECT disposition FROM knowledge_dispositions
+                WHERE source_event_id = ?
+                ORDER BY created_at DESC LIMIT 1
+              `,
+            )
+            .get(src) as { disposition: string } | undefined;
+          if (d?.disposition) {
+            disposition = d.disposition;
+            break;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (disposition === null && artifactIds.length > 0) {
+      for (const art of artifactIds.slice(0, 8)) {
+        try {
+          const d = this.db
+            .prepare(
+              `
+                SELECT disposition FROM knowledge_dispositions
+                WHERE artifact_id = ?
+                ORDER BY created_at DESC LIMIT 1
+              `,
+            )
+            .get(art) as { disposition: string } | undefined;
+          if (d?.disposition) {
+            disposition = d.disposition;
+            break;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Silence unused for Evidence path
+    void eventType;
+    return { disposition, lifecycle_status };
   }
 
   leaseOutbox(limit: number, leaseMs: number, now = this.clock.now()): LeaseResult {

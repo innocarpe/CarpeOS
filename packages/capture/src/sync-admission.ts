@@ -62,13 +62,20 @@ export function evaluateSyncAdmission(
   }
 
   if (eventType === "Observation" || eventType === "Claim") {
+    const life = (input.lifecycle_status ?? "").toLowerCase();
     const disp = (input.disposition ?? "").toLowerCase();
+
+    // Agentic materialize writes lifecycle_status=active on promote; adj promote units
+    // are also active. Prefer lifecycle over disposition-on-same-id (disposition rows
+    // are keyed by *evidence* source_event_id, not the Observation/Claim event_id).
+    if (life === "active" || life === "promoted") {
+      return { ...base, decision: "admit", reason_codes: ["thin_admit_active_unit"] };
+    }
     if (disp === "promote" || disp === "promoted") {
-      const life = (input.lifecycle_status ?? "active").toLowerCase();
-      if (life === "active" || life === "" || life === "promoted") {
-        return { ...base, decision: "admit", reason_codes: ["thin_admit_promoted_unit"] };
-      }
-      return { ...base, decision: "skip", reason_codes: ["thin_skip_inactive_unit"] };
+      return { ...base, decision: "admit", reason_codes: ["thin_admit_promoted_unit"] };
+    }
+    if (life === "draft" || life === "held" || life === "") {
+      return { ...base, decision: "skip", reason_codes: ["thin_skip_draft_or_held_unit"] };
     }
     return { ...base, decision: "skip", reason_codes: ["thin_skip_non_promoted_unit"] };
   }
