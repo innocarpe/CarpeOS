@@ -6,10 +6,7 @@
 
 export const SYNC_ADMISSION_POLICY_VERSION = "remote_thin_promoted_v1" as const;
 
-export type SyncAdmissionPolicyId =
-  | typeof SYNC_ADMISSION_POLICY_VERSION
-  | "full_log"
-  | "off";
+export type SyncAdmissionPolicyId = typeof SYNC_ADMISSION_POLICY_VERSION | "full_log" | "off";
 
 export type SyncAdmissionInput = {
   event_type: string;

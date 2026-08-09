@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  evaluateSyncAdmission,
-  resolveSyncAdmissionPolicy,
-} from "../src/sync-admission.js";
+import { evaluateSyncAdmission, resolveSyncAdmissionPolicy } from "../src/sync-admission.js";
 
 describe("evaluateSyncAdmission thin policy", () => {
   it("skips raw EvidenceArtifact", () => {
@@ -28,18 +25,18 @@ describe("evaluateSyncAdmission thin policy", () => {
   });
 
   it("skips held/reject units", () => {
-    expect(
-      evaluateSyncAdmission({ event_type: "Observation", disposition: "hold" }).decision,
-    ).toBe("skip");
-    expect(
-      evaluateSyncAdmission({ event_type: "Claim", disposition: "reject" }).decision,
-    ).toBe("skip");
+    expect(evaluateSyncAdmission({ event_type: "Observation", disposition: "hold" }).decision).toBe(
+      "skip",
+    );
+    expect(evaluateSyncAdmission({ event_type: "Claim", disposition: "reject" }).decision).toBe(
+      "skip",
+    );
   });
 
   it("full_log admits evidence", () => {
-    expect(
-      evaluateSyncAdmission({ event_type: "EvidenceArtifact" }, "full_log").decision,
-    ).toBe("admit");
+    expect(evaluateSyncAdmission({ event_type: "EvidenceArtifact" }, "full_log").decision).toBe(
+      "admit",
+    );
   });
 });
 

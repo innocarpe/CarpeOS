@@ -3677,11 +3677,9 @@ export class LocalCaptureStore {
    * Remove pending outbox rows that fail sync admission (DF5).
    * Does **not** delete canonical_events — only the delivery queue entry.
    */
-  skipNonAdmittedOutboxPending(input: {
-    dry_run?: boolean;
-    limit?: number;
-    policy?: string | null;
-  } = {}): {
+  skipNonAdmittedOutboxPending(
+    input: { dry_run?: boolean; limit?: number; policy?: string | null } = {},
+  ): {
     schema: "carpeos.outbox.skip-non-admitted/v1";
     policy: string;
     dry_run: boolean;
