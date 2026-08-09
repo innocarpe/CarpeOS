@@ -130,8 +130,9 @@ Success is measured by:
 | **DF6** | docs + doctor | Operator model; doctor warnings |
 | **DF7** | (optional) knowledge bundle | Company Mac offline import |
 
-**Shipped:** DF0–DF2 (#326), DF4–DF5 + requeue (#326/#327), DF4 auto-skip on lease + DF6 guide (this PR).  
-**Remaining:** DF3 counters, DF7 company bundle, stricter active-noise quality.
+**Shipped:** DF0–DF2 (#326), DF4–DF5 + requeue (#326/#327), DF4 auto-skip on lease + DF6 guide (#328),
+DF3 front_drop metrics + DF7 knowledge bundle (this PR).  
+**Remaining:** stricter active-noise quality; optional flush feed insert-time counters in status doctor.
 
 ---
 

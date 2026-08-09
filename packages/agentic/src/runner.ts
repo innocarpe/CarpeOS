@@ -30,6 +30,13 @@ export type AgenticRunnerReport = {
   feed_seen: number;
   feed_done: number;
   feed_skipped: number;
+  /**
+   * DF3: admit-stage drops from deterministic front (subset of feed_skipped when
+   * admit_decision=drop). Counts only this processAgenticOnce run.
+   */
+  front_drop: number;
+  /** Reason-code histogram for front drops (no private statement text). */
+  front_drop_by_reason: Record<string, number>;
   pipelines: AgenticPipelineResult[];
   materializations: number;
   /** P5 draft Claim materializations (never AcceptanceDecision). */
@@ -82,6 +89,8 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     feed_seen: 0,
     feed_done: 0,
     feed_skipped: 0,
+    front_drop: 0,
+    front_drop_by_reason: {},
     pipelines: [],
     materializations: 0,
     draft_claims: 0,
@@ -423,6 +432,13 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
           skip_reason: pipeline.reason_codes.join(",") || "no_proposals",
         });
         report.feed_skipped += 1;
+        if (pipeline.admit_decision === "drop") {
+          report.front_drop += 1;
+          for (const code of pipeline.reason_codes) {
+            if (code.length === 0) continue;
+            report.front_drop_by_reason[code] = (report.front_drop_by_reason[code] ?? 0) + 1;
+          }
+        }
         // empty_signal does not consume the operator --limit (scan more for SessionEnd).
         const emptyDrop =
           pipeline.admit_decision === "drop" && pipeline.reason_codes.includes("empty_signal");

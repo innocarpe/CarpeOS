@@ -3885,6 +3885,239 @@ export class LocalCaptureStore {
   }
 
   /**
+   * DF7: export active Observation/Claim statements for company Mac / offline move.
+   * No ciphertext, no secrets — statement-level portable units only.
+   */
+  exportKnowledgeBundle(input: { limit?: number } = {}): {
+    schema: "carpeos.knowledge-bundle/v1";
+    exported_at: string;
+    source_trust_zone_id: string;
+    source_client_id: string;
+    unit_count: number;
+    units: Array<{
+      event_type: "Observation" | "Claim";
+      statement: string;
+      lifecycle_status: string;
+      source_event_id: string;
+      confidence?: number;
+      claim_type?: string;
+      evidence_artifact_refs?: string[];
+    }>;
+  } {
+    const limit =
+      input.limit !== undefined && Number.isInteger(input.limit) && input.limit > 0
+        ? input.limit
+        : 10_000;
+    const rows = this.db
+      .prepare(
+        `
+          SELECT event_id, event_type, event_json
+          FROM canonical_events
+          WHERE event_type IN ('Observation', 'Claim')
+          ORDER BY local_sequence DESC
+          LIMIT ?
+        `,
+      )
+      .all(limit) as Array<{ event_id: string; event_type: string; event_json: string }>;
+
+    const units: Array<{
+      event_type: "Observation" | "Claim";
+      statement: string;
+      lifecycle_status: string;
+      source_event_id: string;
+      confidence?: number;
+      claim_type?: string;
+      evidence_artifact_refs?: string[];
+    }> = [];
+
+    for (const row of rows) {
+      let parsed: {
+        lifecycle_status?: string;
+        payload?: {
+          statement?: string;
+          confidence?: number;
+          claim_type?: string;
+          evidence_artifact_refs?: string[];
+        };
+      };
+      try {
+        parsed = JSON.parse(row.event_json) as typeof parsed;
+      } catch {
+        continue;
+      }
+      const life = (parsed.lifecycle_status ?? "").toLowerCase();
+      if (life !== "active" && life !== "promoted") continue;
+      const statement = (parsed.payload?.statement ?? "").trim();
+      if (statement.length < 8) continue;
+      // Skip adj capture restatements that are not brain-worthy.
+      if (/^Captured \w+ \w+ evidence\b/i.test(statement)) continue;
+
+      const unit: (typeof units)[number] = {
+        event_type: row.event_type as "Observation" | "Claim",
+        statement,
+        lifecycle_status: parsed.lifecycle_status ?? "active",
+        source_event_id: row.event_id,
+      };
+      if (typeof parsed.payload?.confidence === "number") {
+        unit.confidence = parsed.payload.confidence;
+      }
+      if (typeof parsed.payload?.claim_type === "string") {
+        unit.claim_type = parsed.payload.claim_type;
+      }
+      if (Array.isArray(parsed.payload?.evidence_artifact_refs)) {
+        unit.evidence_artifact_refs = parsed.payload.evidence_artifact_refs.filter(
+          (r): r is string => typeof r === "string",
+        );
+      }
+      units.push(unit);
+    }
+
+    return {
+      schema: "carpeos.knowledge-bundle/v1",
+      exported_at: this.clock.now().toISOString(),
+      source_trust_zone_id: this.trustZone.trust_zone_id,
+      source_client_id: this.clientId,
+      unit_count: units.length,
+      units,
+    };
+  }
+
+  /**
+   * DF7: import a knowledge bundle as local draft/active Observations (and Claims).
+   * Creates new event ids; does not require source device keys.
+   */
+  importKnowledgeBundle(input: {
+    bundle: {
+      schema?: string;
+      units?: Array<{
+        event_type?: string;
+        statement?: string;
+        lifecycle_status?: string;
+        confidence?: number;
+        claim_type?: string;
+        source_event_id?: string;
+      }>;
+    };
+    /** When true (default), import as active so thin sync can requeue. */
+    as_active?: boolean;
+    dry_run?: boolean;
+  }): {
+    schema: "carpeos.knowledge-bundle-import/v1";
+    dry_run: boolean;
+    scanned: number;
+    imported: number;
+    skipped: number;
+    reason_codes: string[];
+  } {
+    const dryRun = input.dry_run === true;
+    const asActive = input.as_active !== false;
+    const units = Array.isArray(input.bundle.units) ? input.bundle.units : [];
+    let imported = 0;
+    let skipped = 0;
+    const reason_codes: string[] = [];
+
+    if (
+      input.bundle.schema !== undefined &&
+      input.bundle.schema !== "carpeos.knowledge-bundle/v1"
+    ) {
+      return {
+        schema: "carpeos.knowledge-bundle-import/v1",
+        dry_run: dryRun,
+        scanned: units.length,
+        imported: 0,
+        skipped: units.length,
+        reason_codes: ["unsupported_bundle_schema"],
+      };
+    }
+
+    let bundleArtifactId: string | null = null;
+    if (!dryRun && units.length > 0) {
+      try {
+        const cap = this.captureHook(
+          {
+            provider: "knowledge_bundle",
+            hook_event_name: "SessionEnd",
+            captured_at: this.clock.now().toISOString(),
+            payload: {
+              kind: "knowledge_bundle_import_anchor",
+              note: "Synthetic evidence anchor for offline knowledge bundle import",
+            },
+            media_type: "application/json",
+            subject_ref: this.projectId,
+          },
+          { extract: false, agentic_feed: false },
+        );
+        if (cap.status === "captured") {
+          bundleArtifactId = cap.event.payload.artifact_id;
+        }
+      } catch {
+        reason_codes.push("bundle_anchor_capture_failed");
+      }
+    }
+
+    for (const unit of units) {
+      const statement = (unit.statement ?? "").trim();
+      if (statement.length < 8) {
+        skipped += 1;
+        continue;
+      }
+      if (dryRun) {
+        imported += 1;
+        continue;
+      }
+      if (bundleArtifactId === null) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        const life = asActive ? "active" : "draft";
+        const idem = `idem_bundle_${hashHex(statement).slice(0, 40)}`;
+        if (!isIdempotencyKey(idem)) {
+          skipped += 1;
+          continue;
+        }
+        // Import as Observation (supports lifecycle active); Claim drafts lack active lifecycle API.
+        this.proposeObservationDraft({
+          statement,
+          evidenceArtifactRefs: [bundleArtifactId],
+          sourceEventId: unit.source_event_id ?? `evt_bundle_${hashHex(statement).slice(0, 24)}`,
+          ...(typeof unit.confidence === "number" ? { confidence: unit.confidence } : {}),
+          lifecycleStatus: life,
+          provenance: [
+            {
+              ref_type: "artifact",
+              ref_id: bundleArtifactId,
+              relationship: "derived_from",
+            },
+            {
+              ref_type: "external",
+              ref_id: `bundle_${(unit.source_event_id ?? "import").slice(0, 40)}`,
+              relationship: "derived_from",
+            },
+          ],
+          idempotencyKey: idem,
+        });
+        imported += 1;
+      } catch {
+        skipped += 1;
+        reason_codes.push("import_unit_failed");
+      }
+    }
+
+    if (imported > 0) reason_codes.push("bundle_units_imported");
+    if (skipped > 0) reason_codes.push("bundle_units_skipped");
+
+    return {
+      schema: "carpeos.knowledge-bundle-import/v1",
+      dry_run: dryRun,
+      scanned: units.length,
+      imported,
+      skipped,
+      reason_codes: [...new Set(reason_codes)],
+    };
+  }
+
+  /**
    * Resolve lifecycle + disposition for thin admission.
    * Disposition rows key by evidence source_event_id / artifact_id, not unit event_id.
    */

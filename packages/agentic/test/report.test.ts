@@ -83,6 +83,8 @@ describe("Q1.5′ report redaction (QD7 / Q-S12)", () => {
       feed_seen: 1,
       feed_done: 1,
       feed_skipped: 0,
+      front_drop: 0,
+      front_drop_by_reason: {},
       pipelines: [pipeline],
       materializations: 0,
       draft_claims: 0,

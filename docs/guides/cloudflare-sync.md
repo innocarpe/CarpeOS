@@ -168,6 +168,23 @@ Opt into historical full mirror (not recommended for dogfood machines):
 export CARPEOS_SYNC_ADMISSION=full_log
 ```
 
+### Company Mac without personal CF (knowledge bundle)
+
+Portable **statement-level** export (no ciphertext, no device keys):
+
+```sh
+# On home machine — active units only; skips adj "Captured … evidence" noise
+carpeos knowledge export --out ~/Desktop/carpeos-brain
+
+# On company machine (after carpeos setup)
+carpeos knowledge import --from ~/Desktop/carpeos-brain          # dry-run
+carpeos knowledge import --from ~/Desktop/carpeos-brain --apply  # write local Observations
+```
+
+Bundle file: `knowledge-bundle-v1.json`. Import creates new local events (new ids)
+anchored by a synthetic capture artifact. Prefer this when corporate policy
+forbids joining the personal Cloudflare edge.
+
 ### Trust zone resolution
 
 Without `--trust-zone`, the CLI picks a zone in this order:
