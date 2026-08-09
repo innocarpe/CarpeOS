@@ -1741,7 +1741,8 @@ export class LocalCaptureStore {
             artifact_id: snap.event.payload.artifact_id,
             trust_zone_id: this.trustZone.trust_zone_id,
             hook_event_name: hook,
-            protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+            protected_value_id:
+              snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
             created_at: now,
             state: "skipped",
             skip_reason: front.reason_codes.slice(0, 6).join(","),
@@ -1754,7 +1755,8 @@ export class LocalCaptureStore {
             artifact_id: snap.event.payload.artifact_id,
             trust_zone_id: this.trustZone.trust_zone_id,
             hook_event_name: hook,
-            protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+            protected_value_id:
+              snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
             created_at: now,
           });
           enqueued += 1;

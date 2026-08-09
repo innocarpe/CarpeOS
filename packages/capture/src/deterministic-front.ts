@@ -8,10 +8,7 @@
  * No network, no canonical writes, no LLM.
  */
 
-import {
-  AGENTIC_FEED_LIFECYCLE_HOOKS,
-  normalizeAgenticFeedHook,
-} from "./agentic-feed-policy.js";
+import { AGENTIC_FEED_LIFECYCLE_HOOKS, normalizeAgenticFeedHook } from "./agentic-feed-policy.js";
 
 const LIFECYCLE_ADMIT = new Set<string>(AGENTIC_FEED_LIFECYCLE_HOOKS);
 /** Noise hooks that never enter Flash even if lifecycle map changes. */
@@ -27,8 +24,7 @@ const NOISE_ONLY =
  */
 const TOOL_NOISE =
   /^(?:PostToolUse|git status|npm install|pnpm (?:install|test|check)|PREFLIGHT PASS|make preflight(?:-fix|-quick)?)\s*$/i;
-const TOOL_NOISE_INLINE =
-  /\b(linter passed|exit 0|vulnerabilit(y|ies)|ran .+ successfully)\b/i;
+const TOOL_NOISE_INLINE = /\b(linter passed|exit 0|vulnerabilit(y|ies)|ran .+ successfully)\b/i;
 const SECRETISH =
   /\b(api[_-]?key|secret|password|bearer\s+[a-z0-9._-]+|sk-[a-z0-9]{10,}|hunter2)\b/i;
 
@@ -70,7 +66,9 @@ export type DeterministicFrontResult = {
 /**
  * Cheap deterministic front evaluation. Precision-first drop of obvious garbage.
  */
-export function evaluateDeterministicFront(input: DeterministicFrontInput): DeterministicFrontResult {
+export function evaluateDeterministicFront(
+  input: DeterministicFrontInput,
+): DeterministicFrontResult {
   const normalized_hook = normalizeAgenticFeedHook(input.hook_event_name);
   const signal = (input.signal_text ?? "").trim();
   const requireLifecycle = input.require_lifecycle_hook !== false;
@@ -102,7 +100,11 @@ export function evaluateDeterministicFront(input: DeterministicFrontInput): Dete
 
   const residual = residualProseLines(signal);
   if (residual.kept.length === 0) {
-    if (residual.dropped_secretish > 0 && residual.dropped_tool === 0 && residual.dropped_telemetry === 0) {
+    if (
+      residual.dropped_secretish > 0 &&
+      residual.dropped_tool === 0 &&
+      residual.dropped_telemetry === 0
+    ) {
       return { ...base, decision: "drop", reason_codes: ["secret_like_material"] };
     }
     if (residual.dropped_tool > 0 || residual.dropped_telemetry > 0) {

@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest";
-import {
-  evaluateDeterministicFront,
-  residualProseLines,
-} from "../src/deterministic-front.js";
+import { evaluateDeterministicFront, residualProseLines } from "../src/deterministic-front.js";
 
 describe("evaluateDeterministicFront", () => {
   it("drops empty and noise-only signals", () => {
-    expect(evaluateDeterministicFront({ hook_event_name: "SessionEnd", signal_text: "" }).decision).toBe(
-      "drop",
-    );
     expect(
-      evaluateDeterministicFront({ hook_event_name: "SessionEnd", signal_text: "pong" }).reason_codes,
+      evaluateDeterministicFront({ hook_event_name: "SessionEnd", signal_text: "" }).decision,
+    ).toBe("drop");
+    expect(
+      evaluateDeterministicFront({ hook_event_name: "SessionEnd", signal_text: "pong" })
+        .reason_codes,
     ).toContain("noise_only_signal");
     expect(
       evaluateDeterministicFront({ hook_event_name: "SessionEnd", signal_text: "DONE" }).decision,
@@ -71,7 +69,9 @@ describe("evaluateDeterministicFront", () => {
 
 describe("residualProseLines", () => {
   it("counts dropped classes", () => {
-    const r = residualProseLines("api_key=sk-1234567890abcdef\nkeep this decision line\ngit status");
+    const r = residualProseLines(
+      "api_key=sk-1234567890abcdef\nkeep this decision line\ngit status",
+    );
     expect(r.dropped_secretish).toBe(1);
     expect(r.dropped_tool).toBe(1);
     expect(r.kept.some((l) => l.includes("decision"))).toBe(true);
