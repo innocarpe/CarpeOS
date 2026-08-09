@@ -140,7 +140,12 @@ describe("OutboxSyncCoordinator", () => {
       };
       return jsonResponse(result);
     });
-    const coordinator = new OutboxSyncCoordinator({ store, transport, trustZoneSyncKey: syncKey });
+    const coordinator = new OutboxSyncCoordinator({
+      store,
+      transport,
+      trustZoneSyncKey: syncKey,
+      admission_policy: "full_log",
+    });
 
     const result = await coordinator.pushOne(now);
 
@@ -178,7 +183,12 @@ describe("OutboxSyncCoordinator", () => {
       } satisfies SyncPushResult);
     });
 
-    const coordinator = new OutboxSyncCoordinator({ store, transport, trustZoneSyncKey: syncKey });
+    const coordinator = new OutboxSyncCoordinator({
+      store,
+      transport,
+      trustZoneSyncKey: syncKey,
+      admission_policy: "full_log",
+    });
     const result = await coordinator.pushOne(now);
 
     expect(result?.status).toBe("acked");
@@ -229,6 +239,7 @@ describe("OutboxSyncCoordinator", () => {
       store: mismatchedStore,
       transport,
       trustZoneSyncKey: syncKey,
+      admission_policy: "full_log",
     });
 
     const result = await coordinator.pushOne(now);
@@ -280,6 +291,7 @@ describe("OutboxSyncCoordinator", () => {
       store: target,
       transport,
       trustZoneSyncKey: syncKey,
+      admission_policy: "full_log",
       pullLimit: 1,
     });
 
@@ -349,6 +361,7 @@ describe("OutboxSyncCoordinator", () => {
       store: target,
       transport,
       trustZoneSyncKey: syncKey,
+      admission_policy: "full_log",
       pullLimit: 1,
     });
 
@@ -398,7 +411,12 @@ async function expectPushOutcome(
             : [],
     });
   });
-  const coordinator = new OutboxSyncCoordinator({ store, transport, trustZoneSyncKey: syncKey });
+  const coordinator = new OutboxSyncCoordinator({
+    store,
+    transport,
+    trustZoneSyncKey: syncKey,
+    admission_policy: "full_log",
+  });
 
   const result = await coordinator.pushOne(now);
 

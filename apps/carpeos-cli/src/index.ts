@@ -36,7 +36,11 @@ import {
   runAgenticProposalPipeline,
   unitsFromCanonicalEvents,
 } from "@carpeos/agentic";
-import { ADJUDICATION_POLICY_VERSION, isIdempotencyKey } from "@carpeos/capture";
+import {
+  ADJUDICATION_POLICY_VERSION,
+  isIdempotencyKey,
+  resolveSyncAdmissionPolicy,
+} from "@carpeos/capture";
 import {
   IdempotencyConflictError,
   isTrustZoneId,
@@ -1009,9 +1013,12 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
         return 0;
       }
       case "lease": {
+        // Manual lease is operator/debug: do not auto-drop under thin (use skip-non-admitted).
         const lease = store.leaseOutbox(
           parseInteger(limitValue, "--limit", 1),
           parseInteger(parsed.values["lease-ms"], "--lease-ms", 1),
+          undefined,
+          { admission_policy: "full_log" },
         );
         writeJson(process.stdout, {
           ok: true,
@@ -1123,6 +1130,7 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
             outbox_trust_zone_ids: outboxTrustZoneIds,
           });
         }
+        const admissionPolicy = resolveSyncAdmissionPolicy(undefined, env);
         writeJson(process.stdout, {
           ok: true,
           command: "sync status",
@@ -1130,6 +1138,11 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
             url_configured: config.urlConfigured,
             credential_file_configured: config.credentialFileConfigured,
             sync_key_file_configured: config.syncKeyFileConfigured,
+            admission_policy: admissionPolicy,
+            admission_note:
+              admissionPolicy === "full_log"
+                ? "push leases any pending outbox row"
+                : "push auto-skips non-admitted pending (Evidence/draft) under thin policy",
           },
           local: {
             outbox: store.outboxStatus(),
@@ -1230,6 +1243,7 @@ async function runSync(argv: readonly string[], env: NodeJS.ProcessEnv): Promise
                 transportCounts[method] = (transportCounts[method] ?? 0) + 1;
                 return globalThis.fetch(input, init);
               },
+              env,
             );
             return resolved.preflight;
           },
@@ -3263,7 +3277,7 @@ function createSyncCoordinator(
   if (!("baseUrl" in config)) {
     throw new CliUsageError("sync credentials are required");
   }
-  return createSyncCoordinatorFromConfig(values, store, config, globalThis.fetch);
+  return createSyncCoordinatorFromConfig(values, store, config, globalThis.fetch, env);
 }
 
 function createSyncCoordinatorFromConfig(
@@ -3271,6 +3285,7 @@ function createSyncCoordinatorFromConfig(
   store: LocalCaptureStore,
   config: Extract<ResolvedSyncConfig, { baseUrl: string }>,
   fetch: FetchLike,
+  env: NodeJS.ProcessEnv = process.env,
 ): OutboxSyncCoordinator {
   return new OutboxSyncCoordinator({
     store,
@@ -3284,6 +3299,8 @@ function createSyncCoordinatorFromConfig(
     leaseMs: parseInteger(values["lease-ms"], "--lease-ms", 1),
     retryDelayMs: parseInteger(values["retry-delay-ms"], "--retry-delay-ms", 0),
     pullLimit: parseInteger(values["pull-limit"], "--pull-limit", 1),
+    // Tests and full-mirror ops: CARPEOS_SYNC_ADMISSION=full_log
+    admission_policy: resolveSyncAdmissionPolicy(undefined, env),
   });
 }
 

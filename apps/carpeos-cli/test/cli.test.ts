@@ -25,7 +25,7 @@ import type {
   SyncPushRequest,
   SyncPushResult,
 } from "@carpeos/schema";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { runCli } from "../src/index.js";
 
 const packageRoot = resolve(import.meta.dirname, "..");
@@ -155,6 +155,16 @@ afterEach(() => {
 });
 
 describe("carpeos CLI", () => {
+  // Sync push fixtures use Evidence capture rows; thin admission would auto-drop them.
+  const priorAdmission = process.env.CARPEOS_SYNC_ADMISSION;
+  beforeAll(() => {
+    process.env.CARPEOS_SYNC_ADMISSION = "full_log";
+  });
+  afterAll(() => {
+    if (priorAdmission === undefined) delete process.env.CARPEOS_SYNC_ADMISSION;
+    else process.env.CARPEOS_SYNC_ADMISSION = priorAdmission;
+  });
+
   it("prints package version as JSON", async () => {
     const viaCommand = await captureHelp(["version"]);
     expect(viaCommand.status).toBe(0);
