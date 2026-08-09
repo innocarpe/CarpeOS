@@ -79,6 +79,16 @@ export {
   type AgenticFeedLifecycleHook,
 } from "./agentic-feed-policy.js";
 
+export {
+  DETERMINISTIC_FRONT_POLICY_VERSION,
+  evaluateDeterministicFront,
+  frontDecisionToAdmit,
+  residualProseLines,
+  type DeterministicFrontDecision,
+  type DeterministicFrontInput,
+  type DeterministicFrontResult,
+} from "./deterministic-front.js";
+
 /** Media type for agent thinking/tool histories captured as protected evidence. */
 export const PROCEDURE_TRACE_MEDIA_TYPE = "application/vnd.carpeos.procedure-trace+json" as const;
 

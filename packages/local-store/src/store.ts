@@ -17,6 +17,7 @@ import {
   fingerprintEnvelope,
   fingerprintObject,
   hashHex,
+  evaluateDeterministicFront,
   isAgenticFeedHookEligible,
   isIdempotencyKey,
   type KnowledgeDisposition,
@@ -1010,14 +1011,35 @@ export class LocalCaptureStore {
       isAgenticFeedHookEligible(envelope.hook_event_name)
     ) {
       try {
-        this.insertAgenticCaptureFeed({
-          source_event_id: capture.event.event_id,
-          artifact_id: capture.event.payload.artifact_id,
-          trust_zone_id: this.trustZone.trust_zone_id,
+        const signal = extractSignalTextFromCapturePayload(envelope.payload);
+        const front = evaluateDeterministicFront({
           hook_event_name: envelope.hook_event_name,
-          protected_value_id: capture.protected_value_id,
-          created_at: this.clock.now().toISOString(),
+          signal_text: signal,
+          require_lifecycle_hook: true,
         });
+        const now = this.clock.now().toISOString();
+        if (front.decision === "drop") {
+          this.insertAgenticCaptureFeed({
+            source_event_id: capture.event.event_id,
+            artifact_id: capture.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: envelope.hook_event_name,
+            protected_value_id: capture.protected_value_id,
+            created_at: now,
+            state: "skipped",
+            skip_reason: front.reason_codes.slice(0, 6).join(","),
+            finished_at: now,
+          });
+        } else {
+          this.insertAgenticCaptureFeed({
+            source_event_id: capture.event.event_id,
+            artifact_id: capture.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: envelope.hook_event_name,
+            protected_value_id: capture.protected_value_id,
+            created_at: now,
+          });
+        }
       } catch {
         // ignore — capture remains authoritative
       }
@@ -1706,15 +1728,37 @@ export class LocalCaptureStore {
         continue;
       }
       try {
-        this.insertAgenticCaptureFeed({
-          source_event_id: snap.event_id,
-          artifact_id: snap.event.payload.artifact_id,
-          trust_zone_id: this.trustZone.trust_zone_id,
+        const signal = this.readCaptureSignalText(snap.event_id);
+        const front = evaluateDeterministicFront({
           hook_event_name: hook,
-          protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
-          created_at: this.clock.now().toISOString(),
+          signal_text: signal,
+          require_lifecycle_hook: true,
         });
-        enqueued += 1;
+        const now = this.clock.now().toISOString();
+        if (front.decision === "drop") {
+          this.insertAgenticCaptureFeed({
+            source_event_id: snap.event_id,
+            artifact_id: snap.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: hook,
+            protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+            created_at: now,
+            state: "skipped",
+            skip_reason: front.reason_codes.slice(0, 6).join(","),
+            finished_at: now,
+          });
+          skipped += 1;
+        } else {
+          this.insertAgenticCaptureFeed({
+            source_event_id: snap.event_id,
+            artifact_id: snap.event.payload.artifact_id,
+            trust_zone_id: this.trustZone.trust_zone_id,
+            hook_event_name: hook,
+            protected_value_id: snap.protected_value_id ?? `pv_missing_${snap.event_id.slice(0, 16)}`,
+            created_at: now,
+          });
+          enqueued += 1;
+        }
       } catch {
         skipped += 1;
       }
@@ -5005,6 +5049,10 @@ export class LocalCaptureStore {
     hook_event_name: string;
     protected_value_id: string;
     created_at: string;
+    /** Default pending. Front-end drop uses skipped + skip_reason (DF2). */
+    state?: "pending" | "skipped";
+    skip_reason?: string;
+    finished_at?: string;
   }): void {
     // Defensive for concurrent first-open races: ensure table exists (lease-capable schema).
     this.db.exec(`
@@ -5022,6 +5070,9 @@ export class LocalCaptureStore {
         lease_expires_at TEXT
       );
     `);
+    const state = input.state ?? "pending";
+    const finishedAt = state === "skipped" ? (input.finished_at ?? input.created_at) : null;
+    const skipReason = state === "skipped" ? (input.skip_reason ?? "front_drop") : null;
     this.db
       .prepare(
         `
@@ -5029,7 +5080,7 @@ export class LocalCaptureStore {
             source_event_id, artifact_id, trust_zone_id, hook_event_name,
             protected_value_id, state, created_at, finished_at, skip_reason,
             lease_id, lease_expires_at
-          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, NULL, NULL, NULL)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
         `,
       )
       .run(
@@ -5038,7 +5089,10 @@ export class LocalCaptureStore {
         input.trust_zone_id,
         input.hook_event_name,
         input.protected_value_id,
+        state,
         input.created_at,
+        finishedAt,
+        skipReason,
       );
   }
 
