@@ -935,7 +935,7 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
   const [subcommand, ...rest] = argv;
   if (subcommand === undefined) {
     throw new CliUsageError(
-      "outbox requires status, lease, ack, retry, or skip-non-admitted (see: carpeos help outbox)",
+      "outbox requires status, lease, ack, retry, skip-non-admitted, or requeue-admitted (see: carpeos help outbox)",
     );
   }
 
@@ -958,7 +958,8 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
       policy: { type: "string" },
     },
   });
-  const limitDefault = subcommand === "skip-non-admitted" ? "100000" : "10";
+  const limitDefault =
+    subcommand === "skip-non-admitted" || subcommand === "requeue-admitted" ? "100000" : "10";
   const limitValue = parsed.values.limit ?? limitDefault;
   const store = openStore(
     compactCommonOptions(
@@ -989,6 +990,20 @@ function runOutbox(argv: readonly string[], env: NodeJS.ProcessEnv): number {
         writeJson(process.stdout, {
           ok: true,
           command: "outbox skip-non-admitted",
+          ...result,
+        });
+        return 0;
+      }
+      case "requeue-admitted": {
+        const dryRun = parsed.values.apply !== true;
+        const result = store.requeueAdmittedOutboxUnits({
+          dry_run: dryRun,
+          limit: parseInteger(limitValue, "--limit", 1),
+          ...(parsed.values.policy !== undefined ? { policy: parsed.values.policy } : {}),
+        });
+        writeJson(process.stdout, {
+          ok: true,
+          command: "outbox requeue-admitted",
           ...result,
         });
         return 0;
@@ -3025,7 +3040,7 @@ EXAMPLES
       return `carpeos outbox — durable local delivery queue
 
 USAGE
-  carpeos outbox <status|lease|ack|retry|skip-non-admitted> [options]
+  carpeos outbox <status|lease|ack|retry|skip-non-admitted|requeue-admitted> [options]
 
 SUBCOMMANDS
   status               Counts: pending / leased / delivered
@@ -3034,6 +3049,8 @@ SUBCOMMANDS
   retry                Re-queue a leased item after failure
   skip-non-admitted    Drop pending rows that fail sync admission (default dry-run;
                        use --apply to delete queue rows; never deletes canonical events)
+  requeue-admitted     Re-enqueue active/promoted Observation|Claim missing from outbox
+                       (default dry-run; --apply to write queue rows)
 
 OPTIONS
   --home <path>
@@ -3055,6 +3072,7 @@ EXAMPLES
   carpeos outbox ack --outbox-id 1 --lease-id lease_…
   carpeos outbox skip-non-admitted --limit 100000
   carpeos outbox skip-non-admitted --apply --limit 100000
+  carpeos outbox requeue-admitted --apply
 `;
     case "sync":
       return `carpeos sync — push/pull against a remote sync edge
