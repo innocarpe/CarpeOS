@@ -213,6 +213,7 @@ export class OutboxSyncCoordinator {
   private readonly retryDelayMs: number;
   private readonly leaseMs: number;
   private readonly pullLimit: number;
+  private readonly admissionPolicy: string | null | undefined;
 
   constructor(input: {
     store: LocalCaptureStore;
@@ -221,6 +222,8 @@ export class OutboxSyncCoordinator {
     retryDelayMs?: number;
     leaseMs?: number;
     pullLimit?: number;
+    /** Override CARPEOS_SYNC_ADMISSION; default resolves env (thin). */
+    admission_policy?: string | null;
   }) {
     this.store = input.store;
     this.transport = input.transport;
@@ -228,10 +231,16 @@ export class OutboxSyncCoordinator {
     this.retryDelayMs = input.retryDelayMs ?? 1_000;
     this.leaseMs = input.leaseMs ?? 30_000;
     this.pullLimit = input.pullLimit ?? 100;
+    this.admissionPolicy = input.admission_policy;
   }
 
   async pushOne(now = new Date()): Promise<PushOneOutboxResult | undefined> {
-    const lease = this.store.leaseOutbox(1, this.leaseMs, now);
+    const lease = this.store.leaseOutbox(
+      1,
+      this.leaseMs,
+      now,
+      this.admissionPolicy === undefined ? {} : { admission_policy: this.admissionPolicy },
+    );
     const item = lease.items[0];
     if (item === undefined) {
       return undefined;

@@ -62,7 +62,7 @@ describe("LocalCaptureStore", () => {
     expect(store.countRows("outbox")).toBe(1);
     expect(store.outboxStatus()).toEqual({ pending: 1, leased: 0, delivered: 0 });
 
-    const lease = store.leaseOutbox(10, 30_000, now);
+    const lease = store.leaseOutbox(10, 30_000, now, { admission_policy: "full_log" });
     expect(lease.items).toHaveLength(1);
     expect(lease.items[0]?.push_request.events).toHaveLength(1);
     expect(lease.items[0]?.push_request.erasures).toEqual([]);
@@ -507,7 +507,7 @@ describe("LocalCaptureStore", () => {
       clock: { now: () => now },
     });
     const captured = store.captureHook(makeEnvelope());
-    const lease = store.leaseOutbox(1, 1_000, now);
+    const lease = store.leaseOutbox(1, 1_000, now, { admission_policy: "full_log" });
     const outboxId = lease.items[0]?.outbox_id ?? -1;
 
     expect(outboxId).toBe(captured.outbox_id);
@@ -515,7 +515,11 @@ describe("LocalCaptureStore", () => {
     expect(store.ackOutbox(outboxId, "lease_wrong", now)).toBe(false);
     expect(store.retryOutbox(outboxId, "lease_wrong", 1_000, "temporary", now)).toBe(false);
     expect(store.retryOutbox(outboxId, lease.lease_id, 2_000, "temporary", now)).toBe(true);
-    expect(store.leaseOutbox(1, 1_000, new Date("2026-01-01T00:00:01Z")).items).toHaveLength(0);
+    expect(
+      store.leaseOutbox(1, 1_000, new Date("2026-01-01T00:00:01Z"), {
+        admission_policy: "full_log",
+      }).items,
+    ).toHaveLength(0);
     store.close();
 
     const reopened = new LocalCaptureStore({
@@ -524,13 +528,37 @@ describe("LocalCaptureStore", () => {
       workspaceRoot: runtimeDir,
       keyProvider: new StaticKeyProvider(staticMaterial),
     });
-    const requeued = reopened.leaseOutbox(1, 1_000, new Date("2026-01-01T00:00:02Z"));
+    const requeued = reopened.leaseOutbox(1, 1_000, new Date("2026-01-01T00:00:02Z"), {
+      admission_policy: "full_log",
+    });
     expect(requeued.items).toHaveLength(1);
     expect(requeued.items[0]?.attempts).toBe(2);
     expect(reopened.ackOutbox(outboxId, requeued.lease_id, new Date("2026-01-01T00:00:03Z"))).toBe(
       true,
     );
     expect(reopened.outboxStatus()).toEqual({ pending: 0, leased: 0, delivered: 1 });
+    reopened.close();
+  });
+
+  it("thin lease auto-skips EvidenceArtifact pending without leasing", () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+    const runtimeDir = tempDir();
+    const dbPath = join(runtimeDir, "carpeos.sqlite");
+    const store = new LocalCaptureStore({
+      runtimeDir,
+      dbPath,
+      workspaceRoot: runtimeDir,
+      keyProvider: new StaticKeyProvider(staticMaterial),
+      clock: { now: () => now },
+    });
+    store.captureHook(makeEnvelope());
+    const lease = store.leaseOutbox(1, 1_000, now, {
+      admission_policy: "remote_thin_promoted_v1",
+    });
+    expect(lease.items).toHaveLength(0);
+    expect(lease.admission_skipped).toBeGreaterThanOrEqual(1);
+    expect(store.outboxStatus().pending).toBe(0);
+    store.close();
   });
 
   it("reclaims expired leases after reopening without retry", () => {
@@ -544,7 +572,7 @@ describe("LocalCaptureStore", () => {
       clock: { now: () => now },
     });
     store.captureHook(makeEnvelope());
-    store.leaseOutbox(1, 1_000, now);
+    store.leaseOutbox(1, 1_000, now, { admission_policy: "full_log" });
     store.close();
 
     const reopened = new LocalCaptureStore({
@@ -553,7 +581,9 @@ describe("LocalCaptureStore", () => {
       workspaceRoot: runtimeDir,
       keyProvider: new StaticKeyProvider(staticMaterial),
     });
-    const reclaimed = reopened.leaseOutbox(1, 1_000, new Date("2026-01-01T00:00:02Z"));
+    const reclaimed = reopened.leaseOutbox(1, 1_000, new Date("2026-01-01T00:00:02Z"), {
+      admission_policy: "full_log",
+    });
     expect(reclaimed.items).toHaveLength(1);
     expect(reclaimed.items[0]?.attempts).toBe(2);
   });

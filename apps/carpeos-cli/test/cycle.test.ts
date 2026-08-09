@@ -9,7 +9,7 @@ import type {
   SyncPushRequest,
   SyncPushResult,
 } from "@carpeos/schema";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CycleFailure, runSyncCycle } from "../src/cycle.js";
 
 const packageRoot = resolve(import.meta.dirname, "..");
@@ -25,6 +25,14 @@ afterEach(() => {
 });
 
 describe("sync cycle runner", () => {
+  const priorAdmission = process.env.CARPEOS_SYNC_ADMISSION;
+  beforeAll(() => {
+    process.env.CARPEOS_SYNC_ADMISSION = "full_log";
+  });
+  afterAll(() => {
+    if (priorAdmission === undefined) delete process.env.CARPEOS_SYNC_ADMISSION;
+    else process.env.CARPEOS_SYNC_ADMISSION = priorAdmission;
+  });
   it("writes an immutable manifest before transport and records private modes, bounds, and health", async () => {
     const home = tempDir("carpeos-cycle-unit-");
     const events: string[] = [];

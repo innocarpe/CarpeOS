@@ -127,12 +127,14 @@ describe.skipIf(process.env.G008_NODE_E2E !== "1")("G008 local synthetic E2E rel
     const sourceTransport = makeWorkerTransport(source.clientId, SOURCE_CREDENTIAL);
     const mirrorTransport = makeWorkerTransport(mirror.clientId, MIRROR_CREDENTIAL);
     const sourceSync = new OutboxSyncCoordinator({
+      admission_policy: "full_log",
       store: source,
       transport: sourceTransport,
       trustZoneSyncKey: SYNC_KEY,
       pullLimit: 20,
     });
     const mirrorSync = new OutboxSyncCoordinator({
+      admission_policy: "full_log",
       store: mirror,
       transport: mirrorTransport,
       trustZoneSyncKey: SYNC_KEY,
@@ -405,6 +407,7 @@ describe.skipIf(process.env.G008_NODE_E2E !== "1")("G008 local synthetic E2E rel
     seedAuthorization(mirror.clientId, currentTrustZoneId, MIRROR_CREDENTIAL);
     const sourceTransport = makeWorkerTransport(source.clientId, SOURCE_CREDENTIAL);
     const mirrorSync = new OutboxSyncCoordinator({
+      admission_policy: "full_log",
       store: mirror,
       transport: makeWorkerTransport(mirror.clientId, MIRROR_CREDENTIAL),
       trustZoneSyncKey: SYNC_KEY,

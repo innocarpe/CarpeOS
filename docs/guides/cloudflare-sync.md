@@ -133,6 +133,41 @@ it was resolved (`trust_zone_source`: `flag` | `env` | `config` |
 warning. Rows with `last_error` appear under `outbox_errors` when that field is
 available in the installed CLI.
 
+### Thin remote admission (default)
+
+Default policy: **`remote_thin_promoted_v1`** (env `CARPEOS_SYNC_ADMISSION`).
+
+| Decision | Rows |
+| --- | --- |
+| **Skip** | Raw `EvidenceArtifact`; draft/held Observation/Claim |
+| **Admit** | `lifecycle_status=active` Observation/Claim (brain units) |
+
+**Local-full / remote-thin:** capture may still store encrypted Evidence locally.
+Thin policy only governs what leaves the machine via outbox → Worker.
+
+Operator hygiene:
+
+```sh
+# Preview / purge non-admitted pending (canonical store untouched)
+carpeos outbox skip-non-admitted
+carpeos outbox skip-non-admitted --apply
+
+# After a wipe, restore active units to the queue
+carpeos outbox requeue-admitted --apply
+
+# Push under thin: lease auto-skips Evidence/draft at queue head
+carpeos sync once --url https://carpeos-sync.example.workers.dev \
+  --credential-file "$HOME/.carpeos/sync-credential" \
+  --sync-key-file "$HOME/.carpeos/trust-zone-sync.key" \
+  --limit 10
+```
+
+Opt into historical full mirror (not recommended for dogfood machines):
+
+```sh
+export CARPEOS_SYNC_ADMISSION=full_log
+```
+
 ### Trust zone resolution
 
 Without `--trust-zone`, the CLI picks a zone in this order:

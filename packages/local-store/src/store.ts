@@ -503,6 +503,9 @@ export type LeaseResult = {
   lease_id: string;
   leased_until: string;
   items: LeasedOutboxItem[];
+  /** Rows dropped from the queue during lease because thin admission denied them. */
+  admission_skipped?: number;
+  admission_policy?: string;
 };
 
 type EventRow = {
@@ -3985,7 +3988,17 @@ export class LocalCaptureStore {
     return { disposition, lifecycle_status };
   }
 
-  leaseOutbox(limit: number, leaseMs: number, now = this.clock.now()): LeaseResult {
+  /**
+   * Lease pending outbox rows for push.
+   * Under thin admission (default), non-admitted pending rows are deleted from the
+   * queue as they are scanned so Evidence never blocks the head of the queue.
+   */
+  leaseOutbox(
+    limit: number,
+    leaseMs: number,
+    now = this.clock.now(),
+    options: { admission_policy?: string | null } = {},
+  ): LeaseResult {
     if (!Number.isInteger(limit) || limit < 1) {
       throw new Error("lease limit must be a positive integer");
     }
@@ -3996,23 +4009,30 @@ export class LocalCaptureStore {
     const leaseId = `lease_${hashHex(randomUUID()).slice(0, 24)}`;
     const leasedUntil = new Date(now.getTime() + leaseMs).toISOString();
     const nowText = now.toISOString();
+    const policy = resolveSyncAdmissionPolicy(options.admission_policy);
+    const thinFilter = policy !== "full_log";
+    const scanCap = Math.max(limit * 50, 200);
 
     return this.withImmediateTransaction(() => {
-      const candidates = this.db
-        .prepare(`
-          SELECT outbox_id
-          FROM outbox
-          WHERE
-            ((state = 'pending' AND available_at <= ?)
-              OR (state = 'leased' AND lease_expires_at <= ?))
-          ORDER BY outbox_id
-          LIMIT ?
-        `)
-        .all(nowText, nowText, limit) as OutboxIdRow[];
+      let admission_skipped = 0;
+      const leasedIds: number[] = [];
 
-      for (const candidate of candidates) {
-        this.db
-          .prepare(`
+      // Scan head of queue; lease admitted only; drop non-admitted under thin.
+      const selectHead = this.db.prepare(`
+          SELECT o.outbox_id AS outbox_id, e.event_id AS event_id, e.event_type AS event_type,
+                 e.event_json AS event_json
+          FROM outbox o
+          JOIN canonical_events e ON e.event_id = o.event_id
+          WHERE
+            ((o.state = 'pending' AND o.available_at <= ?)
+              OR (o.state = 'leased' AND o.lease_expires_at <= ?))
+          ORDER BY o.outbox_id
+          LIMIT ?
+        `);
+      const delPending = this.db.prepare(
+        `DELETE FROM outbox WHERE outbox_id = ? AND state IN ('pending', 'leased')`,
+      );
+      const leaseRow = this.db.prepare(`
             UPDATE outbox
             SET state = 'leased',
                 lease_id=?,
@@ -4020,8 +4040,50 @@ export class LocalCaptureStore {
                 attempts = attempts + 1,
                 updated_at = ?
             WHERE outbox_id = ?
-          `)
-          .run(leaseId, leasedUntil, nowText, candidate.outbox_id);
+          `);
+
+      let scanned = 0;
+      while (leasedIds.length < limit && scanned < scanCap) {
+        const batch = selectHead.all(nowText, nowText, Math.min(32, scanCap - scanned)) as Array<{
+          outbox_id: number | bigint;
+          event_id: string;
+          event_type: string;
+          event_json: string;
+        }>;
+        if (batch.length === 0) break;
+
+        let progressed = false;
+        for (const row of batch) {
+          if (leasedIds.length >= limit) break;
+          scanned += 1;
+          progressed = true;
+          const outboxId = Number(row.outbox_id);
+          if (thinFilter) {
+            const meta = this.resolveSyncAdmissionMeta(
+              row.event_id,
+              row.event_type,
+              row.event_json,
+            );
+            const adm = evaluateSyncAdmission(
+              {
+                event_type: row.event_type,
+                disposition: meta.disposition,
+                lifecycle_status: meta.lifecycle_status,
+              },
+              policy,
+            );
+            if (adm.decision === "skip") {
+              delPending.run(outboxId);
+              admission_skipped += 1;
+              continue;
+            }
+          }
+          leaseRow.run(leaseId, leasedUntil, nowText, outboxId);
+          leasedIds.push(outboxId);
+        }
+        // Avoid infinite loop if SELECT keeps returning already-handled leased-by-us rows.
+        if (!progressed) break;
+        if (batch.every((r) => leasedIds.includes(Number(r.outbox_id)))) break;
       }
 
       const rows = this.db
@@ -4051,6 +4113,8 @@ export class LocalCaptureStore {
           attempts: Number(row.attempts),
           push_request: JSON.parse(row.push_request_json) as SyncPushRequest,
         })),
+        admission_skipped,
+        admission_policy: policy,
       };
     });
   }
