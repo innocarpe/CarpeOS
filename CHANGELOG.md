@@ -12,7 +12,20 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
-- (none yet — fold entries here before the next release)
+- Agentic **HITL-free closed loop**: each `processAgenticOnce` reclaims expired job
+  leases, leases the admit job for the claimed feed row (not oldest-bulk thrash),
+  and materializes unmaterialized **promote** proposals without human `promote-held`.
+- `leaseAgenticJobById` / `reclaimExpiredAgenticJobs` for crash-safe job housekeeping
+  (exhausted attempts → `dead`).
+- CLI `agentic run` defaults match flush: `--skip-ineligible` and `--prefer-lifecycle`
+  so the always-on timer spends budget on lifecycle rows first.
+
+### Fixed
+
+- Flash empty / parse / no-citable extract no longer dead-ends residual knowledge —
+  broader local override + local extract fallback.
+- Materialize accepts known legacy policy stamps (`agentic_v1`) so pre-quality promote
+  proposals can still write Observations under the closed loop.
 
 ## [6.7.7] - 2026-08-08
 
