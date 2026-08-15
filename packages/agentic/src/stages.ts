@@ -215,9 +215,12 @@ function triageFlash(input: AgenticTriageInput): AgenticTriageResult {
     let decision = normalizeTriage(parsed.decision);
     let reason_codes = clampTriageReasonCodes(parsed.reason_codes);
 
-    // Deterministic safety belt: Flash must not drop explicit decision/constraint packs
+    // Deterministic safety belt: Flash must not drop/need_context explicit knowledge packs
     // (dogfood 6.7.x saw tool_noise / unsolicited_directive on clear decisions).
-    if (decision === "drop" && hasLoadBearingDecisionSignal(input.pack_text)) {
+    if (
+      (decision === "drop" || decision === "need_context") &&
+      hasLoadBearingDecisionSignal(input.pack_text)
+    ) {
       decision = "keep";
       reason_codes = [...reason_codes, "local_override_decision_signal"];
     }
@@ -252,11 +255,37 @@ function triageFlash(input: AgenticTriageInput): AgenticTriageResult {
   }
 }
 
+/**
+ * Load-bearing knowledge residual (decision/constraint/preference/fact).
+ * Used for Flash drop/override and local extract fallback so the closed loop
+ * does not depend on Flash always parsing cleanly.
+ */
 function hasLoadBearingDecisionSignal(packText: string): boolean {
   const text = packText.trim();
   if (text.length < 8) return false;
   if (INJECT_RE.test(text)) return false;
-  return DECISION_RE.test(text);
+  if (DECISION_RE.test(text) || FACT_RE.test(text)) return true;
+  // Constraint / procedure / preference residual without the DECISION_RE keywords.
+  if (
+    /\b(must never|shall not|required to|never commit|never rewrite)\b/i.test(text) ||
+    /\b(constraint|preference|prefer|procedure|how to)\b/i.test(text) ||
+    /(제약|선호|절차|금지|필수)/.test(text)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** True when pack has any citable residual for local extract fallback. */
+function hasExtractFallbackSignal(packText: string): boolean {
+  if (hasLoadBearingDecisionSignal(packText)) return true;
+  const text = packText.trim();
+  if (text.length < 24) return false;
+  if (INJECT_RE.test(text)) return false;
+  // Non-noise multi-line prose: try local extract rather than empty skip.
+  if (NOISE_RE.test(text) && !DECISION_RE.test(text) && !FACT_RE.test(text)) return false;
+  if (TOOL_ONLY_RE.test(text)) return false;
+  return /[a-zA-Z가-힣]{12,}/.test(text);
 }
 
 function parseTriageJson(raw: string): { decision?: string; reason_codes?: string[] } {
@@ -340,8 +369,8 @@ function extractFake(input: AgenticExtractInput): AgenticExtractResult {
 function extractFlash(input: AgenticExtractInput): AgenticExtractResult {
   const raw = input.flash_response_text?.trim() ?? "";
   if (raw.length === 0) {
-    // Fallback: deterministic extract when Flash empty but pack has decision prose.
-    if (hasLoadBearingDecisionSignal(input.pack_text)) {
+    // Fallback: deterministic extract when Flash empty but pack has residual prose.
+    if (hasExtractFallbackSignal(input.pack_text)) {
       const fake = extractFake({ ...input, mode: "fake", allow_network: false });
       return {
         ...fake,
@@ -424,8 +453,8 @@ function extractFlash(input: AgenticExtractInput): AgenticExtractResult {
       }
       candidates.push(candidate);
     }
-    // Empty after cite filter / non-emittable only → local extract for decision packs.
-    if (candidates.length === 0 && hasLoadBearingDecisionSignal(input.pack_text)) {
+    // Empty after cite filter / non-emittable only → local extract for residual packs.
+    if (candidates.length === 0 && hasExtractFallbackSignal(input.pack_text)) {
       const fake = extractFake({ ...input, mode: "fake", allow_network: false });
       return {
         ...fake,
@@ -444,7 +473,9 @@ function extractFlash(input: AgenticExtractInput): AgenticExtractResult {
       network_used: true,
     });
   } catch {
-    if (hasLoadBearingDecisionSignal(input.pack_text)) {
+    // Always prefer local extract over empty skip when pack has residual prose
+    // (dogfood: flash_extract_parse_error skipped 100+ SessionEnds).
+    if (hasExtractFallbackSignal(input.pack_text)) {
       const fake = extractFake({ ...input, mode: "fake", allow_network: false });
       return {
         ...fake,
