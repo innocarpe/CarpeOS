@@ -21,8 +21,8 @@ on the happy path.
 It keeps the trail of where each piece came from **without** turning every
 session dump into “memory.”
 
-**Latest package:** [`@innocarpe/carpeos@6.7.7`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([CHANGELOG](CHANGELOG.md) · [`v6.7.7`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.7.7)).
+**Latest package:** [`@innocarpe/carpeos@6.7.8`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([CHANGELOG](CHANGELOG.md) · [`v6.7.8`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.7.8)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="Network of knowledge nodes around a central core" width="920" />
@@ -98,7 +98,7 @@ After capture, two write-time paths can assign what is worth keeping:
 | Plane | Role | Default path |
 | --- | --- | --- |
 | **`adj_v3`** | Cheap rule prefilter / noise reject | Still available; comparison baseline |
-| **Agentic Layer** (`agentic_v1.1`) | Typed, cited brain (Flash-only when network on) + **quality plane** | **Product 6 happy path** from 6.6.0; quality ultragoal closed through **6.7.7** |
+| **Agentic Layer** (`agentic_v1.1`) | Typed, cited brain (Flash-only when network on) + **quality plane** | **Product 6 happy path** from 6.6.0; quality ultragoal closed through **6.7.8** |
 
 | Disposition | Meaning unit | Default search |
 | --- | --- | --- |
@@ -304,7 +304,7 @@ Useful options: `--home`, `--bin-dir`, `--workspace-root`, `--trust-zone`,
 Setup never mutates the machine without `--apply`.
 
 Pin a version when you care about reproducibility:
-`npm i -g @innocarpe/carpeos@6.7.7`. See [CHANGELOG.md](CHANGELOG.md).
+`npm i -g @innocarpe/carpeos@6.7.8`. See [CHANGELOG.md](CHANGELOG.md).
 Milestone DoDs (maintainers): [`docs/maintainers/`](docs/maintainers/) ·
 product index: [docs/PRD.md](docs/PRD.md).
 
@@ -410,7 +410,7 @@ alternate install paths. Releases: SemVer + `vX.Y.Z` only
 
 ## Product line (majors)
 
-Current npm package is **`@innocarpe/carpeos@6.7.7`** (`v6.7.7`): operator loop through
+Current npm package is **`@innocarpe/carpeos@6.7.8`** (`v6.7.8`): operator loop through
 adjudication + retrieval, Product 4 trust plane, opt-in Product 5 draft lane, and
 **Product 6 HITL-free Agentic Layer** (post-capture Flash brain;
 **promote-when-verified**, retract, day spend, **30m timer** — ADR 0018) plus the
@@ -434,8 +434,8 @@ Q-S5 dogfood remains advisory (metrics helper shipped).
 
 ## What works today
 
-**Public package:** [`@innocarpe/carpeos@6.7.7`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v6.7.7` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
+**Public package:** [`@innocarpe/carpeos@6.7.8`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v6.7.8` · [CHANGELOG](CHANGELOG.md)). npm install does **not** imply hosted deploy or
 live Product 4 release authority.
 
 Default local loop (CI-gated):
@@ -469,7 +469,7 @@ hooks → encrypted evidence → agentic_capture_feed (no LLM in capture)
 | Hosted graph adapters / services | Planned; not shipped or deployed |
 | OKF v0.2 export projection | **Shipped** in 3.1 — local export only; no import path |
 | Product 3.x–5.x | **Shipped** — see product DoDs under `docs/maintainers/` |
-| Product 6 Agentic Layer (`carpeos agentic`) | **HITL-free shipped** from **6.6.0**; **quality plane closed through 6.7.7** (`agentic_v1.1`, corpus DoD, cite belt, near-dup, denser hosts); [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md), [agentic-quality](docs/architecture/agentic-quality.md) |
+| Product 6 Agentic Layer (`carpeos agentic`) | **HITL-free shipped** from **6.6.0**; **quality plane closed through 6.7.8** (`agentic_v1.1`, corpus DoD, cite belt, near-dup, denser hosts); [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md), [agentic-quality](docs/architecture/agentic-quality.md) |
 | `carpeos setup` / one-stop install | Shipped (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard library | Library + tests; not a shipped UI |
 | Obsidian projection | Local only |
