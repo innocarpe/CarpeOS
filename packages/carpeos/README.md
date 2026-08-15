@@ -7,7 +7,7 @@ knowledge, and retrieve it for humans and agents.
 
 ```sh
 # npm — current public release
-npm install -g @innocarpe/carpeos@6.7.7
+npm install -g @innocarpe/carpeos@6.7.8
 
 # one-liner (curl)
 curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/install.sh | bash
@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/innocarpe/carpeos/main/scripts/inst
 
 Requires **Node.js ≥ 22.22**.
 
-The current public release is **`6.7.7`** (HITL-free Agentic Layer + **closed
+The current public release is **`6.7.8`** (HITL-free Agentic Layer + **closed
 agentic quality plane**: prepared packs, redaction, cite belt, corpus DoD,
 near-dup, denser host adapters; **deepseek-v4-flash** product path; `agentic
 feed` / `flush` / 30m timer). Activate with the exact version pin and

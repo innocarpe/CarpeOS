@@ -20,8 +20,8 @@ CarpeOS는 AI 보조 작업을 위한 개인 지식 OS입니다. 에이전트 �
 세션 덤프 전부를 “메모리”로 취급하지 않습니다. 각 조각이 어디서 왔는지 흔적을
 남기되, **승격된 의미 단위**가 기본 검색 대상입니다.
 
-**최신 패키지:** [`@innocarpe/carpeos@6.7.7`](https://www.npmjs.com/package/@innocarpe/carpeos)
-([변경 기록](CHANGELOG.md) · [`v6.7.7`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.7.7)).
+**최신 패키지:** [`@innocarpe/carpeos@6.7.8`](https://www.npmjs.com/package/@innocarpe/carpeos)
+([변경 기록](CHANGELOG.md) · [`v6.7.8`](https://github.com/innocarpe/CarpeOS/releases/tag/v6.7.8)).
 
 <p align="center">
   <img src="docs/assets/readme-hero.jpg" alt="지식 노드가 중심으로 모이는 네트워크 이미지" width="920" />
@@ -93,7 +93,7 @@ Codex, Claude Code, Grok Build의 일부 lifecycle 이벤트를 공통 capture �
 | 평면 | 역할 | 기본 |
 | --- | --- | --- |
 | **`adj_v3`** | 저비용 규칙 프리필터 / 노이즈 거부 | 비교 기준선으로 유지 |
-| **Agentic Layer** (`agentic_v1.1`) | 인용·타입 brain (네트워크 시 Flash-only) + **quality plane** | **6.6.0부터 Product 6 happy path**; quality ultragoal은 **6.7.7**까지 닫힘 |
+| **Agentic Layer** (`agentic_v1.1`) | 인용·타입 brain (네트워크 시 Flash-only) + **quality plane** | **6.6.0부터 Product 6 happy path**; quality ultragoal은 **6.7.8**까지 닫힘 |
 
 | Disposition | 의미 단위 | 기본 검색 |
 | --- | --- | --- |
@@ -292,7 +292,7 @@ carpeos setup show              # config.json 출력
 `--register-mcp auto|none|claude,codex,grok`, `--register-hooks auto|none|…`.
 `--apply` 없이는 기계를 바꾸지 않습니다.
 
-재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@6.7.7`.
+재현이 중요하면 버전 고정: `npm i -g @innocarpe/carpeos@6.7.8`.
 변경 기록: [CHANGELOG.md](CHANGELOG.md).
 제품 마일스톤: [1.0 DoD](docs/maintainers/product-1.0.0.md) (파이프라인) ·
 [2.0 DoD](docs/maintainers/product-2.0.0.md) (판정) ·
@@ -398,7 +398,7 @@ only** 임을 보고합니다 (빈 스토어는 warning).
 
 ## 제품 라인 (majors)
 
-현재 npm 패키지는 **`@innocarpe/carpeos@6.7.7`** (`v6.7.7`)입니다. adjudication + retrieval
+현재 npm 패키지는 **`@innocarpe/carpeos@6.7.8`** (`v6.7.8`)입니다. adjudication + retrieval
 운영 루프, Product 4 trust plane, opt-in Product 5 draft lane, **Product 6 HITL-free
 Agentic Layer**(promote-when-verified + 30분 timer — ADR 0018)와 **agentic quality
 plane**(6.7.x: prepared pack, 기본 리포트 적색화, line-scoped admit, cite grounding,
@@ -422,8 +422,8 @@ hold-biased; live Flash는 network opt-in; Q-S5 dogfood는 advisory
 
 ## 지금 구현된 것
 
-**공개 패키지:** [`@innocarpe/carpeos@6.7.7`](https://www.npmjs.com/package/@innocarpe/carpeos)
-(`v6.7.7` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
+**공개 패키지:** [`@innocarpe/carpeos@6.7.8`](https://www.npmjs.com/package/@innocarpe/carpeos)
+(`v6.7.8` · [CHANGELOG](CHANGELOG.md)). npm 설치는 호스티드 배포나 live Product 4
 release authority를 뜻하지 **않습니다**.
 
 기본 로컬 루프 (CI 게이트):
@@ -456,7 +456,7 @@ hooks → 암호화 증거 → agentic_capture_feed (capture에 LLM 없음)
 | Hosted graph adapter / service | 계획됨; 출시·배포되지 않음 |
 | OKF v0.2 export projection | **3.1에 출시** — 로컬 export만 |
 | Product 3.x–5.x | **출시** — `docs/maintainers/` DoD |
-| Product 6 Agentic Layer (`carpeos agentic`) | **6.6.0 HITL-free 출시**; **quality plane은 6.7.7까지 닫힘** (`agentic_v1.1`, corpus DoD, cite belt, near-dup, denser hosts); [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md), [agentic-quality](docs/architecture/agentic-quality.md) |
+| Product 6 Agentic Layer (`carpeos agentic`) | **6.6.0 HITL-free 출시**; **quality plane은 6.7.8까지 닫힘** (`agentic_v1.1`, corpus DoD, cite belt, near-dup, denser hosts); [product-6.0.0](docs/maintainers/product-6.0.0.md), [agentic-layer](docs/architecture/agentic-layer.md), [agentic-quality](docs/architecture/agentic-quality.md) |
 | `carpeos setup` / one-stop install | 출시 (`@innocarpe/carpeos`) |
 | OpenLoop / dashboard 라이브러리 | 라이브러리+테스트. 제품 UI 아님 |
 | Obsidian projection | 로컬만 |

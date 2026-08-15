@@ -4,9 +4,9 @@ Status: maintainer policy for the public npm package and Git tags.
 
 This document is the source of truth for how CarpeOS versions are chosen, tagged,
 and published. Follow it before the first and every subsequent npm release.
-Current public release: **`@innocarpe/carpeos@6.7.7`** (Product 6 HITL-free Agentic Layer
-+ closed quality plane: corpus DoD, cite belt, near-dup, denser host adapters; policy
-`agentic_v1.1`).
+Current public release: **`@innocarpe/carpeos@6.7.8`** (Product 6 HITL-free Agentic Layer
++ closed quality plane through 6.7.7; **6.7.8** closes the always-on promote path —
+lease reclaim, promote backlog materialize, Flash local fallback; policy `agentic_v1.1`).
 Independent Product 4 live release authority remains out of band / fail-closed.
 Shipped `adj_v3` keeps automatic Claim creation off. B0 reconciliation is
 preview-only; B1 apply remains deferred. V5 is opt-in with `canonical_effect: "none"`.
