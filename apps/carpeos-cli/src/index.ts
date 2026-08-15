@@ -1864,6 +1864,13 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
           golden: { type: "boolean", default: false },
           "golden-path": { type: "string" },
           limit: { type: "string" },
+          /**
+           * Bulk-skip non-lifecycle residual rows before drain (PostToolUse flood).
+           * Default true so timer/always-on matches flush HITL-free path.
+           */
+          "skip-ineligible": { type: "boolean", default: true },
+          /** Prefer SessionEnd/Stop/PreCompact when claiming (default true). */
+          "prefer-lifecycle": { type: "boolean", default: true },
           /** Q1.5′: default redacts statements/quotes; opt-in for debug. */
           verbose: { type: "boolean", default: false },
         },
@@ -1958,6 +1965,12 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             parsed.values["hold-first"] === true ||
             env.CARPEOS_AGENTIC_HOLD_FIRST === "1" ||
             env.CARPEOS_AGENTIC_HOLD_FIRST === "true";
+          const skipIneligible = parsed.values["skip-ineligible"] !== false;
+          const preferLifecycle = parsed.values["prefer-lifecycle"] !== false;
+          let noiseSkip: { scanned: number; skipped: number } | null = null;
+          if (skipIneligible) {
+            noiseSkip = store.skipIneligibleAgenticFeed({ limit: 10_000 });
+          }
           const before = summarizeAgenticFeed(store, 0);
           const report = await processAgenticOnce({
             store,
@@ -1967,6 +1980,7 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             materialize: parsed.values.materialize !== false,
             allow_auto_promote: holdFirst ? false : parsed.values["allow-auto-promote"] !== false,
             hold_first: holdFirst,
+            prefer_lifecycle: preferLifecycle,
             limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20,
             spend: createFlashSpendState({
               spend_cap_usd: Number.isFinite(spendCap) && spendCap > 0 ? spendCap : 5,
@@ -1983,6 +1997,8 @@ async function runAgentic(argv: readonly string[], env: NodeJS.ProcessEnv): Prom
             ok: report.ok,
             command: "agentic.run",
             once: true,
+            noise_skip: noiseSkip,
+            prefer_lifecycle: preferLifecycle,
             feed_before: before.counts,
             feed_after: after.counts,
             report: redactAgenticRunnerReport(report, { verbose: verboseReport }),
