@@ -12,6 +12,12 @@ Versioning policy: [docs/maintainers/versioning-and-releases.md](docs/maintainer
 
 ### Added
 
+- (none yet — fold entries here before the next release)
+
+## [6.7.8] - 2026-08-15
+
+### Added
+
 - Agentic **HITL-free closed loop**: each `processAgenticOnce` reclaims expired job
   leases, leases the admit job for the claimed feed row (not oldest-bulk thrash),
   and materializes unmaterialized **promote** proposals without human `promote-held`.
@@ -727,7 +733,7 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 - Pre-1.0: CLI/MCP contracts may still evolve; breaking changes will be called out
   under `### Breaking` on MINOR bumps while on `0.y.z`.
 
-[Unreleased]: https://github.com/innocarpe/carpeos/compare/v5.0.1...HEAD
+[Unreleased]: https://github.com/innocarpe/carpeos/compare/v6.7.8...HEAD
 [4.0.0]: https://github.com/innocarpe/carpeos/compare/v3.2.0...v4.0.0
 [0.1.0]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.0
 [0.1.1]: https://github.com/innocarpe/carpeos/releases/tag/v0.1.1
@@ -745,3 +751,4 @@ Initial public distribution of the CarpeOS CLI and local MCP server.
 [3.2.0]: https://github.com/innocarpe/carpeos/releases/tag/v3.2.0
 [5.0.0]: https://github.com/innocarpe/carpeos/releases/tag/v5.0.0
 [5.0.1]: https://github.com/innocarpe/carpeos/releases/tag/v5.0.1
+[6.7.8]: https://github.com/innocarpe/carpeos/releases/tag/v6.7.8
