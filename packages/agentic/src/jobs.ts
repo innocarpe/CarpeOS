@@ -128,8 +128,173 @@ function readJob(db: SqlDatabase, jobId: string): AgenticJob | undefined {
 }
 
 /**
+ * Lease a single job by id (pending or expired leased).
+ * Prefer this over bulk lease when processing one feed row — bulk lease of
+ * oldest pending jobs starves newly enqueued admit work behind a backlog.
+ */
+export function leaseAgenticJobById(
+  db: SqlDatabase,
+  input: { jobId: string; leaseMs: number; now?: Date },
+): LeasedAgenticJob | undefined {
+  migrateAgenticJobs(db);
+  if (!Number.isInteger(input.leaseMs) || input.leaseMs < 1) {
+    throw new Error("leaseMs must be a positive integer");
+  }
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const lease_id = `lease_${sha256Hex(`${nowIso}:${Math.random()}`).slice(0, 24)}`;
+  const lease_expires_at = new Date(now.getTime() + input.leaseMs).toISOString();
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const current = readJob(db, input.jobId);
+    if (current === undefined || !isLeaseable(current, nowIso)) {
+      db.exec("COMMIT");
+      return undefined;
+    }
+    // Exhausted retries: terminal dead instead of re-lease forever.
+    if (current.attempt >= current.max_attempts) {
+      writeJob(db, {
+        ...withoutLease(current),
+        state: "dead",
+        finished_at: nowIso,
+        updated_at: nowIso,
+        error_code: current.error_code ?? "max_attempts_exhausted",
+        last_error: current.last_error ?? "max_attempts_exhausted_on_lease",
+      });
+      db.exec("COMMIT");
+      return undefined;
+    }
+    const job: AgenticJob = {
+      ...current,
+      state: "leased",
+      attempt: current.attempt + 1,
+      lease_id,
+      lease_expires_at,
+      leased_at: nowIso,
+      updated_at: nowIso,
+      error_code: null,
+      last_error: null,
+    };
+    writeJob(db, job);
+    db.exec("COMMIT");
+    return { lease_id, lease_expires_at, job };
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+/**
+ * Sweep expired leases + exhausted attempts without re-leasing forever:
+ * - expired leased with attempt < max → pending (available now)
+ * - expired leased with attempt >= max → dead
+ * - pending with attempt >= max → dead (orphan thrash after feed finished)
+ * Returns counts for operator reports (no private text).
+ */
+export function reclaimExpiredAgenticJobs(
+  db: SqlDatabase,
+  input: { now?: Date; limit?: number; trust_zone_id?: string } = {},
+): { reclaimed: number; dead: number } {
+  migrateAgenticJobs(db);
+  const limit = input.limit ?? 500;
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error("reclaim limit must be a positive integer");
+  }
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const zoneFilter = input.trust_zone_id !== undefined;
+  // attempt/max_attempts live in job_json; use JSON extract so exhausted pending
+  // are not starved behind a wall of fresh attempt=0 rows.
+  const scanSql = zoneFilter
+    ? `
+      SELECT job_id FROM agentic_jobs
+      WHERE trust_zone_id = ?
+        AND (
+          (state = 'leased' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+          OR (
+            state = 'pending'
+            AND CAST(json_extract(job_json, '$.attempt') AS INTEGER)
+              >= CAST(json_extract(job_json, '$.max_attempts') AS INTEGER)
+          )
+        )
+      ORDER BY updated_at ASC, job_id ASC
+      LIMIT ?
+    `
+    : `
+      SELECT job_id FROM agentic_jobs
+      WHERE (
+          (state = 'leased' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+          OR (
+            state = 'pending'
+            AND CAST(json_extract(job_json, '$.attempt') AS INTEGER)
+              >= CAST(json_extract(job_json, '$.max_attempts') AS INTEGER)
+          )
+        )
+      ORDER BY updated_at ASC, job_id ASC
+      LIMIT ?
+    `;
+  const rows = (
+    zoneFilter
+      ? db.prepare(scanSql).all(input.trust_zone_id, nowIso, limit)
+      : db.prepare(scanSql).all(nowIso, limit)
+  ) as JobIdRow[];
+
+  let reclaimed = 0;
+  let dead = 0;
+  let processed = 0;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const row of rows) {
+      if (processed >= limit) break;
+      const current = readJob(db, row.job_id);
+      if (current === undefined) continue;
+
+      const expiredLease =
+        current.state === "leased" &&
+        current.lease_expires_at !== null &&
+        current.lease_expires_at <= nowIso;
+      const exhaustedPending =
+        current.state === "pending" && current.attempt >= current.max_attempts;
+
+      if (!expiredLease && !exhaustedPending) continue;
+      processed += 1;
+
+      if (current.attempt >= current.max_attempts) {
+        writeJob(db, {
+          ...withoutLease(current),
+          state: "dead",
+          finished_at: nowIso,
+          updated_at: nowIso,
+          error_code: current.error_code ?? "max_attempts_exhausted",
+          last_error: current.last_error ?? "max_attempts_exhausted_on_reclaim",
+        });
+        dead += 1;
+      } else if (expiredLease) {
+        writeJob(db, {
+          ...withoutLease(current),
+          state: "pending",
+          available_at: nowIso,
+          finished_at: null,
+          updated_at: nowIso,
+          error_code: current.error_code ?? "lease_expired_reclaim",
+          last_error: current.last_error ?? "lease_expired_reclaim",
+        });
+        reclaimed += 1;
+      }
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return { reclaimed, dead };
+}
+
+/**
  * Lease up to `limit` due jobs. Expired leases are reclaimable.
  * Crash-safe: BEGIN IMMEDIATE + per-row re-check under lock.
+ * Prefer leaseAgenticJobById when processing a known feed row.
  */
 export function leaseAgenticJobs(
   db: SqlDatabase,
@@ -180,6 +345,18 @@ export function leaseAgenticJobs(
     for (const row of rows) {
       const current = readJob(db, row.job_id);
       if (current === undefined || !isLeaseable(current, nowIso)) {
+        continue;
+      }
+      // Do not re-lease exhausted jobs (dogfood: attempt 100+ stuck leases).
+      if (current.attempt >= current.max_attempts) {
+        writeJob(db, {
+          ...withoutLease(current),
+          state: "dead",
+          finished_at: nowIso,
+          updated_at: nowIso,
+          error_code: current.error_code ?? "max_attempts_exhausted",
+          last_error: current.last_error ?? "max_attempts_exhausted_on_lease",
+        });
         continue;
       }
       const job: AgenticJob = {

@@ -10,8 +10,10 @@ import {
   enqueueAgenticJob,
   failAgenticJob,
   getAgenticJob,
+  leaseAgenticJobById,
   leaseAgenticJobs,
   listAgenticJobs,
+  reclaimExpiredAgenticJobs,
 } from "../src/jobs.js";
 import { AGENTIC_FLASH_MODEL_ID, AGENTIC_POLICY_VERSION } from "../src/types.js";
 
@@ -248,6 +250,48 @@ describe("agentic job store", () => {
     const listed = listAgenticJobs(db, { trust_zone_id: "tz_a", state: "pending" });
     expect(listed).toHaveLength(1);
     expect(listed[0]?.trust_zone_id).toBe("tz_a");
+    db.close();
+  });
+
+  it("leases a specific job by id even when older pending jobs exist", () => {
+    const db = makeDb();
+    enqueueAgenticJob(db, spec({ source_event_id: "evt_old_1" }));
+    enqueueAgenticJob(db, spec({ source_event_id: "evt_old_2" }));
+    const target = enqueueAgenticJob(db, spec({ source_event_id: "evt_new_target" }));
+    const lease = leaseAgenticJobById(db, { jobId: target.job_id, leaseMs: 30_000, now });
+    expect(lease).toBeDefined();
+    expect(lease?.job.job_id).toBe(target.job_id);
+    expect(lease?.job.source_event_id).toBe("evt_new_target");
+    expect(countAgenticJobs(db).leased).toBe(1);
+    expect(countAgenticJobs(db).pending).toBe(2);
+    db.close();
+  });
+
+  it("reclaims expired leases to pending and dead when max_attempts exhausted", () => {
+    const db = makeDb();
+    const job = enqueueAgenticJob(db, spec({ max_attempts: 2 }));
+    const first = leaseAgenticJobs(db, { limit: 1, leaseMs: 1_000, now })[0];
+    expect(first).toBeDefined();
+    // attempt=1, expired → reclaim to pending
+    const r1 = reclaimExpiredAgenticJobs(db, {
+      now: new Date("2026-08-06T12:00:02Z"),
+    });
+    expect(r1.reclaimed).toBe(1);
+    expect(r1.dead).toBe(0);
+    expect(getAgenticJob(db, job.job_id)?.state).toBe("pending");
+
+    const l2 = leaseAgenticJobById(db, {
+      jobId: job.job_id,
+      leaseMs: 1_000,
+      now: new Date("2026-08-06T12:00:03Z"),
+    });
+    expect(l2?.job.attempt).toBe(2);
+    // attempt already at max → dead on reclaim
+    const r2 = reclaimExpiredAgenticJobs(db, {
+      now: new Date("2026-08-06T12:00:05Z"),
+    });
+    expect(r2.dead).toBe(1);
+    expect(getAgenticJob(db, job.job_id)?.state).toBe("dead");
     db.close();
   });
 
