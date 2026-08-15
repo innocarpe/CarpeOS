@@ -6,11 +6,21 @@
 import type { LocalCaptureStore } from "@carpeos/local-store";
 import { ruleAdmitEvidence } from "./admit.js";
 import { callAgenticFlash, createFlashSpendState, type FlashSpendState } from "./flash.js";
-import { completeAgenticJob, enqueueAgenticJob, failAgenticJob, leaseAgenticJobs } from "./jobs.js";
+import {
+  completeAgenticJob,
+  enqueueAgenticJob,
+  failAgenticJob,
+  leaseAgenticJobById,
+  reclaimExpiredAgenticJobs,
+} from "./jobs.js";
 import { materializeAgenticProposal } from "./materialize.js";
 import { makeAgenticPackId, packAgenticEvidence } from "./pack.js";
 import { type AgenticPipelineResult, runAgenticProposalPipeline } from "./pipeline.js";
-import { type AgenticProposalRecord, listAgenticProposals } from "./proposals.js";
+import {
+  type AgenticProposalRecord,
+  listAgenticProposals,
+  listUnmaterializedPromoteProposals,
+} from "./proposals.js";
 import {
   addDaySpend,
   AGENTIC_DAY_MAX_CALLS,
@@ -22,6 +32,10 @@ import {
 import type { SqlDatabase } from "./sql.js";
 import { runTriageStage } from "./stages.js";
 import { AGENTIC_POLICY_VERSION } from "./types.js";
+
+/** Offline admit lease (short). Live Flash needs headroom past 2m network RTT. */
+const ADMIT_LEASE_MS_OFFLINE = 120_000;
+const ADMIT_LEASE_MS_NETWORK = 900_000;
 
 export type AgenticRunnerReport = {
   schema: "carpeos.agentic.runner-report/v1";
@@ -41,6 +55,11 @@ export type AgenticRunnerReport = {
   materializations: number;
   /** P5 draft Claim materializations (never AcceptanceDecision). */
   draft_claims: number;
+  /** Backlog promote materializations closed this run (HITL-free). */
+  backlog_materializations: number;
+  /** Expired job leases reclaimed / marked dead at run start. */
+  jobs_reclaimed: number;
+  jobs_dead_on_reclaim: number;
   /** P4 structure edge proposals across pipelines. */
   structure_edge_count: number;
   /** P4 E9 projection hook fired. */
@@ -94,6 +113,9 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     pipelines: [],
     materializations: 0,
     draft_claims: 0,
+    backlog_materializations: 0,
+    jobs_reclaimed: 0,
+    jobs_dead_on_reclaim: 0,
     structure_edge_count: 0,
     project_invoked: false,
     network_used: false,
@@ -104,6 +126,21 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
   if (!agentic_enabled) {
     report.reason_codes.push("agentic_off");
     return report;
+  }
+
+  // HITL-free housekeeping: clear expired leases so job status stays truthful
+  // and exhausted attempts become terminal dead (not attempt 100+ thrash).
+  {
+    const reclaim = reclaimExpiredAgenticJobs(input.agenticDb, {
+      ...(input.now !== undefined ? { now: input.now } : {}),
+      limit: 2_000,
+      trust_zone_id: input.store.trustZone.trust_zone_id,
+    });
+    report.jobs_reclaimed = reclaim.reclaimed;
+    report.jobs_dead_on_reclaim = reclaim.dead;
+    if (reclaim.reclaimed > 0 || reclaim.dead > 0) {
+      report.reason_codes.push("jobs_lease_reclaim");
+    }
   }
 
   const limit = input.limit ?? 20;
@@ -181,13 +218,13 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
         model_id,
         ...nowOpt,
       });
-      const leased = leaseAgenticJobs(input.agenticDb, {
-        limit: 8,
-        leaseMs: 120_000,
-        trust_zone_id: row.trust_zone_id,
+      // Target the admit job for this feed row only — bulk oldest-first lease
+      // starves new work behind thousands of stale pending admit jobs.
+      const lease = leaseAgenticJobById(input.agenticDb, {
+        jobId: admitJob.job_id,
+        leaseMs: allow_network ? ADMIT_LEASE_MS_NETWORK : ADMIT_LEASE_MS_OFFLINE,
         ...nowOpt,
       });
-      const lease = leased.find((l) => l.job.job_id === admitJob.job_id);
 
       // QD0 / H6: never invent an "(empty capture …)" placeholder that admits and
       // spends Flash. Empty signal stays empty → admit drops with empty_signal.
@@ -354,7 +391,14 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
                 reason_codes: ["flash_transient_retry", ...admit.reason_codes],
               };
               report.reason_codes.push("flash_transient_retry");
-            } else if (flash_triage_text !== null || flash_extract_text !== null) {
+            } else {
+              // Always enter stages with flash mode: null/bad Flash text triggers
+              // local override + extract fallback (HITL-free closed loop).
+              // Do not require a non-null HTTP body — that left dogfood as
+              // flash_no_usable_response / flash_extract_parse_error skips.
+              if (flash_triage_text === null && flash_extract_text === null) {
+                report.reason_codes.push("flash_empty_local_stage_fallback");
+              }
               pipeline = runAgenticProposalPipeline(input.agenticDb, {
                 trust_zone_id: row.trust_zone_id,
                 source_event_id: row.source_event_id,
@@ -370,16 +414,6 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
                 ...structureContext,
                 ...nowOpt,
               });
-            } else {
-              pipeline = {
-                ...emptyPipeline(),
-                admit_decision: "admit",
-                pack_digest: prepared.pack_digest,
-                triage_view_text: prepared.triage_view_text,
-                extract_view_text: prepared.extract_view_text,
-                effective_view_digest: prepared.effective_view_digest,
-                reason_codes: ["flash_no_usable_response", ...admit.reason_codes],
-              };
             }
           }
         }
@@ -485,6 +519,31 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
     }
   } // while usefulRemaining / scanBudget
 
+  // HITL-free: close promote proposals that never received Observation writes
+  // (materialize=false runs, lease thrash, policy-stamp backlog).
+  if (input.materialize === true) {
+    const backlog = drainUnmaterializedPromotes({
+      store: input.store,
+      agenticDb: input.agenticDb,
+      trust_zone_id,
+      allow_auto_promote: input.hold_first === true ? false : input.allow_auto_promote !== false,
+      hold_first: input.hold_first === true,
+      limit: Math.max(limit, 20),
+    });
+    report.backlog_materializations = backlog.materializations;
+    report.materializations += backlog.materializations;
+    report.draft_claims += backlog.draft_claims;
+    for (const id of backlog.observation_event_ids) {
+      observationIds.push(id);
+    }
+    if (backlog.materializations > 0) {
+      report.reason_codes.push("promote_backlog_materialized");
+    }
+    if (backlog.skipped > 0) {
+      report.reason_codes.push("promote_backlog_partial");
+    }
+  }
+
   // Persist day spend deltas so multi-process timers share ADR 0018 D5 caps.
   const deltaSpend = Math.max(0, spend.spend_usd - spendAtStart.spend_usd);
   const deltaCalls = Math.max(0, spend.calls - spendAtStart.calls);
@@ -514,6 +573,87 @@ export async function processAgenticOnce(input: AgenticRunnerInput): Promise<Age
   }
 
   return report;
+}
+
+/**
+ * Materialize gated promote proposals missing Observation events.
+ * Resolves artifact_id from structure edges or EvidenceArtifact payload.
+ */
+function drainUnmaterializedPromotes(input: {
+  store: LocalCaptureStore;
+  agenticDb: SqlDatabase;
+  trust_zone_id: string;
+  allow_auto_promote: boolean;
+  hold_first: boolean;
+  limit: number;
+}): {
+  materializations: number;
+  draft_claims: number;
+  skipped: number;
+  observation_event_ids: string[];
+} {
+  const out = {
+    materializations: 0,
+    draft_claims: 0,
+    skipped: 0,
+    observation_event_ids: [] as string[],
+  };
+  const pending = listUnmaterializedPromoteProposals(input.agenticDb, {
+    trust_zone_id: input.trust_zone_id,
+    limit: input.limit,
+  });
+  for (const proposal of pending) {
+    const artifact_id = resolveArtifactIdForProposal(input.store, proposal);
+    if (artifact_id === null) {
+      out.skipped += 1;
+      continue;
+    }
+    const mat = materializeAgenticProposal({
+      store: input.store,
+      agenticDb: input.agenticDb,
+      proposal,
+      artifact_id,
+      allow_promote_materialize: input.hold_first ? false : input.allow_auto_promote,
+      subject_ref: input.store.projectId,
+    });
+    if (!mat.ok) {
+      out.skipped += 1;
+      continue;
+    }
+    if (mat.observation_event_id !== null) {
+      out.materializations += 1;
+      out.observation_event_ids.push(mat.observation_event_id);
+    }
+    if (mat.claim_event_id !== null) {
+      out.draft_claims += 1;
+      out.observation_event_ids.push(mat.claim_event_id);
+      if (mat.observation_event_id === null) {
+        out.materializations += 1;
+      }
+    }
+  }
+  return out;
+}
+
+function resolveArtifactIdForProposal(
+  store: LocalCaptureStore,
+  proposal: AgenticProposalRecord,
+): string | null {
+  for (const e of proposal.edges ?? []) {
+    if (typeof e.to_ref === "string" && e.to_ref.startsWith("art_")) {
+      return e.to_ref;
+    }
+  }
+  try {
+    const evt = store.getEvent(proposal.source_event_id) as
+      | { event_type?: string; payload?: { artifact_id?: string } }
+      | undefined;
+    const art = evt?.payload?.artifact_id;
+    if (typeof art === "string" && art.length > 0) return art;
+  } catch {
+    // store may throw on missing — skip this proposal
+  }
+  return null;
 }
 
 /** Transient Flash failures that should leave the feed row retryable (Q7′ / QD9). */

@@ -182,6 +182,8 @@ export function listAgenticProposals(
     limit?: number;
     /** Default asc (legacy). Use desc for recent-first near-dup windows. */
     order?: "asc" | "desc";
+    /** When true, only rows with no primary materialize event yet. */
+    unmaterialized_only?: boolean;
   } = {},
 ): AgenticProposalRecord[] {
   migrateAgenticProposals(db);
@@ -199,11 +201,30 @@ export function listAgenticProposals(
     sql += ` AND gate_decision = ?`;
     params.push(input.gate_decision);
   }
+  if (input.unmaterialized_only === true) {
+    sql += ` AND materialized_event_id IS NULL`;
+  }
   const order = input.order === "desc" ? "DESC" : "ASC";
   sql += ` ORDER BY created_at ${order}, proposal_id ${order} LIMIT ?`;
   params.push(limit);
   const rows = db.prepare(sql).all(...params) as ProposalRow[];
   return rows.map((r) => normalizeProposal(JSON.parse(r.proposal_json)));
+}
+
+/**
+ * Promote proposals not yet written to Observation — HITL-free backlog drain.
+ */
+export function listUnmaterializedPromoteProposals(
+  db: SqlDatabase,
+  input: { trust_zone_id?: string; limit?: number } = {},
+): AgenticProposalRecord[] {
+  return listAgenticProposals(db, {
+    ...(input.trust_zone_id !== undefined ? { trust_zone_id: input.trust_zone_id } : {}),
+    gate_decision: "promote",
+    unmaterialized_only: true,
+    limit: input.limit ?? 50,
+    order: "asc",
+  });
 }
 
 /** Mark proposal materialized (P2/P5); keeps record for idempotency. */

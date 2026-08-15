@@ -5,8 +5,14 @@ import { DatabaseSync } from "node:sqlite";
 import type { CaptureEnvelope } from "@carpeos/capture";
 import { LocalCaptureStore, StaticKeyProvider } from "@carpeos/local-store";
 import { afterEach, describe, expect, it } from "vitest";
-import { listAgenticProposals } from "../src/proposals.js";
+import { evaluateAgenticGate } from "../src/gate.js";
+import {
+  listAgenticProposals,
+  listUnmaterializedPromoteProposals,
+  putAgenticProposal,
+} from "../src/proposals.js";
 import { processAgenticOnce } from "../src/runner.js";
+import { AGENTIC_POLICY_VERSION } from "../src/types.js";
 
 const dirs: string[] = [];
 const now = new Date("2026-08-06T15:00:00Z");
@@ -153,6 +159,90 @@ describe("product loop: capture feed → runner → materialize", () => {
     expect(report.feed_seen).toBe(0);
     expect(report.reason_codes).toContain("feed_empty");
     expect(listAgenticProposals(agenticDb)).toHaveLength(0);
+    store.close();
+    agenticDb.close();
+  });
+
+  it("HITL-free: materializes unmaterialized promote backlog without human review", async () => {
+    const store = makeStore();
+    const captured = store.captureHook(
+      envelope({
+        source_event_id: "source_backlog_promote",
+        payload: {
+          transcript: "Decision: we decided default search is promoted active units only.",
+        },
+      }),
+      { extract: false },
+    );
+    expect(captured.status).toBe("captured");
+    const sourceId = captured.event.event_id;
+    const artifactId = captured.event.payload.artifact_id;
+    const agenticDb = new DatabaseSync(join(tempDir(), "agentic-backlog.sqlite"));
+
+    const statement = "we decided default search is promoted active units only";
+    const candidate = {
+      kind: "decision" as const,
+      statement,
+      confidence: 0.8,
+      citations: [
+        {
+          evidence_event_id: sourceId,
+          segment_id: "seg_agentic_body",
+          start: 0,
+          end: statement.length,
+          quote: statement,
+        },
+      ],
+    };
+    const gate = evaluateAgenticGate({
+      candidate,
+      cite_ok: true,
+      secret_ok: true,
+      allow_auto_promote: true,
+    });
+    expect(gate.decision).toBe("promote");
+    putAgenticProposal(agenticDb, {
+      trust_zone_id: "tz_runner_loop",
+      source_event_id: sourceId,
+      pack_digest: "sha256:synthetic_backlog_pack",
+      candidate,
+      cite_ok: true,
+      secret_ok: true,
+      verify_reason_codes: ["cite_ok"],
+      gate,
+      edges: [
+        {
+          kind: "derived_from",
+          from_ref: "unit",
+          to_ref: artifactId,
+          note: "evidence_artifact",
+        },
+      ],
+      now,
+    });
+    expect(listUnmaterializedPromoteProposals(agenticDb)).toHaveLength(1);
+
+    // Finish feed without runner so only backlog drain runs (feed empty).
+    store.finishAgenticCaptureFeed({ source_event_id: sourceId, state: "done" });
+
+    const report = await processAgenticOnce({
+      store,
+      agenticDb,
+      materialize: true,
+      allow_network: false,
+      now,
+    });
+    expect(report.feed_seen).toBe(0);
+    expect(report.backlog_materializations).toBeGreaterThanOrEqual(1);
+    expect(report.reason_codes).toContain("promote_backlog_materialized");
+    expect(listUnmaterializedPromoteProposals(agenticDb)).toHaveLength(0);
+    const history = store.listDispositionHistory(sourceId);
+    expect(
+      history.some(
+        (d) => d.policy_version === AGENTIC_POLICY_VERSION && d.disposition === "promote",
+      ),
+    ).toBe(true);
+
     store.close();
     agenticDb.close();
   });

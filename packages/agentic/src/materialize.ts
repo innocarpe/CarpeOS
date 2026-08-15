@@ -14,7 +14,7 @@ import {
 import { type AgenticProposalRecord, markProposalMaterialized } from "./proposals.js";
 import type { SqlDatabase } from "./sql.js";
 import { edgesToProvenanceRefs, structureAgenticLinks } from "./structure.js";
-import { AGENTIC_POLICY_VERSION } from "./types.js";
+import { AGENTIC_KNOWN_POLICY_VERSIONS, AGENTIC_POLICY_VERSION } from "./types.js";
 
 export type MaterializeAgenticInput = {
   store: LocalCaptureStore;
@@ -87,7 +87,9 @@ export function materializeAgenticProposal(
     ...partial,
   });
 
-  if (proposal.policy_version !== AGENTIC_POLICY_VERSION) {
+  // Accept current + known legacy stamps (agentic_v1) so HITL-free backlog
+  // materialize can close pre-quality promotes without human re-gate.
+  if (!AGENTIC_KNOWN_POLICY_VERSIONS.has(proposal.policy_version)) {
     return empty({ reason_codes: ["policy_version_mismatch"] });
   }
 
